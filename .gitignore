@@ -1,0 +1,35 @@
+# ==========================
+# Python
+# ==========================
+deepfake_project/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+
+
+# Ignore Gemini test script
+test_gemini.py
+
+# ==========================
+# Project-specific
+# ==========================
+
+# Large folders
+deepfake_project/models/
+deepfake_project/HydraFake/
+
+# Dataset
+deepfake_project/datasets/hydrafake/
+deepfake_project/datasets/__pycache__/
+
+# ==========================
+# Training checkpoints
+# ==========================
+
+# Ignore all checkpoint files
+deepfake_project/runs/intern_exp2/checkpoints/*.pth
+
+# Keep only the best checkpoint
+!deepfake_project/runs/intern_exp2/checkpoints/best.pth
