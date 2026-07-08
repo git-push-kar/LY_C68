@@ -1,0 +1,34 @@
+WARNING: --loss_alpha=0.99 has no effect. The GRU decoder is no longer trained. All gradient signal comes from classification loss.
+Device : cuda
+GPU    : NVIDIA RTX A5000
+
+Loading data …
+WARNING: --loss_alpha=0.99 has no effect. The GRU decoder is no longer trained. All gradient signal comes from classification loss.
+Device : cuda
+GPU    : NVIDIA RTX A5000
+
+Loading data …
+
+Building model …
+Total params     : 131,708,508
+Trainable params : 72,605,532
+
+==============================================================================
+ Epoch   TrainLoss   TrainAcc   ValLoss   ValAcc   ValF1     AUC  Best
+==============================================================================
+WARNING: --loss_alpha=0.99 has no effect. The GRU decoder is no longer trained. All gradient signal comes from classification loss.
+Device : cuda
+GPU    : NVIDIA RTX A5000
+
+Loading data …
+
+Building model …
+Total params     : 131,708,508
+Trainable params : 72,605,532
+
+==============================================================================
+ Epoch   TrainLoss   TrainAcc   ValLoss   ValAcc   ValF1     AUC  Best
+==============================================================================
+     1      0.5639     0.6249    0.5389   0.7790  0.7225  0.9290     *
+     2      0.4776     0.6760    0.4083   0.8625  0.8553  0.9442     *
+     3      0.4539     0.6815    0.4726   0.8383  0.8179  0.9408      
