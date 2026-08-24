@@ -1,0 +1,78 @@
+Inference log : C:\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260824_103545.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['1.jpg', '2.jpg', '3.jpg', '4.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 4 image(s) ...
+
+
+============================================================
+  Image             : 1.jpg
+  Classifier verdict: FAKE  (conf 81.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The answer is evident from the initial inspection, where visual inconsistencies in color and structure strongly suggest artificial generation. Upon observing the image closely:
+    - There are noticeable skin tone differences between facial regions that deviate slightly from natural lighting gradients.
+    Additionally,
+    visual structural abnormalities include unnatural edges around key features like the eyes and mouth, inconsistent proportions of the face relative to the background, uneven expression coordination among facial components,
+    and anatomical distortions such as misaligned eyebrows or off-center alignment
+    Further examination reveals subtle artifacts including overly smooth texture lacking realistic imperfections on large areas; jagged edge transitions at boundaries;
+    blurry contours near hairline suggesting poor blending;
+    These points collectively indicate generator-based manipulation rather than a naturally captured scene. Based upon observed clear color mismatches, structural anomalies, textural irregularities, and indications of AI synthesis, this appears an easily detectable case of digitally manipulated imagery indicative of AI-generated forgery. These characteristics align with "easy" classification for detection difficulty. Considering both obvious appearance flaws and detailed generated artifacts, it clearly meets the definition of an easy-level hard-to-detect fakeness through structured analysis. Thus, the conclusion supports categorizing this sample as fake (AI-generated) without needing complex reasoning.
+============================================================
+
+============================================================
+  Image             : 2.jpg
+  Classifier verdict: FAKE  (conf 87.2%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> the image appears to be a cartoon-style illustration of three figures, each with exaggerated proportions and simplified textures. The facial features are overly large or stylized in ways that deviate from natural human anatomy--such as disproportionately huge eyes and an enlarged forehead --suggesting artificial generation rather than real photography. Additionally, there is a lack of realistic shading, no meaningful skin texture variation, and edges around faces appear jagged without smooth transitions typically found in authentic images.
+    To dive deeper: - visual structural abnormalities include misproportioned limbs and head-to-body size ratios that defy typical human morphology. Each character has multiple oversized appendages like extra arms and legs which are not logically aligned nor naturally posed within their compact space.
+    - subtle artifacts reveal unnatural blending between characters/elements on the same plane, resulting in visually confusing smudges instead of seamless gradients under realism-driven imaging principles.
+    Finally, considering physical plausibility issues: -
+    the lighting direction lacks coherent shadow casting,
+    there's inconsistent focus across elements despite parallel planes in perspective,
+    and overall optical behavior doesn't align with how light interacts realistically through photographic media. Considering all these aspects collectively strongly suggests AI-generated creation while avoiding easy dismissals due to low resolution and simplistic structure
+============================================================
+
+============================================================
+  Image             : 3.jpg
+  Classifier verdict: REAL  (conf 58.2%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The answer is clear upon initial observation due to several obvious visual inconsistencies. A straightforward classification of the artifacts into categories such as "structure," "generator-related signs," and physical implausibility allows for a quick determination without deeper analysis.
+    Upon closer inspection, multiple structural abnormalities are evident: facial proportions deviate from typical human biometrics (e.g., forehead width), expression alignment issues suggest artificial generation rather than natural emotion reflection, and subtle color mismatches around eyes indicate poor blending or feature swapping. These problems point toward an AI-generated face where anatomy was not accurately modeled.
+    Further examination reveals generator-specific flaws -- edges near hairline appear jagged instead of smooth, skin texture varies unnaturally between overly perfect in certain areas and lacks high-frequency details like pores - all common indicators of synthetic image creation. Additionally, unnatural blur on parts inconsistent with real-world depth-of-field effects adds further doubt about authenticity.
+    Finally, although lighting appears generally consistent at first glance, its flatness alone does not rule out manipulation given that genuine photographs can also exhibit this trait. However, combined with other factors--such as mismatched contextual elements visible only when comparing foreground and background—the cumulative presence of these anomalies becomes increasingly telling against realism. Considering both the immediately noticeable anatomical inaccuracies alongside more nuanced textural irregularities, it's reasonable to conclude that the photo has been artificially generated using deepfake technology. Such images often expose创作者 through combination of glaring but non-obvious cues beyond casual perception. Therefore, based on structured evaluation of various observable attributes, deception arises clearly detectable even at moderate scrutiny level requiring no profound analytical effort. Thus, confirming it as relatively easy-to-detect fakeness despite being medium difficulty).
+============================================================
+
+============================================================
+  Image             : 4.jpg
+  Classifier verdict: REAL  (conf 94.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is `` fake '' based on several visual inconsistencies and artifacts that are commonly associated with AI-generated face images. A key indicator of the inauthenticity is the clear structural flaw -- specifically, a noticeable color difference between half-face regions — which strongly suggests improper blending or synthetic generation. Additionally, subtle signs such as overly smooth skin texture without natural imperfections like pores further support this conclusion. There's also an unnatural blur around facial edges along with inconsistent lighting across shadowed areas, both of which align well-known generator limitations. These clues collectively make it relatively straightforward to identify the image as artificially generated without needing deep analysis. Considering the evident misblending, lack thereof fine biological details, and other visible anomalies induced by generative models, we can confidently assert that this sample is indeed AI-produced rather than being authentic human imagery. This example demonstrates how identifiable flaws alone can confirm artificial origin even at educational levels where technical detail scrutiny isn't required. Therefore, it falls under easy difficulty category.
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  1.jpg           FAKE     81.5%
+  2.jpg           FAKE     87.2%
+  3.jpg           REAL     58.2%
+  4.jpg           REAL     94.5%
+============================================================
+
+Log saved to: C:\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260824_103545.log
+Done.

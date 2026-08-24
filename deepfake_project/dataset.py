@@ -167,6 +167,8 @@ class HydraFakeDataset(Dataset):
         missing_count  = 0
         found_count    = 0
         fallback_count = 0
+        dupe_count     = 0
+        seen_paths     = set()
 
         for jf in sorted(files):
             with open(jf, encoding="utf-8") as f:
@@ -181,10 +183,21 @@ class HydraFakeDataset(Dataset):
                 resolved = _resolve_path(imgs[0], self.dataset_root)
                 label    = int(e.get("label", 0))
 
-                if os.path.exists(resolved):
-                    found_count += 1
-                else:
+                # The same image is listed across multiple JSON files
+                # (all.json + per-generator files + sft/mipo/pgrpo).
+                # Keep only the first occurrence.
+                key = os.path.normcase(resolved)
+                if key in seen_paths:
+                    dupe_count += 1
+                    continue
+                seen_paths.add(key)
+
+                # Skip entries whose image is missing on disk instead of
+                # silently training on a black-image substitute.
+                if not os.path.exists(resolved):
                     missing_count += 1
+                    continue
+                found_count += 1
 
                 raw_reasoning = _extract_reasoning(e.get("messages", []))
 
@@ -216,13 +229,18 @@ class HydraFakeDataset(Dataset):
 
         print(f"[{self.split}] {len(self.samples)} samples "
               f"from {len(files)} JSON file(s). "
-              f"Found: {found_count}  Missing: {missing_count}  "
+              f"Found: {found_count}  Missing(skipped): {missing_count}  "
+              f"Duplicates(skipped): {dupe_count}  "
               f"Reasoning fallbacks: {fallback_count}")
 
-        if missing_count > 0 and found_count == 0:
-            print(f"  WARNING: ALL {missing_count} image paths are missing.")
-        elif missing_count > 0:
-            print(f"  WARNING: {missing_count} image paths could not be resolved.")
+        if missing_count > 0:
+            print(f"  WARNING: skipped {missing_count} entries with "
+                  f"missing images under root: {self.dataset_root}")
+        if len(self.samples) == 0:
+            raise FileNotFoundError(
+                f"[{self.split}] 0 usable images resolved from {json_dir}. "
+                f"Check --dataset_root ({self.dataset_root}) and that the "
+                f"on-disk folder layout matches the JSON paths.")
 
     def __len__(self):
         return len(self.samples)

@@ -60,7 +60,7 @@ def parse_args():
     p.add_argument("--max_new_tokens", type=int, default=512)
     p.add_argument("--image_size",     type=int, default=448)
     p.add_argument("--log_dir",        default=
-                   r"C:\Users\Admin\Desktop\ly project c 68\deepfake_project"
+                   r"C:\deepfake_project"
                    r"\runs\intern_exp2\logs")
     return p.parse_args()
 
