@@ -1,0 +1,74 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_best_20260428_151605.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/best.pth
+Images        : ['1.jpg', '2.jpg', '3.jpg', '4.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/best.pth
+  epoch=7  stage=?  missing=0  unexpected=0
+
+Processing 4 image(s) ...
+
+
+============================================================
+  Image             : 1.jpg
+  Classifier verdict: FAKE  (conf 85.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> <description>The image exhibits multiple structural inconsistencies that strongly suggest artificial generation. The skin tone is unnaturally uniform, lacking the natural variation seen in real human faces such as pores or subtle color shifts under lighting and expression changes like squinting eyes during smile production. Facial proportions are also off -- particularly eye spacing relative to face width --- which deviates from typical biometric norms.
+    Further inspection reveals overly smooth edges along facial contours without any signs of realistic texture blending typically present near hairlines and around glasses' borders.
+    </subscene_description>
+    The lack of high-frequency details within both skin textures supports its synthetic origin since even a brief visual scan highlights missing fine lines common across AI-generated images.<device_attributes>A clean background with no contextual elements makes it impossible for there be an optical focus discrepancy.</background_info>
+    These issues align well with known artifacts produced by generative models attempting photorealism but failing at finer detail rendering and realism replication." class="output-tag">fake </output-label>" depth=1></visual-structure-analysis>, based on immediate observation alone. Considering all observed anomalies collectively — especially poor structure modeling leading to unnatural expressions and misaligned features—the conclusion remains consistent: this image does not depict reality accurately. It further confirms what can-be-determined immediately upon basic scrutiny rather than requiring deep analysis—hence categorized as easy sample type..}
+============================================================
+
+============================================================
+  Image             : 2.jpg
+  Classifier verdict: REAL  (conf 84.7%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The image appears to be authentic at first glance, with no obvious signs of manipulation. Upon inspection, the facial features are well-proportioned and symmetrical without any visible distortions or unnatural expressions that would raise suspicion as fake images often do during initial observation.
+    Looking more closely:
+    - **Visual Structure**: There is a natural consistency in skin tone across different parts of the face, indicating there were likely not multiple color mismatches typical seen on swapped faces.
+    - **Subtle Generator Artifacts**:
+    - Edge smoothness: Natural contours exist between hairline, jaw line etc., suggesting proper rendering rather than artificially generated edges
+    - Texture detail present within realistic pores distribution indicates high-frequency information preserved which lacks common AI smoothing effects
+    Considering both structural coherence and absence of subtle synthetic artifacts suggests authenticity even when viewed holistically despite moderate resolution constraints limiting deeper forensic analysis beyond surface-level cues
+============================================================
+
+============================================================
+  Image             : 3.jpg
+  Classifier verdict: REAL  (conf 94.9%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> At first glance, the image appears realistic with no obvious signs of manipulation. Upon closer inspection, multiple visual and structural aspects support its authenticity: facial proportions are natural, expressions coherent, skin tones consistent across regions--showing none that raise suspicion under scrutiny by forensic standards such as edge distortions or unnatural blurring (suggesting it is not AI-generated). Furthermore, subtle details like texture continuity in hair strands align more closely to a genuine photograph than an artificially generated one where textures might appear less defined.
+    The lighting on both individuals matches surrounding objects without inconsistency; shadows follow expected physical patterns from apparent light sources located above them, reinforcing realism. There's also coherence between context within their environments—buildings' features match those they depict inside—and any accessories present maintain logical placement relative to each other. These factors collectively rule out common deepfake inconsistencies visible only through detailed analysis rather than immediate perception. Considering all observed attributes—from basic structure alignment to contextual harmony—the presence of clear environmental consistency cues strongly supports this being authentic content captured realistically via photography. It does so convincingly enough to classify itself easily into 'easy’ difficulty category for detection due to abundant reliable evidence available even at superficial level alone sufficient for confident judgment.
+============================================================
+
+============================================================
+  Image             : 4.jpg
+  Classifier verdict: REAL  (conf 89.0%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is clearly determined from the initial visual inspection. Upon close examination, multiple lines of evidence support this judgment: facial structure appears natural with consistent proportions and no visible distortions or asymmetries; skin tone transitions smoothly under uniform lighting without color mismatches that often appear in face-swapped images. Subtle artifacts typically introduced by generative models--such as unnatural edges around features like hairline boundaries, texture irregularities, blurriness inconsistent across regions, nor do they exhibit missing high-frequency details such as pores or fine hairs further reinforce its authenticity beyond doubt. Additionally, there are no violations to physical laws including plausible shadowing behavior during nighttime activities aligns naturally expected behaviors observed visually.
+    To dive deeper into contextual clues provided even though scene elements might be ambiguous due to image quality slight mismatch between clothing colors does not constitute manipulation on part but rather environmental variability make conclusion more grounded than it would for lower-resolutions issues Further synthesis holds weight based upon consistency seen within human subjects alone No signs here warrant closer scrutiny involving misleading anomalies commonly found in synthetic outputs In light of strong structural coherence absence generator-specific abnormalities lack any indication AI involvement at level necessary enough realism supports definitive classification Real Based solely on available cues none suggest artificial generation Human faces displayed coherent structures textures absent significant inconsistencies throughout corroborated through detailed forensic lens yet still considered medium difficulty case primarily because confirmation relies heavily on observable facts only
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  1.jpg           FAKE     85.5%
+  2.jpg           REAL     84.7%
+  3.jpg           REAL     94.9%
+  4.jpg           REAL     89.0%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_best_20260428_151605.log
+Done.

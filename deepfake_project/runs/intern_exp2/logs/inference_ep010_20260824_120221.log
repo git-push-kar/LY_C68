@@ -1,0 +1,34 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260824_120221.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['mar.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : mar.jpg
+  Classifier verdict: REAL  (conf 85.3%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The image appears authentic at a glance and detailed analysis confirms this. To verify the authenticity, we proceed in three logical steps: first checking for obvious structural issues, then inspecting for subtle generation artifacts, and finally evaluating physical plausibility. Since no clear anomalies are visible initially, we examine them progressively to ensure there is no hidden indicator of fakeness. Visually, the face shows consistent skin tone without mismatched regions that might indicate manipulation or swap. Facial features such as eyes, nose, and mouth are proportionate and symmetrically aligned, with natural expression coordination between the smile and eye movement. There are no distortions in facial proportions, which often appear abnormal but here maintain realistic appearance.
+    Upon closer inspection, edges around hairline and jaw line exhibit soft transitions typical of photographs, not jagged or artificial contours. Skin texture includes fine details like pores and lines—features missing would raise suspicion. No blockiness, unnatural blurring, or blending boundaries suggest post-processing or generative smoothing effects. Upon deepest scrutiny involving contextual understanding—and lacking any violations thereof—the lighting direction and shadow consistency aligns across foreground and background elements. Additionally, high-resolution textures remain physically plausible, with no optical focus discrepancies nor stylization traits common to synthetic images.
+    All examined aspects—from surface-level structure to deeper physics-based realism—are coherent with those found in genuine photos, supporting the conclusion that it's an unaltered capture of a real person. Given the absence of detectable visual abnormalities, generator-specific artefacts, and inconsistencies rooted in physical laws—even after thorough verification—we confidently affirm that the image depicted herein is genuinely a real photograph captured by a camera rather than artificially synthesized via AI techniques.
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  mar.jpg         REAL     85.3%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260824_120221.log
+Done.

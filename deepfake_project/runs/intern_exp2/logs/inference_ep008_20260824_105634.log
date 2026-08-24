@@ -1,0 +1,78 @@
+Inference log : C:\deepfake_project\runs\intern_exp2\logs\inference_ep008_20260824_105634.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep008.pth
+Images        : ['1.jpg', '2.jpg', '3.jpg', '4.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep008.pth
+  epoch=8  stage=joint  missing=0  unexpected=0
+
+Processing 4 image(s) ...
+
+
+============================================================
+  Image             : 1.jpg
+  Classifier verdict: FAKE  (conf 68.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The image is likely AI-generated due to several visually apparent inconsistencies. At first glance, the face exhibits structural irregularities that raise suspicion about its authenticity: facial proportions appear off with unusually large eyes and an asymmetrical nose bridge; expressions seem unnatural without proper coordination between features like mismatched eye openness or overly perfect smiles devoid of natural muscle engagement such as crow's feet around the eyes. These are common signs in synthetic images where anatomical accuracy may be compromised for visual coherence.
+    Upon closer inspection further evidence supports this hypothesis through subtle artifacts introduced by generative models:
+    - Edges along the hairline lack realistic softness typically seen near human scalp,
+    - Facial textures show inconsistent smoothness across different regions suggesting blending issues during generation.
+    Going beyond surface-level clues we also observe violations against physical plausibility - lighting appears flat lacking directional consistency which contradicts how light behaves realistically on three-dimensional surfaces... shadows under chin or jaw would naturally follow a defined direction given ample ambient illumination. Additionally makeup highlights don't align logically either,... glossiness isn’t implausible per se but seems exaggerated when not grounded within contextual realism.
+    Considering all these factors together – flawed structure at foundational level combined with minor textural anomalies and physically unrealistic rendering--the cumulative case strongly leans toward artificial origin rather than being authentic photographic representation.. Therefore it can confidently conclude that the image was generated synthetically using current standards of AI-based face synthesis techniques. Based upon examining clear skeletal imperfections alongside subtler digital traces...
+    even partially coherent yet ultimately unrealistically rendered elements add up convincingly enough to confirm emergence from algorithmic modeling process instead of genuine capture via camera lens.
+============================================================
+
+============================================================
+  Image             : 2.jpg
+  Classifier verdict: FAKE  (conf 76.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> the image appears photorealistic at first glance, but lacks natural imperfections typical of real human faces. Upon closer inspection, subtle inconsistencies emerge that are not immediately apparent in a quick visual check--these require more focused analysis to detect accurately. The most noticeable artifacts point toward artificial generation: while facial proportions and expressions appear normal with no obvious distortions or asymmetries, skin texture is unusually smooth lacking pores , fine lines, shadows -- any high-frequency detail typically found on actual human complexions. These details become visible only through deliberate scrutiny rather than casual observation. Further examination reveals edge consistency without organic softness transitions around contours like hairlines, suggesting algorithmic smoothing effects used during blending stages common in AI-generated images. Additionally, there's an absence of localized blurring anomalies often seen when depth cues mismatch camera optics; however this may also be influenced by post-processing enhancements for aesthetic appeal which cannot always coexist naturally within realistic photography principles.
+    The lighting across both face and background remains consistent initially - resembling professional setups commonly employed in studio portraits – yet deeper shadow evaluation fails to reveal expected gradations given the frontal illumination alone. Such discrepancies could imply non-physically plausible rendering algorithms utilized during final synthesis steps before distribution as finished imagery. Considering all observed nuances collectively—smooth textures devoid of lifelike detailing, unnatural sharp edges alongside missing micro-variations, and implausible shading—the evidence strongly suggests manipulation beyond simple digital alteration. While none attribute clearly indicate forgery à la blatant mismatches or glaring structural errors, cumulative presence supports conclusion revolving around medium-hard detection criteria aligning with "medium" difficulty classification suggested upon initial review. Synthesizing observations from textural analyses along with slight misalignments detected in expression clarity provides compelling grounds supporting authenticity flaws inherent in the image despite its otherwise convincing appearance. Based on detailed forensic checks focusing particularly on textual surface qualities and minimal observable aberrations, it becomes evident that the image has potential indicators of being artificially generated—a moderately challenging case requiring thoughtful interpretation of superficial realism accompanied by careful attention paid to nuanced generative traces indicative of deepfake creation. Therefore marking它as likely manipulated．
+============================================================
+
+============================================================
+  Image             : 3.jpg
+  Classifier verdict: REAL  (conf 65.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The answer is that the image appears to be AI-generated based on several noticeable visual inconsistencies. At a glance, there are clear structural abnormalities in facial symmetry and proportion: one eye lacks detail or has an unnatural shape while being slightly larger than its counterpart; eyebrows exhibit asymmetry between left and right sides with mismatched thicknesss--features uncommon at this level of generation. Further inspection reveals subtle artifacts such as unnaturally sharp edges around hairline without realistic soft blending transitions typical seen even among amateur images.
+    Additionally, lighting discrepancies become apparent upon closer examination where shadows under eyes appear overly pronounced compared against highlights on other parts of the face -- violating basic principles of consistent illumination across real-world conditions. These clues collectively suggest artificial creation rather than authenticity captured by camera.
+    Considering both obvious anomalies like distorted proportions alongside more nuanced edge details and implausible shadowing effects, it becomes evident that multiple layers point towards synthetic fabrication - supporting final conclusion that this photo was not photographed but digitally generated instead. It's enough evidence for reasonable suspicion regardless of initial confidence levels before thorough analysis. Given visible distortions combined with secondary detectable flaws due to inconsistent shading and natural human variation detection standards challenging high-quality deepfakes make authentic verification difficult despite discernible irregularities present here. Therefore judgment leans toward likely digital manipulation occurring behind-the-scenes during advanced synthesis stage.
+============================================================
+
+============================================================
+  Image             : 4.jpg
+  Classifier verdict: REAL  (conf 96.2%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> At first glance, the image appears authentic with natural facial features and lighting. Upon closer inspection, there are no structural abnormalities such as mismatched skin tones or distorted proportions that would immediately suggest artificial generation.
+    To dive deeper into subtle indicators of authenticity:
+    - The edges around human anatomy like hairlines appear soft without digital artifacts
+    - Skin texture shows fine details typical for high-resolution images rather than smoothed-out patterns common in AI-generated faces
+    Finally examining physical plausibility:
+    - Lighting direction is consistent across shadows indicating a single coherent light source.
+    The background aligns stylistically & optically with foreground elements,
+    There’s an absence of unnatural focus shifts between face regions
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  1.jpg           FAKE     68.1%
+  2.jpg           FAKE     76.1%
+  3.jpg           REAL     65.5%
+  4.jpg           REAL     96.2%
+============================================================
+
+Log saved to: C:\deepfake_project\runs\intern_exp2\logs\inference_ep008_20260824_105634.log
+Done.

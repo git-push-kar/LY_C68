@@ -1,0 +1,37 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep011_20260824_121013.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep011.pth
+Images        : ['mar.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep011.pth
+  epoch=11  stage=joint  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : mar.jpg
+  Classifier verdict: REAL  (conf 87.4%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The image appears to be authentic at a glance, with no obvious signs of manipulation or synthetic generation. To confirm this initial judgment, we proceed by analyzing the image through three progressively deeper layers: visual structure inspection, generator-specific artifacts check, and physical plausibility verification. Each layer builds upon the previous one in terms of detail complexity and forensic relevance, ensuring a comprehensive assessment. At the structural level, the face exhibits natural proportions, consistent skin tone, and coherent expressions without any visible distortions or mismatches that might suggest digital tampering. Moving beyond the surface, subtle indicators such as smooth facial edges, realistic skin texture, and absence of unnatural blurring further reinforce its authenticity. On a more conceptual level, lighting and shadows behave according to real-world physics, and there are no contextual inconsistencies between the subject and background. Together, these observations form a cohesive case for realism. Considering all levels of evidence--from basic visual checks to deep logical inference--the image shows no indications of being fake and is confidently classified as genuine. Given the clear lack of anomalies across every examined dimension, the conclusion remains firmly rooted in factual confidence.
+    --- Summary -- Evidence Breakdown ---
+    - **Visual Structure** - All facial features maintain proportional and symmetrical alignment typical of human anatomy.
+    - **Subtle Artifacts** \( \begin{aligned} & Texture consistency \\& Edge transitions\\& Absence of blending boundaries \\end{aligned} \) No traces of artificial smoothing或blocky artifact patterns typically found in generated images.
+    - **Physical Plausibility** (lighting、shadow direction，background harmony）Each element adheres to expected optical and environmental behavior without contradictions.
+    --- Conclusion -- While minor pixelation exists—possibly due to resolution or compression—it does not manifest as major forgery markers. This slight imperfection aligns with real photographic degradation rather than AI-generated inconsistency. Synthesizing all findings, the image demonstrates strong empirical validity across multiple forensic dimensions. It retains sufficient fidelity even under detailed scrutiny to affirm its genuineness despite minute potential noise. Final determination stands solidly on verified facts alone.
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  mar.jpg         REAL     87.4%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep011_20260824_121013.log
+Done.
