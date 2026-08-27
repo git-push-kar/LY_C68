@@ -1,16 +1,16 @@
-"""
+﻿"""
 dataset.py
 ==========
 HydraFake dataset loader.
 
 Fixes applied (vs previous version):
-  #4  Tokenization moved out of __getitem__ → done at load time in _load().
+  #4  Tokenization moved out of __getitem__ â†’ done at load time in _load().
       Previous: tokenizer called inside the DataLoader worker loop every step,
       creating a CPU bottleneck that kept the GPU idle between batches.
       Now: reasoning text is tokenized once at dataset construction. The
-      DataLoader collates pre-computed int tensors — extremely fast.
+      DataLoader collates pre-computed int tensors â€” extremely fast.
 
-  #7  Reasoning quality filter — samples with empty reasoning are still
+  #7  Reasoning quality filter â€” samples with empty reasoning are still
       included (the image + label is valid) but get a minimal fallback
       text "<answer>real</answer>" or "<answer>fake</answer>" so the LM
       loss always has a clean target, never trains on empty sequences.
@@ -69,14 +69,20 @@ _MIN_REASONING_LEN = 20
 
 
 def _extract_reasoning(messages: list) -> str:
+    """
+    Return the FULL assistant response verbatim, preserving the structured
+    tags (<fast>/<planning>/<reasoning>/<reflection>/<conclusion>) AND the
+    final <answer>real|fake</answer>.
+
+    Previous behaviour stripped the tags and dropped the answer entirely,
+    which created a train/inference format mismatch: inference.py parses for
+    exactly these tags, and pgrpo-style entries taught a conflicting bare
+    '<answer> X </answer>' mode.
+    """
     for msg in messages:
         if msg.get("role") != "assistant":
             continue
-        content = msg.get("content", "")
-        parts = _TAG_RE.findall(content)
-        if parts:
-            return " ".join(p.strip() for p in parts)
-        return _ANSWER_RE.sub("", content).strip() or content.strip()
+        return msg.get("content", "").strip()
     return ""
 
 
@@ -144,7 +150,7 @@ class HydraFakeDataset(Dataset):
         tokenizer,
         split:        str = "train",
         image_size:   int = 448,
-        max_text_len: int = 192,
+        max_text_len: int = 512,
     ):
         self.dataset_root = dataset_root
         self.tokenizer    = tokenizer
@@ -165,10 +171,18 @@ class HydraFakeDataset(Dataset):
                 f"No JSON files found under: {json_dir}")
 
         missing_count  = 0
-        found_count    = 0
         fallback_count = 0
         dupe_count     = 0
-        seen_paths     = set()
+        no_trace_count = 0
+        too_long_count = 0
+
+        # Phase 1 â€” merge conflicting annotations per image.
+        # The same image is listed across multiple JSON files with
+        # DIFFERENT assistant targets: all.json / per-generator files /
+        # pgrpo contain a bare '<answer> X </answer>', while sft_36k and
+        # mipo carry the full structured trace. Keep the RICHEST copy
+        # (tagged trace beats bare answer) per unique image.
+        candidates = {}   # normcase path -> (rich, resolved, label, raw, ftype)
 
         for jf in sorted(files):
             with open(jf, encoding="utf-8") as f:
@@ -183,54 +197,86 @@ class HydraFakeDataset(Dataset):
                 resolved = _resolve_path(imgs[0], self.dataset_root)
                 label    = int(e.get("label", 0))
 
-                # The same image is listed across multiple JSON files
-                # (all.json + per-generator files + sft/mipo/pgrpo).
-                # Keep only the first occurrence.
-                key = os.path.normcase(resolved)
-                if key in seen_paths:
-                    dupe_count += 1
-                    continue
-                seen_paths.add(key)
-
                 # Skip entries whose image is missing on disk instead of
                 # silently training on a black-image substitute.
                 if not os.path.exists(resolved):
                     missing_count += 1
                     continue
-                found_count += 1
 
                 raw_reasoning = _extract_reasoning(e.get("messages", []))
+                rich = 1 if _TAG_RE.search(raw_reasoning or "") else 0
 
-                # Fix #7: sanitize empty / garbage reasoning
-                reasoning = _sanitize_reasoning(raw_reasoning, label)
-                if reasoning != raw_reasoning.strip():
-                    fallback_count += 1
+                key = os.path.normcase(resolved)
+                prev = candidates.get(key)
+                if prev is None:
+                    candidates[key] = (rich, resolved, label, raw_reasoning,
+                                       e.get("type", "unknown"))
+                else:
+                    dupe_count += 1
+                    if rich > prev[0]:
+                        candidates[key] = (rich, resolved, label,
+                                           raw_reasoning,
+                                           e.get("type", "unknown"))
 
-                # Fix #4: tokenize HERE at load time, not in __getitem__.
-                # This runs once per sample in the main process during dataset
-                # construction. The DataLoader then just collates pre-computed
-                # int tensors — no tokenizer CPU overhead per training step.
-                enc = self.tokenizer(
-                    reasoning,
-                    max_length=self.max_text_len,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt",
-                )
+        # Phase 2 â€” build samples from the winning annotation only.
+        # Images with NO tagged copy anywhere are skipped entirely: they
+        # would teach the LM the degenerate 'bare answer' mode that caused
+        # the reasoning-format collapse. Harmless for the classifier,
+        # which is frozen during corrective fine-tuning.
+        for rich, resolved, label, raw_reasoning, ftype in candidates.values():
+            if not rich:
+                if self.split == "train":
+                    no_trace_count += 1
+                    continue
+                # Non-train splits only feed classification metrics
+                # (validate()/eval are cls-only), so give them the minimal
+                # valid target instead of dropping them.
+                raw_reasoning = ""
 
-                self.samples.append({
-                    "image_path":     resolved,
-                    "label":          label,
-                    "reasoning_ids":  enc["input_ids"].squeeze(0),       # (max_text_len,)
-                    "attention_mask": enc["attention_mask"].squeeze(0),  # (max_text_len,)
-                    "reasoning_text": reasoning,   # kept for logging/debug only
-                    "forgery_type":   e.get("type", "unknown"),
-                })
+            # Fix #7: sanitize empty / garbage reasoning
+            reasoning = _sanitize_reasoning(raw_reasoning, label)
+            if reasoning != raw_reasoning.strip():
+                fallback_count += 1
 
-        print(f"[{self.split}] {len(self.samples)} samples "
+            # Fix #4: tokenize HERE at load time, not in __getitem__.
+            #
+            # EOS append: targets never contained an eos_token before, so
+            # the LM never learned WHEN to stop generating. Appending it
+            # makes '<answer>...</answer><eos>' the learned ending.
+            target_text = reasoning + self.tokenizer.eos_token
+
+            # Drop over-long targets instead of truncating: a truncated
+            # trace ends mid-sentence with NO <answer> and NO eos, which
+            # would teach the LM to stop without answering.
+            n_tok = len(self.tokenizer(target_text)["input_ids"])
+            if n_tok > self.max_text_len:
+                too_long_count += 1
+                continue
+
+            enc = self.tokenizer(
+                target_text,
+                max_length=self.max_text_len,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
+
+            self.samples.append({
+                "image_path":     resolved,
+                "label":          label,
+                "reasoning_ids":  enc["input_ids"].squeeze(0),
+                "attention_mask": enc["attention_mask"].squeeze(0),
+                "reasoning_text": reasoning,   # kept for logging/debug only
+                "forgery_type":   ftype,
+            })
+
+        print(f"[{self.split}] {len(self.samples)} usable samples "
               f"from {len(files)} JSON file(s). "
-              f"Found: {found_count}  Missing(skipped): {missing_count}  "
-              f"Duplicates(skipped): {dupe_count}  "
+              f"Unique images found: {len(candidates)}  "
+              f"Missing(skipped): {missing_count}  "
+              f"Duplicates(merged): {dupe_count}  "
+              f"No-tagged-trace(skipped): {no_trace_count}  "
+              f"Too-long(skipped): {too_long_count}  "
               f"Reasoning fallbacks: {fallback_count}")
 
         if missing_count > 0:
@@ -280,7 +326,7 @@ def build_dataloaders(
     json_root:      str,
     tokenizer_name: str = "./models/InternVL3-2B",
     image_size:     int = 448,
-    max_text_len:   int = 192,
+    max_text_len:   int = 512,
     batch_size:     int = 8,
     num_workers:    int = 8,
 ):

@@ -59,9 +59,8 @@ def parse_args():
                    default=["1.jpg", "2.jpg", "3.jpg", "4.jpg"])
     p.add_argument("--max_new_tokens", type=int, default=512)
     p.add_argument("--image_size",     type=int, default=448)
-    p.add_argument("--log_dir",        default=
-                   r"C:\deepfake_project"
-                   r"\runs\intern_exp2\logs")
+    p.add_argument("--log_dir",        default=None,
+                   help="Defaults to <project>/runs/intern_exp2/logs")
     return p.parse_args()
 
 
@@ -93,6 +92,18 @@ def parse_reasoning(text: str) -> dict:
     m = _ANSWER_RE.search(text)
     tags["answer"] = m.group(1).lower() if m else "unknown"
     return tags
+
+
+def trim_after_answer(text: str) -> str:
+    """
+    Cut everything after the LAST '</answer>' tag. Checkpoints trained
+    before the eos-append fix never learned when to stop and ramble until
+    max_new_tokens is exhausted.
+    """
+    end = text.rfind("</answer>")
+    if end != -1:
+        return text[:end + len("</answer>")].strip()
+    return text.strip()
 
 
 # ── Result formatter ──────────────────────────────────────────────────────────
@@ -148,6 +159,10 @@ def main():
     # ── Log file: inference_<ckpt>_<timestamp>.log ────────────────────
     ckpt_name = os.path.splitext(os.path.basename(args.checkpoint))[0]
     ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.log_dir is None:
+        args.log_dir = os.path.join(
+            script_dir, "runs", "intern_exp2", "logs")
+    os.makedirs(args.log_dir, exist_ok=True)
     log_path  = os.path.join(args.log_dir, f"inference_{ckpt_name}_{ts}.log")
     logger    = setup_logger(log_path)
 
@@ -210,7 +225,7 @@ def main():
             result = model.predict(pv, tokenizer,
                                    max_new_tokens=args.max_new_tokens)
 
-        raw_text = result["reasoning"][0]
+        raw_text = trim_after_answer(result["reasoning"][0])
         tags     = parse_reasoning(raw_text)
         verdict  = "FAKE" if cls_pred == 1 else "REAL"
 

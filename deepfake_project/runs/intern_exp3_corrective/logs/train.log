@@ -1,0 +1,21 @@
+13:41:21 | Device: cuda
+13:41:21 | GPU   : NVIDIA RTX A5000
+13:41:21 | VRAM  : 25.8 GB
+13:41:21 | Loading data ...
+13:42:48 | Building model ...
+13:42:53 | Loading model weights from: ./runs/intern_exp2/checkpoints/ep010.pth
+13:42:56 |   epoch=10  missing=0  unexpected=0
+13:42:56 | Froze 16 tensors (cls_head=True, projector=True)
+13:42:56 | Trainable after freeze: 73,990,788 (3.41%)
+13:42:56 | Optimizer groups: LoRA=392 tensors, custom=4 tensors
+13:42:56 | ======================================================================
+13:42:56 |   batch_size=4  grad_accum=8  eff_batch=32
+13:42:56 |   lm_seq_len=512  lm_loss_weight=0.3
+13:42:56 |   epochs_cls=0  epochs_joint=2
+13:42:56 |   lr=1e-05  lora_rank=64
+13:42:56 |   steps/epoch=8841  total_steps=17682
+13:42:56 |   logs → ./runs/intern_exp3_corrective\logs
+13:42:56 | ======================================================================
+13:42:56 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+13:42:56 | ======================================================================
+13:45:00 | Ep 1 | Step 0/8841 | Loss 0.8104 | Cls 0.4316 | LM 1.2628

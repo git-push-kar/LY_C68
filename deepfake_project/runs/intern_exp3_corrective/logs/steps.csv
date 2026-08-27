@@ -1,0 +1,2 @@
+epoch,step,global_step,loss,cls_loss,lm_loss
+1,0,0,0.810428,0.43158,1.262828

@@ -226,7 +226,7 @@ class DeepfakeReasoningModel(nn.Module):
             )
         n_params = sum(p.numel() for _, p in lora_params)
         print(f"  LoRA trainable: {n_params:,} params across "
-              f"{len(lora_params)} tensors  ✓")
+              f"{len(lora_params)} tensors  [OK]")
 
     def _print_params(self):
         total     = sum(p.numel() for p in self.parameters())
@@ -336,7 +336,14 @@ class DeepfakeReasoningModel(nn.Module):
     # ── Inference ─────────────────────────────────────────────────────────────
 
     @torch.no_grad()
-    def predict(self, pixel_values, tokenizer, max_new_tokens=512):
+    def predict(self, pixel_values, tokenizer, max_new_tokens=512,
+                do_sample=False, temperature=1.0, top_p=1.0,
+                repetition_penalty=1.05):
+        """
+        Deterministic by default (greedy) — required for reproducible
+        forensic analysis. The old hardcoded sampling config
+        (temp 0.8 / top_p 0.9 / rep 1.3) made outputs unstable.
+        """
         self.eval()
         cls_token, patch_mean = self._get_vision_features(pixel_values)
 
@@ -368,10 +375,11 @@ class DeepfakeReasoningModel(nn.Module):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=0.8,
-                top_p=0.9,
-                repetition_penalty=1.3,
+                do_sample=do_sample,
+                temperature=temperature,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                use_cache=True,
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )

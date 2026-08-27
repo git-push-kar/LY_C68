@@ -7,7 +7,7 @@
 #       train_epoch reads reasoning_ids/attention_mask directly from batch.
 #   #5  Eval script was broken (collate_fn, build_transform imports).
 #       eval.py is a separate fixed file.
-#   #11 lm_seq_len default changed to 192 (covers answer token in all traces).
+#   #11 lm_seq_len default 512 (covers full tagged trace + <answer> + eos; longer targets are dropped not truncated).
 #   #12 epochs_joint default lowered to 2 (reduces overfitting risk).
 
 # Logging added:
@@ -31,6 +31,9 @@
 #         --lr           5e-5 ^
 #         --num_workers  8
 
+# Corrective fine-tune from ep010 (one line, cmd):
+#     python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --weights_from ./runs/intern_exp2/checkpoints/ep010.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
+
 
 import argparse
 import csv
@@ -41,7 +44,7 @@ import sys
 
 import torch
 import torch.nn as nn
-from torch.amp import GradScaler, autocast
+from torch.amp import autocast
 from transformers import AutoTokenizer
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 
@@ -203,7 +206,7 @@ def build_scheduler(optimizer, warmup_steps, total_steps):
 
 # ── Train one epoch ───────────────────────────────────────────────────────────
 
-def train_epoch(model, loader, optimizer, scheduler, scaler,
+def train_epoch(model, loader, optimizer, scheduler,
                 device, epoch, logger, step_csv,
                 use_lm_loss=False, grad_accum=1):
     """
@@ -237,13 +240,15 @@ def train_epoch(model, loader, optimizer, scheduler, scaler,
                          reasoning_attention_mask=reasoning_mask)
             loss = out["loss"] / grad_accum
 
-        scaler.scale(loss).backward()
+        # No GradScaler: it is FP16-only machinery (no BF16 unscale kernel)
+        # and pointless under bfloat16 autocast — bf16 shares fp32's
+        # exponent range, so gradients never need scaling.
+        loss.backward()
 
         if (step + 1) % grad_accum == 0:
-            scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            scaler.step(optimizer)
-            scaler.update()
+            grads = [p for p in model.parameters() if p.grad is not None]
+            nn.utils.clip_grad_norm_(grads, 1.0)
+            optimizer.step()
             scheduler.step()
             optimizer.zero_grad(set_to_none=True)
 
@@ -335,9 +340,10 @@ def parse_args():
     p.add_argument("--grad_accum",     type=int,   default=4)
     p.add_argument("--epochs_cls",     type=int,   default=3)
     p.add_argument("--epochs_joint",   type=int,   default=2)  # fix #12
-    p.add_argument("--lm_seq_len",     type=int,   default=192,  # fix #11
-                   help="Reasoning token length. 192 = safe minimum that "
-                        "covers <answer> in all traces.")
+    p.add_argument("--lm_seq_len",     type=int,   default=512,
+                   help="Reasoning token length. 512 covers ~95% of the "
+                        "full tagged traces; longer targets are DROPPED "
+                        "(never truncated) by the dataset.")
     p.add_argument("--lr",             type=float, default=5e-5)
     p.add_argument("--weight_decay",   type=float, default=0.01)
     p.add_argument("--lora_rank",      type=int,   default=64)
@@ -347,6 +353,16 @@ def parse_args():
     p.add_argument("--warmup_ratio",   type=float, default=0.05)
     p.add_argument("--patience",       type=int,   default=5)
     p.add_argument("--resume",         default=None)
+    p.add_argument("--weights_from",   default=None,
+                   help="Init MODEL WEIGHTS ONLY from this checkpoint "
+                        "(no optimizer/scheduler restore). Use for "
+                        "corrective fine-tuning from a trusted epoch.")
+    p.add_argument("--freeze_cls_head",   action="store_true",
+                   help="Freeze the classification head (protects "
+                        "classifier during corrective fine-tuning).")
+    p.add_argument("--freeze_projector", action="store_true",
+                   help="Freeze the visual projector (stabilises the "
+                        "LLM prefix during corrective fine-tuning).")
     return p.parse_args()
 
 
@@ -393,6 +409,49 @@ def main():
         lm_loss_weight=args.lm_loss_weight,
     ).to(device)
 
+    # ── Corrective init: model weights ONLY ───────────────────────────
+    # Unlike --resume, this deliberately does NOT restore optimizer or
+    # scheduler state. The old schedule was re-stretched across many
+    # resumes (epochs_joint 2→5→7→10), so its moment/schedule state is
+    # not trustworthy for a new objective.
+    if args.weights_from:
+        if not os.path.isfile(args.weights_from):
+            raise FileNotFoundError(f"weights_from not found: {args.weights_from}")
+        logger.info(f"Loading model weights from: {args.weights_from}")
+        ckpt = torch.load(args.weights_from, map_location=device,
+                          weights_only=False)
+        missing, unexpected = model.load_state_dict(
+            ckpt.get("model", ckpt), strict=False)
+
+        critical_prefixes = ("cls_head.", "custom_projector.", "lora_")
+        critical_missing = [k for k in missing
+                            if k.startswith(critical_prefixes)]
+        if critical_missing:
+            raise RuntimeError(
+                "weights_from checkpoint incompatible — critical keys "
+                "missing:\n" + "\n".join(critical_missing[:10]))
+        logger.info(f"  epoch={ckpt.get('epoch', '?')}  "
+                    f"missing={len(missing)}  unexpected={len(unexpected)}")
+
+    # ── Corrective freezes (protect classifier + prefix semantics) ────
+    frozen_names = []
+    for n, p_ in model.named_parameters():
+        if args.freeze_cls_head and n.startswith("cls_head."):
+            p_.requires_grad = False
+            frozen_names.append(n)
+        elif args.freeze_projector and n.startswith("custom_projector."):
+            p_.requires_grad = False
+            frozen_names.append(n)
+    if frozen_names:
+        logger.info(f"Froze {len(frozen_names)} tensors "
+                    f"(cls_head={args.freeze_cls_head}, "
+                    f"projector={args.freeze_projector})")
+        trainable = sum(p_.numel() for p_ in model.parameters()
+                        if p_.requires_grad)
+        total     = sum(p_.numel() for p_ in model.parameters())
+        logger.info(f"Trainable after freeze: {trainable:,} "
+                    f"({100*trainable/total:.2f}%)")
+
     # ── Optimizer ─────────────────────────────────────────────────────
     lora_params   = [p for n, p in model.named_parameters()
                      if "lora_" in n and p.requires_grad]
@@ -418,7 +477,6 @@ def main():
     total_steps  = total_epochs * steps_per_ep
     warmup_steps = int(total_steps * args.warmup_ratio)
     scheduler    = build_scheduler(optimizer, warmup_steps, total_steps)
-    scaler       = GradScaler("cuda")
 
     best_auc   = 0.0
     no_improve = 0
@@ -455,7 +513,7 @@ def main():
         stage  = "joint" if use_lm else "cls_only"
 
         tr = train_epoch(
-            model, loaders["train"], optimizer, scheduler, scaler,
+            model, loaders["train"], optimizer, scheduler,
             device, epoch, logger, step_csv,
             use_lm_loss=use_lm, grad_accum=args.grad_accum,
         )
