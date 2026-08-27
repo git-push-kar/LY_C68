@@ -1,8 +1,0 @@
-Inference log : C:\deepfake_project\runs\intern_exp2\logs\inference_ep05_20260824_104015.log
-Checkpoint    : ./runs/intern_exp2/checkpoints/ep05.pth
-Images        : ['1.jpg', '2.jpg', '3.jpg', '4.jpg']
-Device        : cuda
-GPU           : NVIDIA RTX A5000
-
-Loading model ...
-Loading checkpoint: ./runs/intern_exp2/checkpoints/ep05.pth
