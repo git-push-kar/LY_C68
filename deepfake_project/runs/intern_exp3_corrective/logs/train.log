@@ -19,3 +19,120 @@
 13:42:56 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
 13:42:56 | ======================================================================
 13:45:00 | Ep 1 | Step 0/8841 | Loss 0.8104 | Cls 0.4316 | LM 1.2628
+09:48:18 | Device: cuda
+09:48:18 | GPU   : NVIDIA RTX A5000
+09:48:18 | VRAM  : 25.8 GB
+09:48:18 | Loading data ...
+09:49:54 | Building model ...
+09:49:59 | Loading model weights from: ./runs/intern_exp2/checkpoints/ep010.pth
+09:50:02 |   epoch=10  missing=0  unexpected=0
+09:50:02 | Froze 16 tensors (cls_head=True, projector=True)
+09:50:02 | Trainable after freeze: 73,990,788 (3.41%)
+09:50:02 | Optimizer groups: LoRA=392 tensors, custom=4 tensors
+09:50:02 | ======================================================================
+09:50:02 |   batch_size=4  grad_accum=8  eff_batch=32
+09:50:02 |   lm_seq_len=512  lm_loss_weight=0.3
+09:50:02 |   epochs_cls=0  epochs_joint=2
+09:50:02 |   lr=1e-05  lora_rank=64
+09:50:02 |   steps/epoch=8841  total_steps=17682
+09:50:02 |   logs → ./runs/intern_exp3_corrective\logs
+09:50:02 | ======================================================================
+09:50:02 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+09:50:02 | ======================================================================
+09:52:03 | Ep 1 | Step 0/8841 | Loss 0.7488 | Cls 0.4187 | LM 1.1002
+10:00:59 | Ep 1 | Step 200/8841 | Loss 0.9517 | Cls 0.5418 | LM 1.3663
+10:09:51 | Ep 1 | Step 400/8841 | Loss 0.8316 | Cls 0.3900 | LM 1.4720
+10:18:40 | Ep 1 | Step 600/8841 | Loss 0.7011 | Cls 0.3024 | LM 1.3289
+10:27:30 | Ep 1 | Step 800/8841 | Loss 0.7783 | Cls 0.3973 | LM 1.2700
+10:36:30 | Ep 1 | Step 1000/8841 | Loss 0.8624 | Cls 0.4131 | LM 1.4980
+10:46:17 | Ep 1 | Step 1200/8841 | Loss 0.9625 | Cls 0.5366 | LM 1.4197
+11:03:30 | Ep 1 | Step 1400/8841 | Loss 0.7443 | Cls 0.3761 | LM 1.2273
+11:12:28 | Ep 1 | Step 1600/8841 | Loss 0.9914 | Cls 0.5252 | LM 1.5539
+11:20:55 | Ep 1 | Step 1800/8841 | Loss 0.8557 | Cls 0.4940 | LM 1.2055
+11:29:51 | Ep 1 | Step 2000/8841 | Loss 1.2863 | Cls 1.0183 | LM 0.8932
+11:38:20 | Ep 1 | Step 2200/8841 | Loss 0.7072 | Cls 0.3978 | LM 1.0311
+11:46:35 | Ep 1 | Step 2400/8841 | Loss 0.6370 | Cls 0.3610 | LM 0.9199
+11:55:02 | Ep 1 | Step 2600/8841 | Loss 0.6947 | Cls 0.3753 | LM 1.0647
+12:04:39 | Ep 1 | Step 2800/8841 | Loss 0.6468 | Cls 0.3461 | LM 1.0024
+13:11:53 | Ep 1 | Step 3000/8841 | Loss 0.6076 | Cls 0.3209 | LM 0.9558
+13:21:29 | Ep 1 | Step 3200/8841 | Loss 0.5519 | Cls 0.2288 | LM 1.0771
+13:30:16 | Ep 1 | Step 3400/8841 | Loss 0.7537 | Cls 0.4788 | LM 0.9164
+13:38:59 | Ep 1 | Step 3600/8841 | Loss 0.5863 | Cls 0.2833 | LM 1.0102
+13:47:43 | Ep 1 | Step 3800/8841 | Loss 0.7050 | Cls 0.4745 | LM 0.7683
+13:56:26 | Ep 1 | Step 4000/8841 | Loss 0.7194 | Cls 0.5201 | LM 0.6644
+14:05:14 | Ep 1 | Step 4200/8841 | Loss 0.5306 | Cls 0.3690 | LM 0.5387
+14:13:57 | Ep 1 | Step 4400/8841 | Loss 0.5368 | Cls 0.3149 | LM 0.7395
+14:22:42 | Ep 1 | Step 4600/8841 | Loss 0.5134 | Cls 0.2924 | LM 0.7368
+14:31:26 | Ep 1 | Step 4800/8841 | Loss 0.5455 | Cls 0.2845 | LM 0.8699
+14:40:09 | Ep 1 | Step 5000/8841 | Loss 0.8141 | Cls 0.6727 | LM 0.4714
+14:48:52 | Ep 1 | Step 5200/8841 | Loss 0.5306 | Cls 0.2806 | LM 0.8332
+14:57:36 | Ep 1 | Step 5400/8841 | Loss 0.6285 | Cls 0.3565 | LM 0.9066
+15:06:20 | Ep 1 | Step 5600/8841 | Loss 0.3627 | Cls 0.2179 | LM 0.4826
+15:15:04 | Ep 1 | Step 5800/8841 | Loss 0.8051 | Cls 0.6469 | LM 0.5273
+15:23:48 | Ep 1 | Step 6000/8841 | Loss 0.4636 | Cls 0.2310 | LM 0.7754
+15:32:32 | Ep 1 | Step 6200/8841 | Loss 0.8344 | Cls 0.5109 | LM 1.0785
+15:41:16 | Ep 1 | Step 6400/8841 | Loss 0.4893 | Cls 0.2968 | LM 0.6417
+15:49:59 | Ep 1 | Step 6600/8841 | Loss 0.6118 | Cls 0.3947 | LM 0.7238
+15:58:44 | Ep 1 | Step 6800/8841 | Loss 0.6725 | Cls 0.4366 | LM 0.7864
+16:07:32 | Ep 1 | Step 7000/8841 | Loss 0.6495 | Cls 0.4674 | LM 0.6069
+16:16:22 | Ep 1 | Step 7200/8841 | Loss 0.8242 | Cls 0.6571 | LM 0.5570
+16:25:13 | Ep 1 | Step 7400/8841 | Loss 0.6976 | Cls 0.3144 | LM 1.2775
+16:34:04 | Ep 1 | Step 7600/8841 | Loss 0.8221 | Cls 0.6709 | LM 0.5042
+16:42:54 | Ep 1 | Step 7800/8841 | Loss 0.6853 | Cls 0.5034 | LM 0.6062
+16:51:45 | Ep 1 | Step 8000/8841 | Loss 0.4830 | Cls 0.2452 | LM 0.7926
+17:00:35 | Ep 1 | Step 8200/8841 | Loss 0.6660 | Cls 0.4912 | LM 0.5826
+17:09:25 | Ep 1 | Step 8400/8841 | Loss 0.4903 | Cls 0.3143 | LM 0.5867
+17:18:16 | Ep 1 | Step 8600/8841 | Loss 0.5637 | Cls 0.3934 | LM 0.5677
+17:27:05 | Ep 1 | Step 8800/8841 | Loss 0.6600 | Cls 0.5288 | LM 0.4372
+17:32:53 |    1    joint   0.7124  0.8345   0.4174  0.8582  0.9431     *
+17:33:01 |   Saved: ./runs/intern_exp3_corrective\checkpoints\ep001.pth
+17:33:12 |   Saved: ./runs/intern_exp3_corrective\checkpoints\best.pth
+17:35:47 | Ep 2 | Step 0/8841 | Loss 0.4822 | Cls 0.3224 | LM 0.5328
+17:44:38 | Ep 2 | Step 200/8841 | Loss 0.6795 | Cls 0.5037 | LM 0.5861
+17:53:28 | Ep 2 | Step 400/8841 | Loss 0.9376 | Cls 0.7691 | LM 0.5617
+18:02:19 | Ep 2 | Step 600/8841 | Loss 0.6919 | Cls 0.5466 | LM 0.4844
+18:11:10 | Ep 2 | Step 800/8841 | Loss 0.7055 | Cls 0.4052 | LM 1.0008
+18:20:00 | Ep 2 | Step 1000/8841 | Loss 0.5755 | Cls 0.3335 | LM 0.8069
+09:44:20 | Device: cuda
+09:44:20 | GPU   : NVIDIA RTX A5000
+09:44:20 | VRAM  : 25.8 GB
+09:44:20 | Loading data ...
+09:46:07 | Building model ...
+09:46:13 | Loading model weights from: ./runs/intern_exp2/checkpoints/ep010.pth
+09:46:18 |   epoch=10  missing=0  unexpected=0
+09:46:18 | Froze 16 tensors (cls_head=True, projector=True)
+09:46:18 | Trainable after freeze: 73,990,788 (3.41%)
+09:46:18 | Optimizer groups: LoRA=392 tensors, custom=4 tensors
+09:46:18 | ======================================================================
+09:46:18 |   batch_size=4  grad_accum=8  eff_batch=32
+09:46:18 |   lm_seq_len=512  lm_loss_weight=0.3
+09:46:18 |   epochs_cls=0  epochs_joint=2
+09:46:18 |   lr=1e-05  lora_rank=64
+09:46:18 |   steps/epoch=8841  total_steps=17682
+09:46:18 |   logs → ./runs/intern_exp3_corrective\logs
+09:46:18 | ======================================================================
+09:46:18 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+09:46:18 | ======================================================================
+09:48:33 | Ep 1 | Step 0/8841 | Loss 0.7533 | Cls 0.3433 | LM 1.3665
+09:58:07 | Device: cuda
+09:58:07 | GPU   : NVIDIA RTX A5000
+09:58:07 | VRAM  : 25.8 GB
+09:58:07 | Loading data ...
+09:59:41 | Building model ...
+09:59:46 | Froze 16 tensors (cls_head=True, projector=True)
+09:59:46 | Trainable after freeze: 73,990,788 (3.41%)
+09:59:46 | Optimizer groups: LoRA=392 tensors, custom=4 tensors
+09:59:51 | Resumed from epoch 1, best AUC=0.9431
+09:59:51 | ======================================================================
+09:59:51 |   batch_size=4  grad_accum=8  eff_batch=32
+09:59:51 |   lm_seq_len=512  lm_loss_weight=0.3
+09:59:51 |   epochs_cls=0  epochs_joint=5
+09:59:51 |   lr=1e-05  lora_rank=64
+09:59:51 |   steps/epoch=8841  total_steps=44205
+09:59:51 |   logs → ./runs/intern_exp3_corrective\logs
+09:59:51 | ======================================================================
+09:59:51 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+09:59:51 | ======================================================================
+10:01:52 | Ep 2 | Step 0/8841 | Loss 0.6469 | Cls 0.4330 | LM 0.7131
+10:16:50 | Ep 2 | Step 200/8841 | Loss 0.5508 | Cls 0.3800 | LM 0.5696
+10:26:52 | Ep 2 | Step 400/8841 | Loss 0.6877 | Cls 0.4339 | LM 0.8458

@@ -4,11 +4,20 @@ inference.py
 Run classification + reasoning generation on custom images.
 Logs everything to the run's logs directory.
 
+Aligned with corrective training (keep-richest, verbatim tagged
+targets + <answer> + EOS, seq 512, deterministic decoding):
+
+  Training (corrective):  --weights_from ep010 --freeze_cls_head
+                          --freeze_projector --lm_seq_len 512
+  Inference: greedy (do_sample=False) + use_cache + trim after
+             </answer>; max_new_tokens should match lm_seq_len.
+
 Usage:
     python inference.py ^
         --model_path  "./models/InternVL3-2B" ^
-        --checkpoint  "./runs/intern_exp2/checkpoints/best.pth" ^
+        --checkpoint  "./runs/intern_exp3_corrective/checkpoints/best.pth" ^
         --images      1.jpg 2.jpg 3.jpg 4.jpg
+    # or:  --checkpoint ./runs/intern_exp2/checkpoints/ep010.pth
 """
 
 import argparse
@@ -98,8 +107,12 @@ def trim_after_answer(text: str) -> str:
     """
     Cut everything after the LAST '</answer>' tag. Checkpoints trained
     before the eos-append fix never learned when to stop and ramble until
-    max_new_tokens is exhausted.
+    max_new_tokens is exhausted. New checkpoints emit <eos> right after
+    </answer>, so this is a no-op for them but keeps output clean for
+    older checkpoints. Also strips <|im_end|>/<|endoftext|> artifacts.
     """
+    # strip leftover special-token strings that survive skip_special_tokens
+    text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "").replace("<|im_start|>", "")
     end = text.rfind("</answer>")
     if end != -1:
         return text[:end + len("</answer>")].strip()
@@ -143,6 +156,14 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
             line = line.strip()
             if line:
                 lines.append(f"    {line}")
+
+    # Surface the generated <answer> and flag classifier/reasoning drift
+    gen_answer = tags.get("answer", "unknown")
+    lines.append(f"\n  Generated answer : {gen_answer.upper()}")
+    if gen_answer in ("real", "fake"):
+        gen_verdict = "FAKE" if gen_answer == "fake" else "REAL"
+        if gen_verdict != verdict:
+            lines.append(f"  [WARNING] reasoning answer ({gen_verdict}) disagrees with classifier ({verdict})")
 
     lines.append(sep)
     return "\n".join(lines)

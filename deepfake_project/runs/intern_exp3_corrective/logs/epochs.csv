@@ -1,0 +1,2 @@
+epoch,stage,tr_loss,tr_cls,tr_lm,tr_acc,tr_f1,va_loss,va_acc,va_f1,va_auc,is_best
+1,joint,0.712399,0.44465,0.892497,0.834493,0.845474,0.417373,0.85825,0.850829,0.943113,1

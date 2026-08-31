@@ -32,9 +32,10 @@
 #         --num_workers  8
 
 # Corrective fine-tune from ep010 (one line, cmd):
-#     python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --weights_from ./runs/intern_exp2/checkpoints/ep010.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
+# python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --weights_from ./runs/intern_exp2/checkpoints/ep010.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
 
-
+# Resume
+# python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --resume ./runs/intern_exp3_corrective/checkpoints/ep001.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
 import argparse
 import csv
 import logging
