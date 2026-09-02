@@ -28,10 +28,4 @@ deepfake_project/datasets/__pycache__/
 # Training checkpoints
 # ==========================
 
-# Ignore all checkpoint files
-deepfake_project/runs/intern_exp2/checkpoints/*.pth
-
-# Keep only the best checkpoint
-!deepfake_project/runs/intern_exp2/checkpoints/best.pth
-
-deepfake_project/runs/intern_exp2/checkpoints/ep*.pth
+**/checkpoints/*.pth
