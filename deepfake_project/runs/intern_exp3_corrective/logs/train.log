@@ -136,3 +136,52 @@
 10:01:52 | Ep 2 | Step 0/8841 | Loss 0.6469 | Cls 0.4330 | LM 0.7131
 10:16:50 | Ep 2 | Step 200/8841 | Loss 0.5508 | Cls 0.3800 | LM 0.5696
 10:26:52 | Ep 2 | Step 400/8841 | Loss 0.6877 | Cls 0.4339 | LM 0.8458
+09:20:16 | Device: cuda
+09:20:16 | GPU   : NVIDIA RTX A5000
+09:20:16 | VRAM  : 25.8 GB
+09:20:16 | Loading data ...
+09:22:00 | Building model ...
+09:22:07 | Loading model weights from: ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+09:22:11 |   epoch=1  missing=0  unexpected=0
+09:22:11 | Froze 12 tensors (cls_head=False, projector=True)
+09:22:12 | Trainable after freeze: 74,515,846 (3.43%)
+09:22:12 | Optimizer groups: LoRA=392 tensors, custom=8 tensors
+09:22:12 | ======================================================================
+09:22:12 |   batch_size=4  grad_accum=8  eff_batch=32
+09:22:12 |   lm_seq_len=512  lm_loss_weight=0.12
+09:22:12 |   epochs_cls=0  epochs_joint=2
+09:22:12 |   lr=5e-06  lora_rank=64
+09:22:12 |   steps/epoch=8841  total_steps=17682
+09:22:12 |   logs → ./runs/intern_exp3_corrective\logs
+09:22:12 | ======================================================================
+09:22:12 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+09:22:12 | ======================================================================
+09:24:21 | Ep 1 | Step 0/8841 | Loss 0.4951 | Cls 0.4270 | LM 0.5670
+15:07:12 | Device: cuda
+15:07:12 | GPU   : NVIDIA RTX A5000
+15:07:12 | VRAM  : 25.8 GB
+15:07:12 | Loading data ...
+15:08:48 | Building model ...
+15:08:56 | Loading model weights from: ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+15:09:01 |   epoch=1  missing=0  unexpected=0
+15:09:01 | Froze 12 tensors (cls_head=False, projector=True)
+15:09:01 | Trainable after freeze: 74,515,846 (3.43%)
+15:09:01 | Optimizer groups: LoRA=392 tensors, custom=8 tensors
+15:09:01 | ======================================================================
+15:09:01 |   batch_size=4  grad_accum=8  eff_batch=32
+15:09:01 |   lm_seq_len=512  lm_loss_weight=0.12
+15:09:01 |   epochs_cls=0  epochs_joint=2
+15:09:01 |   lr=5e-06  lora_rank=64
+15:09:01 |   steps/epoch=8841  total_steps=17682
+15:09:01 |   logs → ./runs/intern_exp3_corrective\logs
+15:09:01 | ======================================================================
+15:09:01 |   Ep    Stage   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC  Best
+15:09:01 | ======================================================================
+15:11:12 | Ep 1 | Step 0/8841 | Loss 0.4490 | Cls 0.3578 | LM 0.7597
+15:21:40 | Ep 1 | Step 200/8841 | Loss 0.5639 | Cls 0.5043 | LM 0.4965
+15:32:10 | Ep 1 | Step 400/8841 | Loss 0.4023 | Cls 0.3364 | LM 0.5492
+15:42:42 | Ep 1 | Step 600/8841 | Loss 0.5648 | Cls 0.4849 | LM 0.6659
+15:53:13 | Ep 1 | Step 800/8841 | Loss 0.3261 | Cls 0.2629 | LM 0.5269
+16:03:45 | Ep 1 | Step 1000/8841 | Loss 0.4659 | Cls 0.3795 | LM 0.7201
+16:14:16 | Ep 1 | Step 1200/8841 | Loss 0.3744 | Cls 0.3038 | LM 0.5884
+16:24:47 | Ep 1 | Step 1400/8841 | Loss 0.4473 | Cls 0.3620 | LM 0.7115

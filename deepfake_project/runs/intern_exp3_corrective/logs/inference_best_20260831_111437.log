@@ -1,0 +1,12 @@
+Inference log : .\runs\intern_exp3_corrective\logs\inference_best_20260831_111437.log
+Checkpoint    : .\runs\intern_exp3_corrective\checkpoints\best.pth
+Images        : ['8.jpg', '9.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: .\runs\intern_exp3_corrective\checkpoints\best.pth
+  epoch=1  stage=?  missing=0  unexpected=0
+
+Processing 2 image(s) ...
+
