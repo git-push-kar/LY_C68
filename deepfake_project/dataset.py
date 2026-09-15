@@ -151,24 +151,48 @@ class HydraFakeDataset(Dataset):
         split:        str = "train",
         image_size:   int = 448,
         max_text_len: int = 512,
+        allowed_files: list = None,
+        require_reasoning: bool = None,
     ):
         self.dataset_root = dataset_root
         self.tokenizer    = tokenizer
         self.split        = split
         self.image_size   = image_size
         self.max_text_len = max_text_len
+        # allowed_files: explicit list like ["sft_36k.json"] or ["all.json"];
+        # None = glob **/*.json (legacy, for val/test). require_reasoning:
+        # None = auto (train=True, val/test=False), True = drop bare, False = keep bare.
+        self.allowed_files = allowed_files
+        if require_reasoning is None:
+            require_reasoning = (split == "train")
+        self.require_reasoning = require_reasoning
         self.transform    = build_transforms(split, image_size)
         self.samples      = []
         self._load(json_dir)
 
     def _load(self, json_dir: str):
-        files = glob.glob(
-            os.path.join(json_dir, "**", "*.json"), recursive=True)
-        if not files:
-            files = glob.glob(os.path.join(json_dir, "*.json"))
+        # Explicit file list takes priority (for cls/sft/pref separation)
+        if self.allowed_files is not None:
+            files = []
+            for fname in self.allowed_files:
+                cand = os.path.join(json_dir, fname)
+                if os.path.isfile(cand):
+                    files.append(cand)
+                else:
+                    # also try recursive find for nested names like "sft_36k.json"
+                    found = glob.glob(os.path.join(json_dir, "**", fname), recursive=True)
+                    files.extend(found)
+            files = sorted(set(files))
+        else:
+            files = glob.glob(
+                os.path.join(json_dir, "**", "*.json"), recursive=True)
+            if not files:
+                files = glob.glob(os.path.join(json_dir, "*.json"))
         if not files:
             raise FileNotFoundError(
-                f"No JSON files found under: {json_dir}")
+                f"No JSON files found under: {json_dir} (filter={self.allowed_files})")
+        # pgrpo is always inactive — never load it even via glob
+        files = [f for f in files if "pgrpo" not in os.path.basename(f).lower()]
 
         missing_count  = 0
         fallback_count = 0
@@ -225,13 +249,21 @@ class HydraFakeDataset(Dataset):
         # which is frozen during corrective fine-tuning.
         for rich, resolved, label, raw_reasoning, ftype in candidates.values():
             if not rich:
-                if self.split == "train":
+                if self.require_reasoning:
                     no_trace_count += 1
                     continue
-                # Non-train splits only feed classification metrics
-                # (validate()/eval are cls-only), so give them the minimal
-                # valid target instead of dropping them.
-                raw_reasoning = ""
+                # Classification pool (all.json) or val/test bare: keep as
+                # classification-only. Use zero attention so LM loss (if ever
+                # computed) is fully masked, and no synthetic reasoning is invented.
+                self.samples.append({
+                    "image_path":   resolved,
+                    "label":        label,
+                    "reasoning_ids": torch.zeros(self.max_text_len, dtype=torch.long),
+                    "attention_mask": torch.zeros(self.max_text_len, dtype=torch.long),
+                    "reasoning_text": "",
+                    "forgery_type": ftype,
+                })
+                continue
 
             # Fix #7: sanitize empty / garbage reasoning
             reasoning = _sanitize_reasoning(raw_reasoning, label)
@@ -366,4 +398,156 @@ def build_dataloaders(
             )
         loaders[split] = loader
 
+    return loaders, tokenizer
+
+
+# ── Separated supervision pools (Polyvalent, not Veritas) ───────────────────
+# Classification = all.json full image/label pool (48,320 unique, bare allowed).
+# SFT          = sft_36k.json rich traces only (36,750 → ~35k after >512 drop).
+# Preference   = mipo_3k.json chosen/rejected pairs (3,480 pairs, 870 images ×4).
+# pgrpo_8k.json is intentionally never loaded here.
+
+class HydraFakePreferenceDataset(Dataset):
+    """Preserves mipo_3k.json chosen/rejected pairs for later preference training.
+    Each sample is one pair (image + chosen + rejected), not deduped to unique
+    images — all 3,480 pairs are kept. No DPO loss is computed here; the
+    dataset is only exposed for future stages."""
+    def __init__(self, dataset_root: str, json_dir: str, tokenizer,
+                 image_size: int = 448, max_text_len: int = 512):
+        self.dataset_root = dataset_root
+        self.tokenizer = tokenizer
+        self.image_size = image_size
+        self.max_text_len = max_text_len
+        self.transform = build_transforms("train", image_size)
+        self.samples = []
+        self._load(json_dir)
+
+    def _load(self, json_dir: str):
+        # Locate mipo file explicitly — do not glob all train JSONs
+        candidates = glob.glob(os.path.join(json_dir, "**", "mipo_3k.json"), recursive=True)
+        if not candidates:
+            candidates = [os.path.join(json_dir, "mipo_3k.json")]
+        files = [f for f in candidates if os.path.isfile(f)]
+        if not files:
+            raise FileNotFoundError(f"mipo_3k.json not found under: {json_dir}")
+
+        kept = 0
+        for jf in sorted(files):
+            with open(jf, encoding="utf-8") as f:
+                data = json.load(f)
+            entries = data if isinstance(data, list) else [data]
+            for e in entries:
+                imgs = e.get("images", [])
+                if not imgs:
+                    continue
+                resolved = _resolve_path(imgs[0], self.dataset_root)
+                if not os.path.exists(resolved):
+                    continue
+                label = int(e.get("label", 0))
+                # Chosen = messages[assistant], rejected = rejected_response
+                chosen_raw = _extract_reasoning(e.get("messages", []))
+                rejected_raw = (e.get("rejected_response") or "").strip()
+                if not chosen_raw or not rejected_raw:
+                    continue
+                # Tokenize both with EOS
+                chosen_enc = self.tokenizer(chosen_raw + self.tokenizer.eos_token,
+                                            max_length=self.max_text_len, padding="max_length",
+                                            truncation=True, return_tensors="pt")
+                rejected_enc = self.tokenizer(rejected_raw + self.tokenizer.eos_token,
+                                              max_length=self.max_text_len, padding="max_length",
+                                              truncation=True, return_tensors="pt")
+                self.samples.append({
+                    "image_path": resolved,
+                    "label": label,
+                    "chosen_ids": chosen_enc["input_ids"].squeeze(0),
+                    "chosen_mask": chosen_enc["attention_mask"].squeeze(0),
+                    "rejected_ids": rejected_enc["input_ids"].squeeze(0),
+                    "rejected_mask": rejected_enc["attention_mask"].squeeze(0),
+                    "chosen_text": chosen_raw,
+                    "rejected_text": rejected_raw,
+                })
+                kept += 1
+        print(f"[pref] {len(self.samples)} preference pairs from {len(files)} file(s) (kept {kept})")
+
+    def __len__(self): return len(self.samples)
+    def __getitem__(self, idx: int):
+        s = self.samples[idx]
+        try:
+            img = Image.open(s["image_path"]).convert("RGB")
+        except Exception:
+            img = Image.new("RGB", (self.image_size, self.image_size), 0)
+        pv = self.transform(img)
+        return {
+            "pixel_values": pv,
+            "labels": torch.tensor(s["label"], dtype=torch.long),
+            "chosen_ids": s["chosen_ids"],
+            "chosen_mask": s["chosen_mask"],
+            "rejected_ids": s["rejected_ids"],
+            "rejected_mask": s["rejected_mask"],
+        }
+
+
+def build_classification_loader(dataset_root: str, json_root: str, tokenizer,
+                                image_size: int = 448, max_text_len: int = 512,
+                                batch_size: int = 8, num_workers: int = 8):
+    """Classification pool: train/all.json only, bare allowed (48,320 unique)."""
+    json_dir = os.path.join(json_root, "train")
+    ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split="train",
+                          image_size=image_size, max_text_len=max_text_len,
+                          allowed_files=["all.json"], require_reasoning=False)
+    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+
+
+def build_sft_loader(dataset_root: str, json_root: str, tokenizer,
+                     image_size: int = 448, max_text_len: int = 512,
+                     batch_size: int = 8, num_workers: int = 8):
+    """SFT reasoning pool: train/sft_36k.json only, rich required (~35k usable)."""
+    json_dir = os.path.join(json_root, "train")
+    ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split="train",
+                          image_size=image_size, max_text_len=max_text_len,
+                          allowed_files=["sft_36k.json"], require_reasoning=True)
+    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+
+
+def build_preference_loader(dataset_root: str, json_root: str, tokenizer,
+                            image_size: int = 448, max_text_len: int = 512,
+                            batch_size: int = 8, num_workers: int = 8):
+    """Preference pool: train/mipo_3k.json chosen/rejected (3,480 pairs). Inactive in current joint training."""
+    json_dir = os.path.join(json_root, "train")
+    ds = HydraFakePreferenceDataset(dataset_root, json_dir, tokenizer, image_size, max_text_len)
+    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+
+
+def build_separated_loaders(dataset_root: str, json_root: str, tokenizer_name: str = "./models/InternVL3-2B",
+                            image_size: int = 448, max_text_len: int = 512,
+                            batch_size: int = 8, num_workers: int = 8):
+    """Return dict with separated pools: cls_train (48k), sft_train (35k), pref (3,480 pairs, inactive), val, test."""
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    loaders = {}
+    # Classification pool
+    cls_loader, _ = build_classification_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+    loaders["cls_train"] = cls_loader
+    # SFT pool
+    sft_loader, _ = build_sft_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+    loaders["sft_train"] = sft_loader
+    # Keep legacy "train" as sft for backward compat (train.py joint loss)
+    loaders["train"] = sft_loader
+    # Preference pool (exposed but not trained yet)
+    try:
+        pref_loader, _ = build_preference_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+        loaders["pref"] = pref_loader
+    except FileNotFoundError:
+        pass
+    # Val/test via legacy (glob, cls-only fallback)
+    for split in ("val", "test"):
+        json_dir = os.path.join(json_root, split)
+        if not os.path.isdir(json_dir):
+            continue
+        ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split, image_size, max_text_len)
+        loaders[split] = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     return loaders, tokenizer

@@ -13,7 +13,10 @@ targets + <answer> + EOS, seq 512, deterministic decoding):
              </answer>; max_new_tokens should match lm_seq_len.
 
 Usage:
-    python inference.py --model_path  "./models/InternVL3-2B" --checkpoint  "./runs/intern_exp3_corrective/checkpoints/best.pth" --images  1.jpg 2.jpg 3.jpg 4.jpg
+    python inference.py ^
+        --model_path  "./models/InternVL3-2B" ^
+        --checkpoint  "./runs/intern_exp3_corrective/checkpoints/best.pth" ^
+        --images      1.jpg 2.jpg 3.jpg 4.jpg
     # or:  --checkpoint ./runs/intern_exp2/checkpoints/ep010.pth
 """
 
@@ -55,36 +58,14 @@ def setup_logger(log_path: str) -> logging.Logger:
     return logger
 
 
-def _load_config(path="config.yaml"):
-    cfg = {}
-    if path and os.path.isfile(path):
-        try:
-            import yaml  # type: ignore
-            with open(path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for k, v in data.items():
-                    if not isinstance(v, dict) and v is not None and not str(k).startswith("_"):
-                        cfg[k] = v
-                # handle nested inference_images
-                if "inference_images" in data and data["inference_images"]:
-                    cfg["inference_images"] = data["inference_images"]
-        except ImportError:
-            pass
-        except Exception:
-            pass
-    return cfg
-
-
 # ── Args ──────────────────────────────────────────────────────────────────────
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--config",         default="config.yaml",
-                   help="Central config file; CLI overrides it")
     p.add_argument("--model_path",     default="./models/InternVL3-2B")
-    p.add_argument("--checkpoint",     required=False, default=None)
+    p.add_argument("--checkpoint",     required=True)
     p.add_argument("--images",         nargs="+",
-                   default=None)
+                   default=["1.jpg", "2.jpg", "3.jpg", "4.jpg"])
     p.add_argument("--max_new_tokens", type=int, default=512)
     p.add_argument("--image_size",     type=int, default=448)
     p.add_argument("--log_dir",        default=None,
@@ -192,24 +173,6 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
 
 def main():
     args       = parse_args()
-    _cfg = _load_config(args.config)
-    if not args.checkpoint and "checkpoint" in _cfg:
-        args.checkpoint = _cfg["checkpoint"]
-    if not args.checkpoint:
-        sys.exit("ERROR: --checkpoint required (via CLI or config.yaml)")
-    if not args.images:
-        if "inference_images" in _cfg and _cfg["inference_images"]:
-            args.images = _cfg["inference_images"]
-        else:
-            args.images = ["test_images/1.jpg", "test_images/2.jpg",
-                           "test_images/3.jpg", "test_images/4.jpg"]
-    # generic scalar overrides if flag not in sys.argv
-    for _k, _v in _cfg.items():
-        if not hasattr(args, _k):
-            continue
-        if f"--{_k}" not in sys.argv and f"--{_k.replace('_','-')}" not in sys.argv:
-            setattr(args, _k, _v)
-
     device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     transform  = build_transform(args.image_size)

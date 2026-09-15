@@ -56,16 +56,35 @@ def setup_logger(log_path: str) -> logging.Logger:
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 
+def _load_config(path="config.yaml"):
+    cfg = {}
+    if path and os.path.isfile(path):
+        try:
+            import yaml  # type: ignore
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                for k, v in data.items():
+                    if not isinstance(v, dict) and v is not None and not str(k).startswith("_"):
+                        cfg[k] = v
+        except ImportError:
+            pass
+        except Exception:
+            pass
+    return cfg
+
+
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset_root", required=True)
-    p.add_argument("--json_root",    required=True)
+    p.add_argument("--config",       default="config.yaml",
+                   help="Central config file; CLI overrides it")
+    p.add_argument("--dataset_root", required=False, default=None)
+    p.add_argument("--json_root",    required=False, default=None)
     p.add_argument("--model_path",   default="./models/InternVL3-2B")
-    p.add_argument("--checkpoint",   required=True)
+    p.add_argument("--checkpoint",   required=False, default=None)
     p.add_argument("--batch_size",   type=int, default=8)
     p.add_argument("--num_workers",  type=int, default=8)
     p.add_argument("--image_size",   type=int, default=448)
-    p.add_argument("--lm_seq_len",   type=int, default=192)
+    p.add_argument("--lm_seq_len",   type=int, default=512)
     p.add_argument("--log_dir",      default=None,
                    help="Where to write eval log. Defaults to "
                         "<checkpoint_dir>/../logs/")
@@ -115,6 +134,27 @@ def eval_split(model, loader, device):
 
 def main():
     args   = parse_args()
+    _cfg = _load_config(args.config)
+    if not args.dataset_root and "dataset_root" in _cfg:
+        args.dataset_root = _cfg["dataset_root"]
+    if not args.json_root and "json_root" in _cfg:
+        args.json_root = _cfg["json_root"]
+    if not args.checkpoint and "checkpoint" in _cfg:
+        args.checkpoint = _cfg["checkpoint"]
+    if not args.dataset_root or not args.json_root or not args.checkpoint:
+        sys.exit("ERROR: --dataset_root/--json_root/--checkpoint required (via CLI or config.yaml)")
+    # generic overrides if flag not in sys.argv
+    for _k, _v in _cfg.items():
+        if not hasattr(args, _k):
+            continue
+        if f"--{_k}" not in sys.argv and f"--{_k.replace('_','-')}" not in sys.argv:
+            setattr(args, _k, _v)
+    # handle eval_batch_size -> batch_size mapping
+    if "eval_batch_size" in _cfg and "--batch_size" not in sys.argv:
+        args.batch_size = _cfg["eval_batch_size"]
+    if "eval_num_workers" in _cfg and "--num_workers" not in sys.argv:
+        args.num_workers = _cfg["eval_num_workers"]
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ── Log path: sits in <run>/logs/eval_<ckptname>.log by default ───

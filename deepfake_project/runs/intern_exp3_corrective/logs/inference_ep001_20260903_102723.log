@@ -1,0 +1,34 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_102723.log
+Checkpoint    : ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+Images        : ['multiple-faces.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+  epoch=1  stage=joint  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : multiple-faces.jpg
+  Classifier verdict: FAKE  (conf 67.4%)
+============================================================
+
+  [Quick take]
+    At first glance, the image appears highly realistic and does not exhibit any glaring visual inconsistencies that would immediately suggest it is fake. Given the lack of obvious structural flaws, a deeper forensic analysis is necessary. The evaluation should proceed in a structured manner: first examining subtle generator artifacts, then analyzing potential violations of physical laws, and finally synthesizing all findings into a coherent conclusion. Upon closer inspection, several subtle but telling signs emerge. While the facial structure, proportions, and expression appear natural and well-aligned, the skin texture exhibits an unusual smoothness, lacking the fine imperfections typically found in real human skin. Additionally, high-frequency details such as pores and minor blemishes are missing, which is a common characteristic of AI-generated images. Lighting and shadows behave plausibly, and there are no visible edge distortions or unnatural blurring, suggesting a high-quality generation process. However, the overall appearance carries a slight stylization--subtle but detectable--that deviates from the organic variability seen in real faces. But wait, even though the face itself looks authentic, the very realism may be misleading. AI generators often succeed in producing convincing facsimiles that can only be distinguished under careful scrutiny. This makes the sample not just hard to judge, but also potentially hard to classify without realizing the subtler clues. Considering all observed elements--the absence of major structural flaws, the presence of subtle textural anomalies, and the slight stylized aesthetic--it is reasonable to conclude that the image is likely AI-generated. These indicators, while not immediately apparent, collectively point toward synthetic origin. Therefore, the image falls into the medium difficulty category, where authenticity cannot be determined at a glance but becomes evident through methodical analysis. It is a challenging case due to the sophistication of its realism and the subtlety of its artifacts.
+
+  Generated answer : UNKNOWN
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  multiple-faces.jpg FAKE     67.4%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_102723.log
+Done.

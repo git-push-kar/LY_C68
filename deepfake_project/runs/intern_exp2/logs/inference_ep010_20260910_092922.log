@@ -1,0 +1,13 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260910_092922.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['test1.png', 'test2.png', 'test3.png', 'test4.png']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 4 image(s) ...
+
+  [test1.png]  NOT FOUND — skipping

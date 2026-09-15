@@ -1,0 +1,35 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_103141.log
+Checkpoint    : ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+Images        : ['3-people.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+  epoch=1  stage=joint  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : 3-people.jpg
+  Classifier verdict: FAKE  (conf 99.8%)
+============================================================
+
+  [Raw LM output]
+    <black] At first glance, the image appears realistic and does not raise immediate suspicion regarding its authenticity. Given the lack of obvious structural flaws, a deeper forensic analysis is necessary. The evaluation should proceed in a structured manner: first examining subtle visual inconsistencies, then analyzing textural and edge-related anomalies, and finally assessing whether any physical laws are violated. This multi-layered approach is essential for detecting AI-generated artifacts that are not immediately apparent. Upon closer inspection, several subtle but telling signs emerge. While the facial structure, proportions, and expression appear natural and consistent with real human features, the skin texture exhibits an unusual smoothness, lacking the fine details such as pores or minor imperfections typically found in real photographs. Additionally, there is a slight blurriness around key facial features like the eyes and mouth, which deviates from the sharpness expected in high-resolution photography. These are not obvious to the casual observer but become noticeable under focused scrutiny.
+    To dive deeper, the lighting and shadowing across the face seem mostly coherent, yet they do not fully align with a single light source, suggesting artificial rendering. The background, while visually harmonious, appears overly uniform and lacks the depth and complexity one would expect in a natural outdoor setting. Furthermore, the entire scene maintains a slightly stylized aesthetic, which is often characteristic of AI-generated imagery. There are no glaring mismatches between elements, but the overall coherence of style and focus raises concerns about potential manipulation. Considering all these observations--subtle textural smoothing, missing high-frequency detail, slight blurring, and stylistic uniformity--it is reasonable to conclude that the image is likely AI-generated. While it passes basic visual checks, the accumulation of minor artifacts indicates a synthetic origin, placing it beyond the reach of immediate detection without deliberate analysis. This makes it a medium-difficulty case requiring careful inspection to uncover its artificial nature. In order to determine the authenticity of this image, a progressive and methodical approach was applied. Starting with surface-level structure, the image showed no clear signs of being fake. However, upon closer examination, subtle generator-based artifacts became evident, particularly in texture and detail. Finally, deeper analysis involving lighting consistency and holistic stylization further supported the conclusion that the image exhibited characteristics typical of AI generation. Taken together, these findings indicate that the image is not a photograph of a real person, but rather a highly realistic synthetic image. It represents a challenging case due to the absence of overt anomalies and the need for detailed, layered reasoning to detect its artificial origins.
+
+  Generated answer : UNKNOWN
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  3-people.jpg    FAKE     99.8%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_103141.log
+Done.

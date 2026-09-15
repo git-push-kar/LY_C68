@@ -1,0 +1,315 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260910_102333.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['datasets/hydrafake/train/fake/EFG/Dall-E1/img_0.png', 'datasets/hydrafake/train/fake/EFG/seeprettyface/age_kids_9166.png', 'datasets/hydrafake/train/fake/EFG/StableCascade/img_819.png', 'datasets/hydrafake/train/fake/EFG/VQGAN/139_020506.png', 'datasets/hydrafake/train/fake/FR/facevid2vid/164_216_131.png', 'datasets/hydrafake/train/fake/FR/Hallo2/26369--oBURpv30IkA_0--Hallo2/159.png', 'datasets/hydrafake/train/fake/FS/blendface/651_835_379.png', 'datasets/hydrafake/train/fake/FS/FaceForensics++/Deepfakes/448_361_136.png', 'datasets/hydrafake/train/fake/FS/FaceForensics++/Face2Face/546_621_273.png', 'datasets/hydrafake/train/fake/FS/FaceForensics++/FaceSwap/611_760_059.png', 'datasets/hydrafake/train/fake/FS/FaceForensics++/NeuralTextures/740_796_100.png', 'datasets/hydrafake/train/fake/FS/mobileswap/391_406_228.png', 'datasets/hydrafake/train/real/00004.png', 'datasets/hydrafake/train/real/065_028.png', 'datasets/hydrafake/train/real/127_445.png', 'datasets/hydrafake/train/real/194_310.png', 'datasets/hydrafake/train/real/25891.png', 'datasets/hydrafake/train/real/320_178.png', 'datasets/hydrafake/train/real/391_369.png', 'datasets/hydrafake/train/real/460_123.png', 'datasets/hydrafake/train/real/53236.png', 'datasets/hydrafake/train/real/602_107.png', 'datasets/hydrafake/train/real/735_465.png', 'datasets/hydrafake/train/real/861_401.png']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 24 image(s) ...
+
+
+============================================================
+  Image             : img_0.png
+  Classifier verdict: FAKE  (conf 81.0%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : age_kids_9166.png
+  Classifier verdict: FAKE  (conf 98.2%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : img_819.png
+  Classifier verdict: FAKE  (conf 99.0%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> <answer> fake </answer> <answer> real </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 139_020506.png
+  Classifier verdict: FAKE  (conf 97.4%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 164_216_131.png
+  Classifier verdict: FAKE  (conf 78.3%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is real.answer real <answer> fake </answer> Based on the absence of clear visual anomalies and the presence of natural facial proportions, expression, and texture, the image is judged to be authentic.answer real <answer> real </answer> The image shows no structural inconsistencies such as mismatched skin tones or distorted features, which supports its authenticity.answer real <answer> real </answer> Upon closer inspection, the image maintains natural edge transitions, realistic skin texture, and appropriate high-frequency details like fine lines, all of which are typically difficult for AI generators to replicate convincingly.answer real <answer> real </answer> Lighting and shadow patterns align with real-world physics, and there are no signs of makeup inconsistency or optical focus discrepancies that would suggest manipulation.answer real <answer> real </answer>
+
+  Generated answer : REAL
+  [WARNING] reasoning answer (REAL) disagrees with classifier (FAKE)
+============================================================
+
+============================================================
+  Image             : 159.png
+  Classifier verdict: FAKE  (conf 94.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 651_835_379.png
+  Classifier verdict: FAKE  (conf 76.3%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 448_361_136.png
+  Classifier verdict: FAKE  (conf 98.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 546_621_273.png
+  Classifier verdict: FAKE  (conf 80.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 611_760_059.png
+  Classifier verdict: FAKE  (conf 96.4%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The answer is no.answer fake <answer> real </answer> reasoning: The image shows consistent skin tone, natural facial structure, and realistic proportions, all of which are typical in real images.answer fake <answer> real </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 740_796_100.png
+  Classifier verdict: FAKE  (conf 59.7%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+  [WARNING] reasoning answer (REAL) disagrees with classifier (FAKE)
+============================================================
+
+============================================================
+  Image             : 391_406_228.png
+  Classifier verdict: FAKE  (conf 70.4%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : 00004.png
+  Classifier verdict: FAKE  (conf 52.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+  [WARNING] reasoning answer (REAL) disagrees with classifier (FAKE)
+============================================================
+
+============================================================
+  Image             : 065_028.png
+  Classifier verdict: REAL  (conf 79.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> The answer is no.answer fake </answer> Based on the initial glanceanswer no </answer>
+
+  Generated answer : FAKE
+  [WARNING] reasoning answer (FAKE) disagrees with classifier (REAL)
+============================================================
+
+============================================================
+  Image             : 127_445.png
+  Classifier verdict: REAL  (conf 81.9%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 194_310.png
+  Classifier verdict: REAL  (conf 84.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 25891.png
+  Classifier verdict: REAL  (conf 99.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 320_178.png
+  Classifier verdict: REAL  (conf 72.6%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is real.answer real <answer> fake </answer> The image appears visually normal at first glance, but subtle inconsistencies suggest it may be AI-generated. Upon closer inspection, the facial structure, proportions, and expression all appear natural, with no obvious distortions or mismatches that would immediately raise suspicion. However, subtle signs begin to emerge: the edges around the hairline and jawline are unnaturally sharp, lacking the soft transitions typical of real human faces. Additionally, the skin texture is overly smooth in certain areas, missing the fine details such as pores and micro-lines that are naturally present in real skin. A hard blending boundary is also noticeable where the face meets the background, indicating a lack of seamless integration. These artifacts, while not immediately obvious, are consistent with those commonly introduced by image generation models. While the image does not display overt structural flaws, the presence of subtle yet consistent generator artifacts--such as unnatural edge sharpness, missing high-frequency skin details, and poor blending--supports the conclusion that this image is likely AI-generated. Therefore, the image is fake. <answer> fake </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 391_369.png
+  Classifier verdict: REAL  (conf 81.5%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+  [WARNING] reasoning answer (FAKE) disagrees with classifier (REAL)
+============================================================
+
+============================================================
+  Image             : 460_123.png
+  Classifier verdict: REAL  (conf 78.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 53236.png
+  Classifier verdict: REAL  (conf 96.2%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 602_107.png
+  Classifier verdict: REAL  (conf 67.1%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 735_465.png
+  Classifier verdict: REAL  (conf 77.6%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is real.answer real <answer> fake </answer> fake <answer> real </answer> fake <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer> real <answer> real </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : 861_401.png
+  Classifier verdict: REAL  (conf 87.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is real.answer real <answer> fake </answer> real <answer> fake </answer> fake <answer> real </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer> real <answer> fake </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  img_0.png       FAKE     81.0%
+  age_kids_9166.png FAKE     98.2%
+  img_819.png     FAKE     99.0%
+  139_020506.png  FAKE     97.4%
+  164_216_131.png FAKE     78.3%
+  159.png         FAKE     94.1%
+  651_835_379.png FAKE     76.3%
+  448_361_136.png FAKE     98.8%
+  546_621_273.png FAKE     80.8%
+  611_760_059.png FAKE     96.4%
+  740_796_100.png FAKE     59.7%
+  391_406_228.png FAKE     70.4%
+  00004.png       FAKE     52.5%
+  065_028.png     REAL     79.8%
+  127_445.png     REAL     81.9%
+  194_310.png     REAL     84.1%
+  25891.png       REAL     99.1%
+  320_178.png     REAL     72.6%
+  391_369.png     REAL     81.5%
+  460_123.png     REAL     78.8%
+  53236.png       REAL     96.2%
+  602_107.png     REAL     67.1%
+  735_465.png     REAL     77.6%
+  861_401.png     REAL     87.8%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260910_102333.log
+Done.

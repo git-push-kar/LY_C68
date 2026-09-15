@@ -34,10 +34,13 @@
 # Corrective fine-tune from ep010 (one line, cmd):
 # python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --weights_from ./runs/intern_exp2/checkpoints/ep010.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
 
+#python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --weights_from ./runs/intern_exp3_corrective/checkpoints/best.pth --epochs_cls 0 --epochs_joint 2 --lr 5e-06 --lm_loss_weight 0.12 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_projector
+
 # Resume
 # python train.py --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" --json_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" --output_dir ./runs/intern_exp3_corrective --resume ./runs/intern_exp3_corrective/checkpoints/ep001.pth --epochs_cls 0 --epochs_joint 2 --lr 1e-5 --lm_loss_weight 0.3 --lm_seq_len 512 --batch_size 4 --grad_accum 8 --num_workers 8 --freeze_cls_head --freeze_projector
 import argparse
 import csv
+import itertools
 import logging
 import math
 import os
@@ -49,7 +52,7 @@ from torch.amp import autocast
 from transformers import AutoTokenizer
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 
-from dataset import build_dataloaders
+from dataset import build_dataloaders, build_separated_loaders
 from model import DeepfakeReasoningModel
 
 
@@ -295,6 +298,121 @@ def train_epoch(model, loader, optimizer, scheduler,
     }
 
 
+def train_joint_epoch(model, cls_loader, sft_loader, optimizer, scheduler,
+                      device, epoch, logger, step_csv,
+                      grad_accum=1, lm_loss_weight=0.3):
+    """
+    Joint epoch with separated pools (Option A):
+      joint forward steps = len(sft_loader) = 8,765
+      optimizer updates   = joint steps // grad_accum = 1,095 (grad_accum=8)
+    Every forward step consumes 1 cls batch (all.json, 4 images) for cls_loss
+    and 1 sft batch (sft_36k.json, 4 images) for lm_loss, then
+      loss = cls_loss + lm_loss_weight * lm_loss
+    CLS loader is cycled (48,320 → 73% coverage per epoch, 145% over 2 epochs).
+    """
+    model.train()
+    loss_m = AverageMeter()
+    cls_m  = AverageMeter()
+    lm_m   = AverageMeter()
+    preds_all, labels_all = [], []
+
+    optimizer.zero_grad(set_to_none=True)
+    # Joint epoch defined by SFT length
+    joint_steps = len(sft_loader)
+    cls_steps_total = len(cls_loader)
+    global_step = (epoch - 1) * joint_steps
+
+    cls_iter = iter(cls_loader)
+    # We will iterate sft_loader directly and cycle cls_loader as needed
+    for step, sft_batch in enumerate(sft_loader):
+        # Cycle cls_loader
+        try:
+            cls_batch = next(cls_iter)
+        except StopIteration:
+            cls_iter = iter(cls_loader)
+            cls_batch = next(cls_iter)
+
+        pv_cls = cls_batch["pixel_values"].to(device, non_blocking=True)
+        labels_cls = cls_batch["labels"].to(device, non_blocking=True)
+
+        pv_sft = sft_batch["pixel_values"].to(device, non_blocking=True)
+        labels_sft = sft_batch["labels"].to(device, non_blocking=True)
+        reasoning_ids = sft_batch["reasoning_ids"].to(device, non_blocking=True)
+        reasoning_mask = sft_batch["attention_mask"].to(device, non_blocking=True)
+        B = pv_cls.size(0)  # for meters; both batches same B
+
+        with autocast("cuda", dtype=torch.bfloat16):
+            out_cls = model(pv_cls, labels=labels_cls)
+            out_sft = model(pv_sft, labels=labels_sft,
+                            reasoning_tokens=reasoning_ids,
+                            reasoning_attention_mask=reasoning_mask)
+            cls_loss = out_cls["cls_loss"]
+            lm_loss = out_sft["lm_loss"]
+            # Preserve exact formulation: L = cls(all.json) + 0.3 * lm(sft_36k)
+            loss = cls_loss + lm_loss_weight * lm_loss
+            loss = loss / grad_accum
+
+        loss.backward()
+
+        if (step + 1) % grad_accum == 0:
+            grads = [p for p in model.parameters() if p.grad is not None]
+            nn.utils.clip_grad_norm_(grads, 1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
+
+        loss_m.update((cls_loss + lm_loss_weight * lm_loss).item(), B)
+        cls_m.update(cls_loss.item(), B)
+        lm_m.update(lm_loss.item(), B)
+
+        preds_all.extend(out_cls["cls_logits"].detach().argmax(-1).cpu().tolist())
+        labels_all.extend(labels_cls.cpu().tolist())
+
+        if step % 200 == 0:
+            logger.info(
+                f"Ep {epoch} | Step {step}/{joint_steps} "
+                f"| Loss {(cls_loss + lm_loss_weight*lm_loss).item():.4f} "
+                f"| Cls {cls_loss.item():.4f} | LM {lm_loss.item():.4f}"
+            )
+            step_csv.write({
+                "epoch": epoch,
+                "step": step,
+                "global_step": global_step + step,
+                "loss": round((cls_loss + lm_loss_weight*lm_loss).item(), 6),
+                "cls_loss": round(cls_loss.item(), 6),
+                "lm_loss": round(lm_loss.item(), 6),
+            })
+
+    # Flush remainder grads if steps not divisible by grad_accum
+    if joint_steps % grad_accum != 0:
+        grads = [p for p in model.parameters() if p.grad is not None]
+        if grads:
+            nn.utils.clip_grad_norm_(grads, 1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
+
+    unique = set(preds_all)
+    if len(unique) == 1:
+        logger.info(f"  !! COLLAPSE: model predicts only class {list(unique)[0]}")
+
+    m = compute_metrics(labels_all, preds_all)
+    # Log epoch-level consumption — forward pairs vs optimizer updates (grad_accum)
+    opt_updates = (joint_steps + grad_accum - 1) // grad_accum
+    logger.info(f"  Joint steps: {joint_steps} forward pairs "
+                f"({joint_steps * 4} SFT images, {joint_steps * 4} CLS images) | "
+                f"Optimizer updates: {opt_updates} (forward pairs // grad_accum={grad_accum}) | "
+                f"CLS coverage ~{joint_steps*4/48320*100:.1f}% per epoch — both loaders in every pair, thus every optimizer update")
+
+    return {
+        "loss": loss_m.avg,
+        "cls_loss": cls_m.avg,
+        "lm_loss": lm_m.avg,
+        "accuracy": m["accuracy"],
+        "f1": m["f1"],
+    }
+
+
 # ── Validate ──────────────────────────────────────────────────────────────────
 
 @torch.no_grad()
@@ -330,10 +448,31 @@ def validate(model, loader, device, logger):
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 
+def _load_config(path="config.yaml"):
+    """Load config.yaml if present; CLI always wins. No hard dependency on yaml."""
+    cfg = {}
+    if path and os.path.isfile(path):
+        try:
+            import yaml  # type: ignore
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                for k, v in data.items():
+                    if not isinstance(v, dict) and v is not None and not str(k).startswith("_"):
+                        cfg[k] = v
+        except ImportError:
+            # yaml not installed — try json fallback (comments in yaml will break json, so just warn)
+            pass
+        except Exception:
+            pass
+    return cfg
+
+
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset_root",   required=True)
-    p.add_argument("--json_root",      required=True)
+    p.add_argument("--config",         default="config.yaml",
+                   help="Central config file; CLI args override it")
+    p.add_argument("--dataset_root",   required=False, default=None)
+    p.add_argument("--json_root",      required=False, default=None)
     p.add_argument("--model_path",     default="./models/InternVL3-2B")
     p.add_argument("--tokenizer_path", default="./models/InternVL3-2B")
     p.add_argument("--output_dir",     default="./runs/intern_exp2")
@@ -342,8 +481,8 @@ def parse_args():
     p.add_argument("--epochs_cls",     type=int,   default=3)
     p.add_argument("--epochs_joint",   type=int,   default=2)  # fix #12
     p.add_argument("--lm_seq_len",     type=int,   default=512,
-                   help="Reasoning token length. 512 covers ~95% of the "
-                        "full tagged traces; longer targets are DROPPED "
+                   help="Reasoning token length. 512 covers ~95%% of the "
+                        "full tagged traces; longer DROPPED "
                         "(never truncated) by the dataset.")
     p.add_argument("--lr",             type=float, default=5e-5)
     p.add_argument("--weight_decay",   type=float, default=0.01)
@@ -371,6 +510,27 @@ def parse_args():
 
 def main():
     args = parse_args()
+    # ── Config file (CLI priority) ────────────────────────────────────
+    _cfg = _load_config(args.config)
+    # dataset/json are now optional CLI — fill from config if missing
+    if not args.dataset_root and "dataset_root" in _cfg:
+        args.dataset_root = _cfg["dataset_root"]
+    if not args.json_root and "json_root" in _cfg:
+        args.json_root = _cfg["json_root"]
+    if not args.dataset_root or not args.json_root:
+        sys.exit("ERROR: --dataset_root and --json_root required (via CLI or config.yaml)")
+    # generic scalar overrides: only if flag not in sys.argv
+    for _k, _v in _cfg.items():
+        if not hasattr(args, _k):
+            continue
+        _f1, _f2 = f"--{_k}", f"--{_k.replace('_','-')}"
+        if _f1 not in sys.argv and _f2 not in sys.argv:
+            setattr(args, _k, _v)
+    # boolean flags (store_true): set if config true and not passed
+    if not args.freeze_cls_head and _cfg.get("freeze_cls_head"):
+        args.freeze_cls_head = True
+    if not args.freeze_projector and _cfg.get("freeze_projector"):
+        args.freeze_projector = True
 
     # ── Directories ───────────────────────────────────────────────────
     log_dir  = os.path.join(args.output_dir, "logs")
@@ -390,14 +550,32 @@ def main():
         logger.info(f"VRAM  : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
 
     # ── Data ──────────────────────────────────────────────────────────
+    # Separated pools: cls (all.json 48,320) / sft (sft_36k.json 35,367) / pref (mipo 3,480 pairs, inactive)
+    # pgrpo_8k.json is intentionally never loaded.
     logger.info("Loading data ...")
-    loaders, tokenizer = build_dataloaders(
-        args.dataset_root, args.json_root,
-        tokenizer_name=args.tokenizer_path,
-        max_text_len=args.lm_seq_len,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-    )
+    try:
+        loaders, tokenizer = build_separated_loaders(
+            args.dataset_root, args.json_root,
+            tokenizer_name=args.tokenizer_path,
+            max_text_len=args.lm_seq_len,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+        )
+        if "cls_train" in loaders:
+            logger.info(f"  CLS pool: {len(loaders['cls_train'].dataset)} samples (all.json, bare allowed)")
+        if "train" in loaders:
+            logger.info(f"  SFT pool: {len(loaders['train'].dataset)} samples (sft_36k, rich only)")
+        if "pref" in loaders:
+            logger.info(f"  PREF pool: {len(loaders['pref'].dataset)} pairs (mipo_3k, inactive until DPO)")
+    except Exception as e:
+        logger.info(f"Separated loaders failed ({e}), falling back to legacy build_dataloaders")
+        loaders, tokenizer = build_dataloaders(
+            args.dataset_root, args.json_root,
+            tokenizer_name=args.tokenizer_path,
+            max_text_len=args.lm_seq_len,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+        )
     if "train" not in loaders:
         logger.info("ERROR: no train split found"); return
 
@@ -474,10 +652,17 @@ def main():
     ])
 
     total_epochs = args.epochs_cls + args.epochs_joint
-    steps_per_ep = len(loaders["train"])
+    # Joint forward steps = SFT length (Option A); optimizer updates account for grad_accum
+    if "sft_train" in loaders:
+        joint_forward_steps = len(loaders["sft_train"])
+    else:
+        joint_forward_steps = len(loaders["train"])
+    optimizer_steps_per_epoch = (joint_forward_steps + args.grad_accum - 1) // args.grad_accum
+    steps_per_ep = joint_forward_steps  # for display/logging as forward steps
     total_steps  = total_epochs * steps_per_ep
-    warmup_steps = int(total_steps * args.warmup_ratio)
-    scheduler    = build_scheduler(optimizer, warmup_steps, total_steps)
+    total_optimizer_steps = total_epochs * optimizer_steps_per_epoch
+    warmup_steps = int(total_optimizer_steps * args.warmup_ratio)
+    scheduler    = build_scheduler(optimizer, warmup_steps, total_optimizer_steps)
 
     best_auc   = 0.0
     no_improve = 0
@@ -499,7 +684,8 @@ def main():
     logger.info(f"  lm_seq_len={args.lm_seq_len}  lm_loss_weight={args.lm_loss_weight}")
     logger.info(f"  epochs_cls={args.epochs_cls}  epochs_joint={args.epochs_joint}")
     logger.info(f"  lr={args.lr}  lora_rank={args.lora_rank}")
-    logger.info(f"  steps/epoch={steps_per_ep}  total_steps={total_steps}")
+    logger.info(f"  steps/epoch (forward)={steps_per_ep}  total forward steps={total_steps}")
+    logger.info(f"  optimizer updates/epoch={optimizer_steps_per_epoch}  total optimizer steps={total_optimizer_steps}  warmup={warmup_steps}")
     logger.info(f"  logs → {log_dir}")
     logger.info("=" * 70)
 
@@ -513,11 +699,30 @@ def main():
         use_lm = epoch > args.epochs_cls
         stage  = "joint" if use_lm else "cls_only"
 
-        tr = train_epoch(
-            model, loaders["train"], optimizer, scheduler,
-            device, epoch, logger, step_csv,
-            use_lm_loss=use_lm, grad_accum=args.grad_accum,
-        )
+        # Joint with separated pools: every forward step uses 1 cls batch
+        # (all.json, 4 images) + 1 sft batch (sft_36k, 4 images) → L=cls+0.3*lm.
+        # Joint forward steps = len(sft_loader) = 8,765; optimizer updates = 8,765 // grad_accum = 1,095 (+tail).
+        # CLS loader (12,080 steps) is cycled; each epoch sees 100% of SFT and 73% of CLS (145% over 2 epochs).
+        if use_lm and "cls_train" in loaders and "sft_train" in loaders:
+            tr = train_joint_epoch(
+                model, loaders["cls_train"], loaders["sft_train"],
+                optimizer, scheduler, device, epoch, logger, step_csv,
+                grad_accum=args.grad_accum, lm_loss_weight=args.lm_loss_weight,
+            )
+        elif use_lm:
+            tr = train_epoch(
+                model, loaders["train"], optimizer, scheduler,
+                device, epoch, logger, step_csv,
+                use_lm_loss=True, grad_accum=args.grad_accum,
+            )
+        else:
+            # cls_only stage — use classification pool if available
+            cls_loader = loaders.get("cls_train", loaders["train"])
+            tr = train_epoch(
+                model, cls_loader, optimizer, scheduler,
+                device, epoch, logger, step_csv,
+                use_lm_loss=False, grad_accum=args.grad_accum,
+            )
 
         va = {}
         if "val" in loaders:

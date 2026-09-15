@@ -1,0 +1,53 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_091716.log
+Checkpoint    : ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+Images        : ['8.jpg', '9.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp3_corrective/checkpoints/ep001.pth
+  epoch=1  stage=joint  missing=0  unexpected=0
+
+Processing 2 image(s) ...
+
+
+============================================================
+  Image             : 8.jpg
+  Classifier verdict: FAKE  (conf 92.7%)
+============================================================
+
+  [Quick take]
+    At first glance, the image appears highly realistic and does not exhibit any obvious signs of being fake.
+
+  [Reasoning]
+    <forebrain> The facial structure is symmetrical and proportionate, with consistent skin tone and natural expression, ruling out face-swapping or morphing artifacts. Subtle visual properties such as edge smoothness, texture realism, and absence of unnatural blur further support its authenticity. There are no signs of generator-specific distortions like missing high-frequency details or blending boundaries. On a deeper level, the lighting and shadows behave naturally, there's no contextual mismatch between the subject and background, and the optical focus remains consistent throughout, aligning with real-world physics.
+
+  [Conclusion]
+    Given the absence of structural flaws, subtle artifacts, or physical inconsistencies, the image is confidently judged to be authentic.
+
+  Generated answer : REAL
+  [WARNING] reasoning answer (REAL) disagrees with classifier (FAKE)
+============================================================
+
+============================================================
+  Image             : 9.jpg
+  Classifier verdict: REAL  (conf 88.2%)
+============================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation. The facial features are well-proportioned and symmetrical, with consistent skin tone and natural expression, ruling out structural abnormalities. Upon closer inspection, the edges and textures appear smooth and realistic without any artificial artifacts such as unnatural blurring or missing fine details. Furthermore, the lighting, shadows, and focus align with real-world physics and camera behavior, indicating no violation of natural laws. Considering all visual, subtle, and physical aspects, the image shows no signs of being fake and is confidently judged to be authentic. <fast>
+
+  Generated answer : UNKNOWN
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  8.jpg           FAKE     92.7%
+  9.jpg           REAL     88.2%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep001_20260903_091716.log
+Done.
