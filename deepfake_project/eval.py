@@ -1,20 +1,15 @@
+"""
+eval.py
+=======
+Evaluate a DeepfakeReasoningModel v2 checkpoint across all 4 HydraFake test splits:
+  - ID : In-Domain
+  - CM : Cross-Model
+  - CF : Cross-Forgery
+  - CD : Cross-Domain
 
-# eval.py
-# =======
-# Evaluate a checkpoint across all 4 HydraFake test splits: ID, CM, CF, CD.
-# Works for both cls-only (ep001–ep003) and joint checkpoints.
-# No reasoning generation — cls_head only, fast.
-
-# Logging: all output written to stdout AND <log_dir>/eval_<checkpoint>.log
-
-# Usage:
-#     python eval.py ^
-#         --dataset_root "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake" ^
-#         --json_root    "C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons" ^
-#         --model_path   "./models/InternVL3-2B" ^
-#         --checkpoint   "./runs/intern_exp2/checkpoints/ep001.pth" ^
-#         --batch_size   8 ^
-#         --num_workers  8
+Fast classification evaluation with frequency-domain and attention-pooling fusion.
+Logs results to stdout and <log_dir>/eval_<checkpoint>.log
+"""
 
 import argparse
 import logging
@@ -35,7 +30,6 @@ from model import DeepfakeReasoningModel
 # ── Logger ────────────────────────────────────────────────────────────────────
 
 def setup_logger(log_path: str) -> logging.Logger:
-    """Write to stdout and log file simultaneously."""
     logger = logging.getLogger("eval")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
@@ -54,13 +48,13 @@ def setup_logger(log_path: str) -> logging.Logger:
     return logger
 
 
-# ── Args ──────────────────────────────────────────────────────────────────────
+# ── Args & Config ─────────────────────────────────────────────────────────────
 
 def _load_config(path="config.yaml"):
     cfg = {}
     if path and os.path.isfile(path):
         try:
-            import yaml  # type: ignore
+            import yaml
             with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for k, v in data.items():
@@ -74,9 +68,8 @@ def _load_config(path="config.yaml"):
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config",       default="config.yaml",
-                   help="Central config file; CLI overrides it")
+    p = argparse.ArgumentParser(description="Evaluate DeepfakeReasoningModel checkpoint")
+    p.add_argument("--config",       default="config.yaml")
     p.add_argument("--dataset_root", required=False, default=None)
     p.add_argument("--json_root",    required=False, default=None)
     p.add_argument("--model_path",   default="./models/InternVL3-2B")
@@ -85,9 +78,8 @@ def parse_args():
     p.add_argument("--num_workers",  type=int, default=8)
     p.add_argument("--image_size",   type=int, default=448)
     p.add_argument("--lm_seq_len",   type=int, default=512)
-    p.add_argument("--log_dir",      default=None,
-                   help="Where to write eval log. Defaults to "
-                        "<checkpoint_dir>/../logs/")
+    p.add_argument("--arch_version", default="v2", choices=["v1", "v2"])
+    p.add_argument("--log_dir",      default=None)
     return p.parse_args()
 
 
@@ -101,9 +93,13 @@ def eval_split(model, loader, device):
     for batch in loader:
         pv     = batch["pixel_values"].to(device, non_blocking=True)
         labels = batch["labels"]
+        freq   = batch.get("freq_features")
+        if freq is not None:
+            freq = freq.to(device, non_blocking=True)
 
-        with autocast("cuda", dtype=torch.bfloat16):
-            out = model(pv)   # cls-only forward, no labels needed
+        autocast_ctx = autocast("cuda", dtype=torch.bfloat16) if device.type == "cuda" else torch.nullcontext()
+        with autocast_ctx:
+            out = model(pv, freq_features=freq)
 
         logits = out["cls_logits"].float()
         probs  = F.softmax(logits, dim=-1)[:, 1]
@@ -133,23 +129,25 @@ def eval_split(model, loader, device):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    args   = parse_args()
+    args = parse_args()
     _cfg = _load_config(args.config)
+
     if not args.dataset_root and "dataset_root" in _cfg:
         args.dataset_root = _cfg["dataset_root"]
     if not args.json_root and "json_root" in _cfg:
         args.json_root = _cfg["json_root"]
     if not args.checkpoint and "checkpoint" in _cfg:
         args.checkpoint = _cfg["checkpoint"]
+
     if not args.dataset_root or not args.json_root or not args.checkpoint:
-        sys.exit("ERROR: --dataset_root/--json_root/--checkpoint required (via CLI or config.yaml)")
-    # generic overrides if flag not in sys.argv
+        sys.exit("ERROR: --dataset_root, --json_root, and --checkpoint required (via CLI or config.yaml)")
+
     for _k, _v in _cfg.items():
         if not hasattr(args, _k):
             continue
         if f"--{_k}" not in sys.argv and f"--{_k.replace('_','-')}" not in sys.argv:
             setattr(args, _k, _v)
-    # handle eval_batch_size -> batch_size mapping
+
     if "eval_batch_size" in _cfg and "--batch_size" not in sys.argv:
         args.batch_size = _cfg["eval_batch_size"]
     if "eval_num_workers" in _cfg and "--num_workers" not in sys.argv:
@@ -157,46 +155,45 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ── Log path: sits in <run>/logs/eval_<ckptname>.log by default ───
     ckpt_name = os.path.splitext(os.path.basename(args.checkpoint))[0]
     if args.log_dir:
         log_dir = args.log_dir
     else:
-        log_dir = os.path.join(
-            os.path.dirname(os.path.dirname(args.checkpoint)), "logs"
-        )
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(args.checkpoint)), "logs")
     log_path = os.path.join(log_dir, f"eval_{ckpt_name}.log")
-    logger   = setup_logger(log_path)
+    logger = setup_logger(log_path)
 
     logger.info(f"Eval log : {log_path}")
     logger.info(f"Device   : {device}")
     if device.type == "cuda":
         logger.info(f"GPU      : {torch.cuda.get_device_name(0)}")
 
-    # ── Tokenizer ─────────────────────────────────────────────────────
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_path, trust_remote_code=True)
+    # Tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # ── Model ─────────────────────────────────────────────────────────
+    # Model
     logger.info("Loading model ...")
-    model = DeepfakeReasoningModel(model_path=args.model_path).to(device)
+    model = DeepfakeReasoningModel(
+        model_path=args.model_path,
+        arch_version=args.arch_version,
+    ).to(device)
 
     logger.info(f"Loading checkpoint: {args.checkpoint}")
-    ckpt      = torch.load(args.checkpoint, map_location=device)
-    missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
+    ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    state_dict = ckpt.get("model", ckpt)
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
     epoch_num = ckpt.get("epoch", "?")
-    stage     = ckpt.get("stage", "cls_only")
-    logger.info(f"  epoch={epoch_num}  stage={stage}  "
-                f"missing={len(missing)}  unexpected={len(unexpected)}")
+    stage = ckpt.get("stage", "cls_only")
+    logger.info(f"  epoch={epoch_num}  stage={stage}  missing={len(missing)}  unexpected={len(unexpected)}")
     if missing:
         logger.info(f"  Missing   : {missing[:5]}{'...' if len(missing) > 5 else ''}")
     if unexpected:
         logger.info(f"  Unexpected: {unexpected[:5]}{'...' if len(unexpected) > 5 else ''}")
     model.eval()
 
-    # ── Test splits ───────────────────────────────────────────────────
+    # Splits
     splits = {
         "ID  (In-Domain)":     "id",
         "CM  (Cross-Model)":   "cm",
@@ -207,8 +204,7 @@ def main():
     sep = "=" * 74
     hdr = (f"{'Split':<24} {'N':>6} {'GT R/F':>9} {'Pred R/F':>10} "
            f"{'Acc':>7} {'F1':>7} {'AUC':>7}")
-    logger.info(f"\nCheckpoint: {os.path.basename(args.checkpoint)}  "
-                f"(epoch {epoch_num}, {stage})")
+    logger.info(f"\nCheckpoint: {os.path.basename(args.checkpoint)}  (epoch {epoch_num}, {stage})")
     logger.info(sep)
     logger.info(hdr)
     logger.info(sep)

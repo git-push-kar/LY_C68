@@ -1,19 +1,15 @@
-﻿"""
+"""
 dataset.py
 ==========
-HydraFake dataset loader.
+HydraFake dataset loader for DeepfakeReasoningModel v2.
 
-Fixes applied (vs previous version):
-  #4  Tokenization moved out of __getitem__ â†’ done at load time in _load().
-      Previous: tokenizer called inside the DataLoader worker loop every step,
-      creating a CPU bottleneck that kept the GPU idle between batches.
-      Now: reasoning text is tokenized once at dataset construction. The
-      DataLoader collates pre-computed int tensors â€” extremely fast.
-
-  #7  Reasoning quality filter â€” samples with empty reasoning are still
-      included (the image + label is valid) but get a minimal fallback
-      text "<answer>real</answer>" or "<answer>fake</answer>" so the LM
-      loss always has a clean target, never trains on empty sequences.
+Fixes & Enhancements in v2:
+  #1  Frequency Features       — compute_fft_features(img) calculates log-magnitude 2D FFT spectrum.
+  #2  Answer Token Position    — locates the token index of "real"/"fake" inside <answer> tags for consistency loss.
+  #3  Tokenization at load     — done once at dataset initialization in _load(), zero CPU bottlenecks in worker loops.
+  #4  Reasoning Quality Filter — sanitizes empty/short reasoning, ensures valid structured tags.
+  #5  Separated Pools          — classification (all.json, 48k), SFT (sft_36k.json, 35k), Preference (mipo_3k, 3,480 pairs).
+  #6  Forgery Type Tracking    — exposes per-family generator metadata (cd, cf, cm, id) for diagnostic evaluation.
 """
 
 import os
@@ -21,16 +17,19 @@ import json
 import re
 import glob
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from PIL import Image
+import numpy as np
 import torchvision.transforms as T
 from transformers import AutoTokenizer
 
 
 _ANSWER_RE = re.compile(
-    r"<answer>\s*(real|fake)\s*</answer>", re.IGNORECASE)
+    r"<answer>\s*(real|fake)\s*</answer>", re.IGNORECASE
+)
 _TAG_RE = re.compile(
     r"<(?:planning|reasoning|reflection|conclusion|fast)>(.*?)"
     r"</(?:planning|reasoning|reflection|conclusion|fast)>",
@@ -63,22 +62,97 @@ _TEST_GENERATOR_MAP = {
     "StyleGAN":         "id",
 }
 
-# Minimum non-trivial reasoning length (characters).
-# Fix #7: anything shorter than this is considered empty/garbage.
 _MIN_REASONING_LEN = 20
 
 
-def _extract_reasoning(messages: list) -> str:
-    """
-    Return the FULL assistant response verbatim, preserving the structured
-    tags (<fast>/<planning>/<reasoning>/<reflection>/<conclusion>) AND the
-    final <answer>real|fake</answer>.
+# ── Frequency-Domain Feature Extraction (2.3) ─────────────────────────────────
 
-    Previous behaviour stripped the tags and dropped the answer entirely,
-    which created a train/inference format mismatch: inference.py parses for
-    exactly these tags, and pgrpo-style entries taught a conflicting bare
-    '<answer> X </answer>' mode.
+def compute_fft_features(img: Image.Image, target_size: int = 224) -> torch.Tensor:
     """
+    Compute log-magnitude 2D FFT spectrum from an image.
+    
+    Generative artifacts (checkerboard artifacts, high-frequency attenuation,
+    spectral peaks from upsampling) appear prominently in the Fourier domain.
+    
+    Args:
+        img: PIL Image
+        target_size: resolution for FFT (224x224 provides high spectral resolution with minimal memory)
+    Returns:
+        torch.Tensor of shape (3, target_size, target_size), float32, normalized
+    """
+    img_resized = img.resize((target_size, target_size), Image.BILINEAR)
+    img_np = np.array(img_resized, dtype=np.float32) / 255.0
+    if img_np.ndim == 2:
+        img_np = np.stack([img_np] * 3, axis=-1)
+    elif img_np.shape[2] == 4:
+        img_np = img_np[:, :, :3]
+
+    # Convert to (C, H, W)
+    img_np = np.transpose(img_np, (2, 0, 1))
+
+    # 2D FFT across spatial dimensions
+    fft = np.fft.fft2(img_np, axes=(-2, -1))
+    fft_shift = np.fft.fftshift(fft, axes=(-2, -1))
+    mag = np.abs(fft_shift)
+    log_mag = np.log1p(mag)
+
+    # Channel-wise standard normalization
+    mean = np.mean(log_mag, axis=(-2, -1), keepdims=True)
+    std = np.std(log_mag, axis=(-2, -1), keepdims=True) + 1e-6
+    norm_fft = (log_mag - mean) / std
+
+    return torch.tensor(norm_fft, dtype=torch.float32)
+
+
+# ── Answer Token Location Helper (2.5) ────────────────────────────────────────
+
+def find_answer_token_pos(target_text: str, tokenizer, enc) -> int:
+    """
+    Locate the token index of the word 'real' or 'fake' inside <answer>...</answer>.
+    Used to align the LM logit distribution with the classification head.
+    
+    Returns 0-based token index in enc['input_ids'], or -1 if not found.
+    """
+    m = _ANSWER_RE.search(target_text)
+    if not m:
+        return -1
+    start_char = m.start(1)
+
+    # Try fast tokenizer char_to_token mapping
+    if hasattr(enc, "char_to_token"):
+        try:
+            pos = enc.char_to_token(start_char)
+            if pos is not None:
+                return pos
+        except Exception:
+            pass
+
+    # Try offset mapping if available in enc
+    if "offset_mapping" in enc:
+        offsets = enc["offset_mapping"]
+        if hasattr(offsets, "squeeze"):
+            offsets = offsets.squeeze(0).tolist()
+        for idx, (s, e) in enumerate(offsets):
+            if s <= start_char < e:
+                return idx
+
+    # Fallback: tokenizing prefix
+    try:
+        prefix = target_text[:start_char]
+        prefix_ids = tokenizer(prefix, add_special_tokens=False)["input_ids"]
+        # Account for possible BOS
+        full_with_special = tokenizer(target_text, add_special_tokens=True)["input_ids"]
+        full_without_special = tokenizer(target_text, add_special_tokens=False)["input_ids"]
+        has_bos = len(full_with_special) > len(full_without_special)
+        return len(prefix_ids) + (1 if has_bos else 0)
+    except Exception:
+        return -1
+
+
+# ── Reasoning Extraction & Sanitization ───────────────────────────────────────
+
+def _extract_reasoning(messages: list) -> str:
+    """Return the assistant response verbatim, preserving all structured tags."""
     for msg in messages:
         if msg.get("role") != "assistant":
             continue
@@ -87,28 +161,20 @@ def _extract_reasoning(messages: list) -> str:
 
 
 def _sanitize_reasoning(text: str, label: int) -> str:
-    """
-    Fix #7: guarantee a non-empty, non-garbage reasoning string.
-
-    If the extracted reasoning is too short (empty, whitespace, or a single
-    punctuation mark), replace it with a minimal but valid target that still
-    teaches the LM the correct answer token. This prevents the LM loss from
-    training on empty or near-empty sequences which introduce noise.
-    """
+    """Guarantee non-empty reasoning string with valid fallback."""
     if len(text.strip()) >= _MIN_REASONING_LEN:
         return text.strip()
-    # Fallback: minimal valid target with correct label
     verdict = "fake" if label == 1 else "real"
     return f"<fast>The image appears {verdict}.</fast> <answer>{verdict}</answer>"
 
 
 def _resolve_path(raw: str, root: str) -> str:
     parts = Path(raw).parts
-    if parts[0].lower() == "hydrafake":
+    if parts and parts[0].lower() == "hydrafake":
         parts = parts[1:]
     if len(parts) >= 2 and parts[0].lower() == "test":
         generator = parts[1]
-        category  = _TEST_GENERATOR_MAP.get(generator)
+        category = _TEST_GENERATOR_MAP.get(generator)
         if category:
             parts = (parts[0], category) + parts[1:]
     rel = os.path.join(*parts)
@@ -142,6 +208,8 @@ def build_transforms(split: str = "train", image_size: int = 448):
         ])
 
 
+# ── HydraFake Dataset (v2) ───────────────────────────────────────────────────
+
 class HydraFakeDataset(Dataset):
     def __init__(
         self,
@@ -151,27 +219,23 @@ class HydraFakeDataset(Dataset):
         split:        str = "train",
         image_size:   int = 448,
         max_text_len: int = 512,
-        allowed_files: list = None,
-        require_reasoning: bool = None,
+        allowed_files: Optional[List[str]] = None,
+        require_reasoning: Optional[bool] = None,
     ):
         self.dataset_root = dataset_root
-        self.tokenizer    = tokenizer
-        self.split        = split
-        self.image_size   = image_size
+        self.tokenizer = tokenizer
+        self.split = split
+        self.image_size = image_size
         self.max_text_len = max_text_len
-        # allowed_files: explicit list like ["sft_36k.json"] or ["all.json"];
-        # None = glob **/*.json (legacy, for val/test). require_reasoning:
-        # None = auto (train=True, val/test=False), True = drop bare, False = keep bare.
         self.allowed_files = allowed_files
         if require_reasoning is None:
             require_reasoning = (split == "train")
         self.require_reasoning = require_reasoning
-        self.transform    = build_transforms(split, image_size)
-        self.samples      = []
+        self.transform = build_transforms(split, image_size)
+        self.samples = []
         self._load(json_dir)
 
     def _load(self, json_dir: str):
-        # Explicit file list takes priority (for cls/sft/pref separation)
         if self.allowed_files is not None:
             files = []
             for fname in self.allowed_files:
@@ -179,19 +243,19 @@ class HydraFakeDataset(Dataset):
                 if os.path.isfile(cand):
                     files.append(cand)
                 else:
-                    # also try recursive find for nested names like "sft_36k.json"
                     found = glob.glob(os.path.join(json_dir, "**", fname), recursive=True)
                     files.extend(found)
             files = sorted(set(files))
         else:
-            files = glob.glob(
-                os.path.join(json_dir, "**", "*.json"), recursive=True)
+            files = glob.glob(os.path.join(json_dir, "**", "*.json"), recursive=True)
             if not files:
                 files = glob.glob(os.path.join(json_dir, "*.json"))
         if not files:
             raise FileNotFoundError(
-                f"No JSON files found under: {json_dir} (filter={self.allowed_files})")
-        # pgrpo is always inactive — never load it even via glob
+                f"No JSON files found under: {json_dir} (filter={self.allowed_files})"
+            )
+
+        # pgrpo is always inactive — filter out
         files = [f for f in files if "pgrpo" not in os.path.basename(f).lower()]
 
         missing_count  = 0
@@ -200,13 +264,7 @@ class HydraFakeDataset(Dataset):
         no_trace_count = 0
         too_long_count = 0
 
-        # Phase 1 â€” merge conflicting annotations per image.
-        # The same image is listed across multiple JSON files with
-        # DIFFERENT assistant targets: all.json / per-generator files /
-        # pgrpo contain a bare '<answer> X </answer>', while sft_36k and
-        # mipo carry the full structured trace. Keep the RICHEST copy
-        # (tagged trace beats bare answer) per unique image.
-        candidates = {}   # normcase path -> (rich, resolved, label, raw, ftype)
+        candidates = {}  # normcase path -> (rich, resolved, label, raw, ftype)
 
         for jf in sorted(files):
             with open(jf, encoding="utf-8") as f:
@@ -221,8 +279,6 @@ class HydraFakeDataset(Dataset):
                 resolved = _resolve_path(imgs[0], self.dataset_root)
                 label    = int(e.get("label", 0))
 
-                # Skip entries whose image is missing on disk instead of
-                # silently training on a black-image substitute.
                 if not os.path.exists(resolved):
                     missing_count += 1
                     continue
@@ -242,44 +298,30 @@ class HydraFakeDataset(Dataset):
                                            raw_reasoning,
                                            e.get("type", "unknown"))
 
-        # Phase 2 â€” build samples from the winning annotation only.
-        # Images with NO tagged copy anywhere are skipped entirely: they
-        # would teach the LM the degenerate 'bare answer' mode that caused
-        # the reasoning-format collapse. Harmless for the classifier,
-        # which is frozen during corrective fine-tuning.
         for rich, resolved, label, raw_reasoning, ftype in candidates.values():
             if not rich:
                 if self.require_reasoning:
                     no_trace_count += 1
                     continue
-                # Classification pool (all.json) or val/test bare: keep as
-                # classification-only. Use zero attention so LM loss (if ever
-                # computed) is fully masked, and no synthetic reasoning is invented.
                 self.samples.append({
-                    "image_path":   resolved,
-                    "label":        label,
-                    "reasoning_ids": torch.zeros(self.max_text_len, dtype=torch.long),
-                    "attention_mask": torch.zeros(self.max_text_len, dtype=torch.long),
-                    "reasoning_text": "",
-                    "forgery_type": ftype,
+                    "image_path":       resolved,
+                    "label":            label,
+                    "reasoning_ids":    torch.zeros(self.max_text_len, dtype=torch.long),
+                    "attention_mask":   torch.zeros(self.max_text_len, dtype=torch.long),
+                    "answer_token_pos": torch.tensor(-1, dtype=torch.long),
+                    "reasoning_text":   "",
+                    "forgery_type":     ftype,
                 })
                 continue
 
-            # Fix #7: sanitize empty / garbage reasoning
             reasoning = _sanitize_reasoning(raw_reasoning, label)
             if reasoning != raw_reasoning.strip():
                 fallback_count += 1
 
-            # Fix #4: tokenize HERE at load time, not in __getitem__.
-            #
-            # EOS append: targets never contained an eos_token before, so
-            # the LM never learned WHEN to stop generating. Appending it
-            # makes '<answer>...</answer><eos>' the learned ending.
-            target_text = reasoning + self.tokenizer.eos_token
+            # Append EOS token so LM learns when to stop
+            target_text = reasoning + (self.tokenizer.eos_token or "<|endoftext|>")
 
-            # Drop over-long targets instead of truncating: a truncated
-            # trace ends mid-sentence with NO <answer> and NO eos, which
-            # would teach the LM to stop without answering.
+            # Drop over-long targets instead of truncating
             n_tok = len(self.tokenizer(target_text)["input_ids"])
             if n_tok > self.max_text_len:
                 too_long_count += 1
@@ -293,32 +335,32 @@ class HydraFakeDataset(Dataset):
                 return_tensors="pt",
             )
 
+            # Locate answer token position for self-consistency loss (2.5)
+            ans_pos = find_answer_token_pos(target_text, self.tokenizer, enc)
+
             self.samples.append({
-                "image_path":     resolved,
-                "label":          label,
-                "reasoning_ids":  enc["input_ids"].squeeze(0),
-                "attention_mask": enc["attention_mask"].squeeze(0),
-                "reasoning_text": reasoning,   # kept for logging/debug only
-                "forgery_type":   ftype,
+                "image_path":       resolved,
+                "label":            label,
+                "reasoning_ids":    enc["input_ids"].squeeze(0),
+                "attention_mask":   enc["attention_mask"].squeeze(0),
+                "answer_token_pos": torch.tensor(ans_pos, dtype=torch.long),
+                "reasoning_text":   reasoning,
+                "forgery_type":     ftype,
             })
 
         print(f"[{self.split}] {len(self.samples)} usable samples "
               f"from {len(files)} JSON file(s). "
-              f"Unique images found: {len(candidates)}  "
+              f"Unique images: {len(candidates)}  "
               f"Missing(skipped): {missing_count}  "
               f"Duplicates(merged): {dupe_count}  "
               f"No-tagged-trace(skipped): {no_trace_count}  "
               f"Too-long(skipped): {too_long_count}  "
               f"Reasoning fallbacks: {fallback_count}")
 
-        if missing_count > 0:
-            print(f"  WARNING: skipped {missing_count} entries with "
-                  f"missing images under root: {self.dataset_root}")
         if len(self.samples) == 0:
             raise FileNotFoundError(
                 f"[{self.split}] 0 usable images resolved from {json_dir}. "
-                f"Check --dataset_root ({self.dataset_root}) and that the "
-                f"on-disk folder layout matches the JSON paths.")
+                f"Check --dataset_root ({self.dataset_root})")
 
     def __len__(self):
         return len(self.samples)
@@ -326,23 +368,126 @@ class HydraFakeDataset(Dataset):
     def __getitem__(self, idx: int):
         s = self.samples[idx]
 
-        # Image loading is still here (can't pre-load images into RAM)
         try:
             img = Image.open(s["image_path"]).convert("RGB")
         except Exception:
             img = Image.new("RGB", (self.image_size, self.image_size), 0)
 
-        pixel_values = self.transform(img)
+        pixel_values  = self.transform(img)
+        freq_features = compute_fft_features(img, target_size=224)
 
         return {
-            "pixel_values":   pixel_values,
-            "labels":         torch.tensor(s["label"], dtype=torch.long),
-            # Fix #4: these are pre-computed tensors, not freshly tokenized
-            "reasoning_ids":  s["reasoning_ids"],
-            "attention_mask": s["attention_mask"],
-            "reasoning_text": s["reasoning_text"],  # str, for debug logging
+            "pixel_values":     pixel_values,
+            "freq_features":    freq_features,
+            "labels":           torch.tensor(s["label"], dtype=torch.long),
+            "reasoning_ids":    s["reasoning_ids"],
+            "attention_mask":   s["attention_mask"],
+            "answer_token_pos": s["answer_token_pos"],
+            "reasoning_text":   s["reasoning_text"],
+            "forgery_type":     s["forgery_type"],
         }
 
+
+# ── Preference Dataset (2.7: mipo_3k chosen/rejected pairs) ───────────────────
+
+class HydraFakePreferenceDataset(Dataset):
+    """
+    Preserves mipo_3k.json chosen/rejected pairs for DPO preference optimization.
+    Each sample is one pair (image + chosen + rejected), keeping all 3,480 pairs.
+    """
+    def __init__(self, dataset_root: str, json_dir: str, tokenizer,
+                 image_size: int = 448, max_text_len: int = 512):
+        self.dataset_root = dataset_root
+        self.tokenizer = tokenizer
+        self.image_size = image_size
+        self.max_text_len = max_text_len
+        self.transform = build_transforms("train", image_size)
+        self.samples = []
+        self._load(json_dir)
+
+    def _load(self, json_dir: str):
+        candidates = glob.glob(os.path.join(json_dir, "**", "mipo_3k.json"), recursive=True)
+        if not candidates:
+            candidates = [os.path.join(json_dir, "mipo_3k.json")]
+        files = [f for f in candidates if os.path.isfile(f)]
+        if not files:
+            raise FileNotFoundError(f"mipo_3k.json not found under: {json_dir}")
+
+        kept = 0
+        for jf in sorted(files):
+            with open(jf, encoding="utf-8") as f:
+                data = json.load(f)
+            entries = data if isinstance(data, list) else [data]
+            for e in entries:
+                imgs = e.get("images", [])
+                if not imgs:
+                    continue
+                resolved = _resolve_path(imgs[0], self.dataset_root)
+                if not os.path.exists(resolved):
+                    continue
+                label = int(e.get("label", 0))
+
+                chosen_raw = _extract_reasoning(e.get("messages", []))
+                rejected_raw = (e.get("rejected_response") or "").strip()
+                if not chosen_raw or not rejected_raw:
+                    continue
+
+                eos = self.tokenizer.eos_token or "<|endoftext|>"
+                chosen_enc = self.tokenizer(
+                    chosen_raw + eos,
+                    max_length=self.max_text_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt"
+                )
+                rejected_enc = self.tokenizer(
+                    rejected_raw + eos,
+                    max_length=self.max_text_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt"
+                )
+                self.samples.append({
+                    "image_path":    resolved,
+                    "label":         label,
+                    "chosen_ids":    chosen_enc["input_ids"].squeeze(0),
+                    "chosen_mask":   chosen_enc["attention_mask"].squeeze(0),
+                    "rejected_ids":  rejected_enc["input_ids"].squeeze(0),
+                    "rejected_mask": rejected_enc["attention_mask"].squeeze(0),
+                    "chosen_text":   chosen_raw,
+                    "rejected_text": rejected_raw,
+                    "forgery_type":  e.get("type", "unknown"),
+                })
+                kept += 1
+
+        print(f"[pref] {len(self.samples)} preference pairs loaded from {len(files)} file(s) (kept {kept})")
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx: int):
+        s = self.samples[idx]
+        try:
+            img = Image.open(s["image_path"]).convert("RGB")
+        except Exception:
+            img = Image.new("RGB", (self.image_size, self.image_size), 0)
+
+        pixel_values  = self.transform(img)
+        freq_features = compute_fft_features(img, target_size=224)
+
+        return {
+            "pixel_values":  pixel_values,
+            "freq_features": freq_features,
+            "labels":        torch.tensor(s["label"], dtype=torch.long),
+            "chosen_ids":    s["chosen_ids"],
+            "chosen_mask":   s["chosen_mask"],
+            "rejected_ids":  s["rejected_ids"],
+            "rejected_mask": s["rejected_mask"],
+            "forgery_type":  s["forgery_type"],
+        }
+
+
+# ── DataLoader Builders ───────────────────────────────────────────────────────
 
 def _balanced_sampler(dataset):
     labels        = [s["label"] for s in dataset.samples]
@@ -368,7 +513,6 @@ def build_dataloaders(
         tokenizer.pad_token = tokenizer.eos_token
 
     loaders = {}
-
     for split in ("train", "val", "test"):
         json_dir = os.path.join(json_root, split)
         if not os.path.isdir(json_dir):
@@ -401,153 +545,107 @@ def build_dataloaders(
     return loaders, tokenizer
 
 
-# ── Separated supervision pools (Polyvalent, not Veritas) ───────────────────
-# Classification = all.json full image/label pool (48,320 unique, bare allowed).
-# SFT          = sft_36k.json rich traces only (36,750 → ~35k after >512 drop).
-# Preference   = mipo_3k.json chosen/rejected pairs (3,480 pairs, 870 images ×4).
-# pgrpo_8k.json is intentionally never loaded here.
-
-class HydraFakePreferenceDataset(Dataset):
-    """Preserves mipo_3k.json chosen/rejected pairs for later preference training.
-    Each sample is one pair (image + chosen + rejected), not deduped to unique
-    images — all 3,480 pairs are kept. No DPO loss is computed here; the
-    dataset is only exposed for future stages."""
-    def __init__(self, dataset_root: str, json_dir: str, tokenizer,
-                 image_size: int = 448, max_text_len: int = 512):
-        self.dataset_root = dataset_root
-        self.tokenizer = tokenizer
-        self.image_size = image_size
-        self.max_text_len = max_text_len
-        self.transform = build_transforms("train", image_size)
-        self.samples = []
-        self._load(json_dir)
-
-    def _load(self, json_dir: str):
-        # Locate mipo file explicitly — do not glob all train JSONs
-        candidates = glob.glob(os.path.join(json_dir, "**", "mipo_3k.json"), recursive=True)
-        if not candidates:
-            candidates = [os.path.join(json_dir, "mipo_3k.json")]
-        files = [f for f in candidates if os.path.isfile(f)]
-        if not files:
-            raise FileNotFoundError(f"mipo_3k.json not found under: {json_dir}")
-
-        kept = 0
-        for jf in sorted(files):
-            with open(jf, encoding="utf-8") as f:
-                data = json.load(f)
-            entries = data if isinstance(data, list) else [data]
-            for e in entries:
-                imgs = e.get("images", [])
-                if not imgs:
-                    continue
-                resolved = _resolve_path(imgs[0], self.dataset_root)
-                if not os.path.exists(resolved):
-                    continue
-                label = int(e.get("label", 0))
-                # Chosen = messages[assistant], rejected = rejected_response
-                chosen_raw = _extract_reasoning(e.get("messages", []))
-                rejected_raw = (e.get("rejected_response") or "").strip()
-                if not chosen_raw or not rejected_raw:
-                    continue
-                # Tokenize both with EOS
-                chosen_enc = self.tokenizer(chosen_raw + self.tokenizer.eos_token,
-                                            max_length=self.max_text_len, padding="max_length",
-                                            truncation=True, return_tensors="pt")
-                rejected_enc = self.tokenizer(rejected_raw + self.tokenizer.eos_token,
-                                              max_length=self.max_text_len, padding="max_length",
-                                              truncation=True, return_tensors="pt")
-                self.samples.append({
-                    "image_path": resolved,
-                    "label": label,
-                    "chosen_ids": chosen_enc["input_ids"].squeeze(0),
-                    "chosen_mask": chosen_enc["attention_mask"].squeeze(0),
-                    "rejected_ids": rejected_enc["input_ids"].squeeze(0),
-                    "rejected_mask": rejected_enc["attention_mask"].squeeze(0),
-                    "chosen_text": chosen_raw,
-                    "rejected_text": rejected_raw,
-                })
-                kept += 1
-        print(f"[pref] {len(self.samples)} preference pairs from {len(files)} file(s) (kept {kept})")
-
-    def __len__(self): return len(self.samples)
-    def __getitem__(self, idx: int):
-        s = self.samples[idx]
-        try:
-            img = Image.open(s["image_path"]).convert("RGB")
-        except Exception:
-            img = Image.new("RGB", (self.image_size, self.image_size), 0)
-        pv = self.transform(img)
-        return {
-            "pixel_values": pv,
-            "labels": torch.tensor(s["label"], dtype=torch.long),
-            "chosen_ids": s["chosen_ids"],
-            "chosen_mask": s["chosen_mask"],
-            "rejected_ids": s["rejected_ids"],
-            "rejected_mask": s["rejected_mask"],
-        }
-
-
-def build_classification_loader(dataset_root: str, json_root: str, tokenizer,
-                                image_size: int = 448, max_text_len: int = 512,
-                                batch_size: int = 8, num_workers: int = 8):
-    """Classification pool: train/all.json only, bare allowed (48,320 unique)."""
+def build_classification_loader(
+    dataset_root: str, json_root: str, tokenizer,
+    image_size: int = 448, max_text_len: int = 512,
+    batch_size: int = 8, num_workers: int = 8
+):
+    """Classification pool: train/all.json (48k unique, bare allowed)."""
     json_dir = os.path.join(json_root, "train")
-    ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split="train",
-                          image_size=image_size, max_text_len=max_text_len,
-                          allowed_files=["all.json"], require_reasoning=False)
-    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
-                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+    ds = HydraFakeDataset(
+        dataset_root, json_dir, tokenizer, split="train",
+        image_size=image_size, max_text_len=max_text_len,
+        allowed_files=["all.json"], require_reasoning=False
+    )
+    return DataLoader(
+        ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+        num_workers=num_workers, pin_memory=True, drop_last=True
+    ), ds
 
 
-def build_sft_loader(dataset_root: str, json_root: str, tokenizer,
-                     image_size: int = 448, max_text_len: int = 512,
-                     batch_size: int = 8, num_workers: int = 8):
-    """SFT reasoning pool: train/sft_36k.json only, rich required (~35k usable)."""
+def build_sft_loader(
+    dataset_root: str, json_root: str, tokenizer,
+    image_size: int = 448, max_text_len: int = 512,
+    batch_size: int = 8, num_workers: int = 8
+):
+    """SFT reasoning pool: train/sft_36k.json rich traces only (~35k usable)."""
     json_dir = os.path.join(json_root, "train")
-    ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split="train",
-                          image_size=image_size, max_text_len=max_text_len,
-                          allowed_files=["sft_36k.json"], require_reasoning=True)
-    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
-                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+    ds = HydraFakeDataset(
+        dataset_root, json_dir, tokenizer, split="train",
+        image_size=image_size, max_text_len=max_text_len,
+        allowed_files=["sft_36k.json"], require_reasoning=True
+    )
+    return DataLoader(
+        ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+        num_workers=num_workers, pin_memory=True, drop_last=True
+    ), ds
 
 
-def build_preference_loader(dataset_root: str, json_root: str, tokenizer,
-                            image_size: int = 448, max_text_len: int = 512,
-                            batch_size: int = 8, num_workers: int = 8):
-    """Preference pool: train/mipo_3k.json chosen/rejected (3,480 pairs). Inactive in current joint training."""
+def build_preference_loader(
+    dataset_root: str, json_root: str, tokenizer,
+    image_size: int = 448, max_text_len: int = 512,
+    batch_size: int = 8, num_workers: int = 8
+):
+    """Preference pool: train/mipo_3k.json (3,480 chosen/rejected pairs)."""
     json_dir = os.path.join(json_root, "train")
-    ds = HydraFakePreferenceDataset(dataset_root, json_dir, tokenizer, image_size, max_text_len)
-    return DataLoader(ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
-                      num_workers=num_workers, pin_memory=True, drop_last=True), ds
+    ds = HydraFakePreferenceDataset(
+        dataset_root, json_dir, tokenizer, image_size, max_text_len
+    )
+    return DataLoader(
+        ds, batch_size=batch_size, sampler=_balanced_sampler(ds),
+        num_workers=num_workers, pin_memory=True, drop_last=True
+    ), ds
 
 
-def build_separated_loaders(dataset_root: str, json_root: str, tokenizer_name: str = "./models/InternVL3-2B",
-                            image_size: int = 448, max_text_len: int = 512,
-                            batch_size: int = 8, num_workers: int = 8):
-    """Return dict with separated pools: cls_train (48k), sft_train (35k), pref (3,480 pairs, inactive), val, test."""
+def build_separated_loaders(
+    dataset_root:   str,
+    json_root:      str,
+    tokenizer_name: str = "./models/InternVL3-2B",
+    image_size:     int = 448,
+    max_text_len:   int = 512,
+    batch_size:     int = 8,
+    num_workers:    int = 8
+):
+    """
+    Return separated loaders:
+      - cls_train : 48k classification images
+      - sft_train : 35k rich reasoning traces
+      - pref      : 3,480 preference pairs (mipo_3k)
+      - val / test
+    """
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
     loaders = {}
-    # Classification pool
-    cls_loader, _ = build_classification_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+    cls_loader, _ = build_classification_loader(
+        dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers
+    )
     loaders["cls_train"] = cls_loader
-    # SFT pool
-    sft_loader, _ = build_sft_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+
+    sft_loader, _ = build_sft_loader(
+        dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers
+    )
     loaders["sft_train"] = sft_loader
-    # Keep legacy "train" as sft for backward compat (train.py joint loss)
-    loaders["train"] = sft_loader
-    # Preference pool (exposed but not trained yet)
+    loaders["train"] = sft_loader  # for backward compatibility
+
     try:
-        pref_loader, _ = build_preference_loader(dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers)
+        pref_loader, _ = build_preference_loader(
+            dataset_root, json_root, tokenizer, image_size, max_text_len, batch_size, num_workers
+        )
         loaders["pref"] = pref_loader
     except FileNotFoundError:
         pass
-    # Val/test via legacy (glob, cls-only fallback)
+
     for split in ("val", "test"):
         json_dir = os.path.join(json_root, split)
         if not os.path.isdir(json_dir):
             continue
-        ds = HydraFakeDataset(dataset_root, json_dir, tokenizer, split, image_size, max_text_len)
-        loaders[split] = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+        ds = HydraFakeDataset(
+            dataset_root, json_dir, tokenizer, split, image_size, max_text_len
+        )
+        loaders[split] = DataLoader(
+            ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True
+        )
+
     return loaders, tokenizer

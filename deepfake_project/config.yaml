@@ -1,118 +1,52 @@
 # config.yaml
 # ============
-# Central config for Deepfake Detection + Reasoning
-# Priority: CLI args ALWAYS override config file values.
-# Usage:
-#   python train.py                          # uses this file
-#   python train.py --lr 1e-5 --batch_size 4 # overrides config
+# Central configuration for DeepfakeReasoningModel v2 (InternVL3-2B).
+# Priority: CLI arguments ALWAYS override config file values.
 
-# ── Run2 params (archived, commented for reference) ─────────────────────
-# dataset_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake"
-# json_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake/jsons"
-# model_path: "./models/InternVL3-2B"
-# tokenizer_path: "./models/InternVL3-2B"
-# output_dir: "./runs/intern_exp2"
-# batch_size: 8
-# grad_accum: 4
-# epochs_cls: 3
-# epochs_joint: 2
-# lm_seq_len: 192
-# lr: 5.0e-05
-# weight_decay: 0.01
-# lora_rank: 64
-# lora_alpha: 128
-# lm_loss_weight: 0.3
-# num_workers: 8
-# warmup_ratio: 0.05
-# patience: 5
-# # no weights_from, no freezes
-
-# ── Run3 corrective (archived, commented — exp3 ep1 from ep10) ──────────
-# dataset_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake"
-# json_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake/jsons"
-# model_path: "./models/InternVL3-2B"
-# tokenizer_path: "./models/InternVL3-2B"
-# output_dir: "./runs/intern_exp3_corrective"
-# weights_from: "./runs/intern_exp2/checkpoints/ep010.pth"
-# epochs_cls: 0
-# epochs_joint: 2
-# lm_seq_len: 512
-# lr: 1.0e-05
-# weight_decay: 0.01
-# lora_rank: 64
-# lora_alpha: 128
-# lm_loss_weight: 0.3
-# batch_size: 4
-# grad_accum: 8
-# num_workers: 8
-# warmup_ratio: 0.05
-# patience: 5
-# freeze_cls_head: true
-# freeze_projector: true
-# image_size: 448
-# max_new_tokens: 512 
-# checkpoint: "./runs/intern_exp3_corrective/checkpoints/ep001.pth"
-
-# ── Next run (active) — from BEST_EXP3, unfrozen, eps 2, lower lr ───────
-# dataset_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake"
-# json_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake/jsons"
-# model_path: "./models/InternVL3-2B"
-# tokenizer_path: "./models/InternVL3-2B"
-# output_dir: "./runs/intern_exp3_corrective"
-# weights_from: "./runs/intern_exp3_corrective/checkpoints/best.pth"
-# epochs_cls: 0
-# epochs_joint: 2
-# lm_seq_len: 512
-# lr: 5.0e-06
-# weight_decay: 0.01
-# lora_rank: 64
-# lora_alpha: 128
-# lm_loss_weight: 0.3
-# batch_size: 4
-# grad_accum: 8
-# num_workers: 8
-# warmup_ratio: 0.05
-# patience: 5
-# freeze_cls_head: false
-# freeze_projector: false
-# image_size: 448
-# max_new_tokens: 512
-# checkpoint: "./runs/intern_exp3_corrective/checkpoints/best.pth"
-
-# ── Resume next (active) — continue ep5 → ep6 (1 more epoch) ──────────
-dataset_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake"
-json_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake/jsons"
+# ── Active Run Configuration: DeepfakeReasoningModel v2 Full Curriculum ──
+# dataset_root: "C:/path/to/hydrafake"
+# json_root: "C:/path/to/hydrafake/jsons"
 model_path: "./models/InternVL3-2B"
 tokenizer_path: "./models/InternVL3-2B"
-output_dir: "./runs/intern_exp3_corrective"
-resume: "./runs/intern_exp3_corrective/checkpoints/ep005.pth"
-epochs_cls: 0
-epochs_joint: 6
-lm_seq_len: 512
-lr: 5.0e-06
-weight_decay: 0.01
+output_dir: "./runs/intern_v2"
+arch_version: "v2"
+
+# ── Architecture Hyperparameters ──────────────────────────────────────────
 lora_rank: 64
 lora_alpha: 128
-lm_loss_weight: 0.3
+lora_dropout: 0.05
+
+vision_lora_rank: 16
+vision_lora_alpha: 32
+vision_lora_dropout: 0.05
+
+# ── Training & Optimization ───────────────────────────────────────────────
+# RTX A5000 (24GB VRAM) recommended: batch_size=4, grad_accum=8 (effective batch=32)
 batch_size: 4
 grad_accum: 8
-num_workers: 8
+epochs_cls: 3
+epochs_joint: 2
+lr: 5.0e-05
+weight_decay: 0.01
 warmup_ratio: 0.05
 patience: 5
-freeze_cls_head: false
-freeze_projector: false
-image_size: 448
-max_new_tokens: 512
-checkpoint: "./runs/intern_exp3_corrective/checkpoints/best.pth"
+num_workers: 8
 
-# ── Eval defaults ───────────────────────────────────────────────────────
-# eval shares dataset_root/json_root/model_path above
+# ── Loss Weights & Curriculum ─────────────────────────────────────────────
+# Linear ramp across joint epochs: start at 0.3 -> end at 0.6
+lm_loss_weight_start: 0.3
+lm_loss_weight_end: 0.6
+consistency_loss_weight: 0.05
+
+# ── Sequence & Image Dimensions ───────────────────────────────────────────
+image_size: 448
+lm_seq_len: 512
+max_new_tokens: 512
+
+# ── Evaluation & Inference Defaults ───────────────────────────────────────
 eval_batch_size: 8
 eval_num_workers: 8
 
-# ── Inference defaults ──────────────────────────────────────────────────
-# inference shares model_path/checkpoint/image_size above
-# images are relative to project root (test_images/ contains 1.jpg etc.)
 inference_images:
   - "test_images/1.jpg"
   - "test_images/2.jpg"
