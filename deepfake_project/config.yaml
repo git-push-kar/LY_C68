@@ -79,15 +79,15 @@
 # max_new_tokens: 512
 # checkpoint: "./runs/intern_exp3_corrective/checkpoints/best.pth"
 
-# ── Resume next (active) — continue new ep1 → ep2 via resume ────────────
+# ── Resume next (active) — continue ep5 → ep6 (1 more epoch) ──────────
 dataset_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake"
 json_root: "C:/Users/Admin/Desktop/ly project c 68/deepfake_project/datasets/hydrafake/jsons"
 model_path: "./models/InternVL3-2B"
 tokenizer_path: "./models/InternVL3-2B"
 output_dir: "./runs/intern_exp3_corrective"
-resume: "./runs/intern_exp3_corrective/checkpoints/ep001.pth"
+resume: "./runs/intern_exp3_corrective/checkpoints/ep005.pth"
 epochs_cls: 0
-epochs_joint: 2
+epochs_joint: 6
 lm_seq_len: 512
 lr: 5.0e-06
 weight_decay: 0.01
