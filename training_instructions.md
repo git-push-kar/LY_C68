@@ -216,19 +216,30 @@ In v2, because **both the 2D FFT Frequency Branch (2.3)** and the **Native Multi
 
 ## 6. Monitoring & Diagnostic Guidance
 
-1. **Log Files & Metrics**:
-   - `logs/train.log`: Full timestamped console log.
-   - `logs/steps.csv`: Step-by-step recording of `loss`, `cls_loss`, `lm_loss`, and `consistency`.
-   - `logs/epochs.csv`: Epoch summary with train/val losses, accuracy, F1, validation AUC, and scheduled `lm_loss_weight`.
+1. **Time & Step Progress Tracking**:
+   - **Per-step logging**: Every 200 steps, the console logs progress percentage, speed in `s/step`, elapsed time, and estimated remaining `ETA`:
+     `Ep 1 | Step  200/8765 (  2.3%) | 0.32s/step | Elapsed 1m 04s | ETA 45m 12s | Loss 0.6421 | Cls 0.3120 | LM 1.1003`
+   - **Epoch completion summary**: At epoch completion, the total duration and average step speed are printed:
+     `Stage 2 Joint Epoch 1 completed: 8765/8765 pairs | Duration: 2h 45m 12s | Avg Speed: 1.130s/step`
+   - **Epoch Summary Table**: The table logs exact steps and duration per epoch:
+     ```
+       Ep    Stage       Steps       Time   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC   LM_W  Best
+        1 cls_only   6040/6040    28m 14s   0.3412  0.8650   0.3120  0.8810  0.9412   0.00     *
+        4    joint   8765/8765   2h 45m   0.2840  0.9120   0.2610  0.9240  0.9650   0.30     *
+     ```
+2. **Log Files & Metrics**:
+   - `logs/train.log`: Full timestamped console log with per-step speeds and ETAs.
+   - `logs/steps.csv`: Step-by-step recording of `epoch`, `step`, `global_step`, `step_time_s`, `loss`, `cls_loss`, `lm_loss`, and `consistency`.
+   - `logs/epochs.csv`: Epoch summary with `steps`, `time_sec`, `time_str`, train/val losses, accuracy, F1, validation AUC, and scheduled `lm_loss_weight`.
    - `logs/curves.png`: Training curve plots generated automatically after every epoch.
-2. **Monitoring Consistency Loss**:
+3. **Monitoring Consistency Loss**:
    - Watch the `consistency` metric in `steps.csv` and `epochs.csv`.
    - **Healthy Trend**: `consistency_loss` should decline alongside `cls_loss` and `lm_loss` (typical range: `0.05` to `0.30`).
    - **Divergence Warning**: If `consistency_loss` remains high (>1.5) while `cls_loss` drops (<0.2), the classifier and LLM answer predictions are systematically disagreeing. Check if reasoning prompts are generating unparsed answers or if label mapping is inverted.
-3. **Collapse Detection**:
+4. **Collapse Detection**:
    - If the model begins predicting only class 0 or only class 1, a `COLLAPSE WARNING` is logged.
    - The balanced sampler (`WeightedRandomSampler`) and `label_smoothing=0.1` prevent trivial majority-class collapse.
-4. **Per-Generator-Family Diagnostics**:
+5. **Per-Generator-Family Diagnostics**:
    - During validation at the end of every epoch, `validate()` automatically outputs a breakdown across generator families (`cd`, `cf`, `cm`, `id`). Inspect these numbers before adding custom class weighting or focal loss adjustments.
 
 ---

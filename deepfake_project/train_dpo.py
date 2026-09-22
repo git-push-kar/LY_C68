@@ -33,6 +33,7 @@ import logging
 import math
 import os
 import sys
+import time
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -65,6 +66,21 @@ def setup_logger(log_dir: str) -> logging.Logger:
     logger.addHandler(fh)
 
     return logger
+
+
+# ── Time formatting helper ───────────────────────────────────────────────────
+
+def format_time(seconds: float) -> str:
+    """Format seconds into a clean human-readable duration (e.g. '1h 24m 10s', '45m 12s', '35.4s')."""
+    if seconds < 0:
+        return "0.0s"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h}h {m:02d}m {s:02d}s"
+    return f"{m}m {s:02d}s"
 
 
 # ── CSV Loggers ───────────────────────────────────────────────────────────────
@@ -122,15 +138,6 @@ def compute_sequence_logps(
     """
     Computes per-sequence conditional log-likelihood log P(input_ids | pixel_values).
     Routes pixel_values through InternVL3's native visual tokens.
-    
-    Args:
-        model: DeepfakeReasoningModel
-        pixel_values: (B, 3, H, W)
-        freq_features: (B, 3, 224, 224)
-        input_ids: (B, L) target token IDs
-        attention_mask: (B, L) 1 for valid tokens, 0 for pad
-    Returns:
-        (B,) sum of log probabilities for valid tokens in each sequence
     """
     B = pixel_values.size(0)
     device = pixel_values.device
@@ -178,6 +185,7 @@ def train_dpo_epoch(
 ):
     policy_model.train()
     ref_model.eval()
+    start_time = time.time()
 
     loss_m = AverageMeter()
     chosen_rewards_m = AverageMeter()
@@ -236,17 +244,25 @@ def train_dpo_epoch(
         rejected_rewards_m.update(rejected_rewards.mean().item(), B)
         reward_acc_m.update(reward_acc.item(), B)
 
-        if step % 50 == 0:
+        if (step + 1) % 50 == 0 or (step + 1) == num_steps or step == 0:
+            elapsed = time.time() - start_time
+            steps_done = step + 1
+            s_per_step = elapsed / max(1, steps_done)
+            eta_sec = (num_steps - steps_done) * s_per_step
+            progress_pct = (steps_done / num_steps) * 100
+
             logger.info(
-                f"DPO Ep {epoch} | Step {step}/{num_steps} "
+                f"DPO Ep {epoch} | Step {steps_done:>4}/{num_steps} ({progress_pct:>5.1f}%) "
+                f"| {s_per_step:.2f}s/step | Elapsed {format_time(elapsed)} | ETA {format_time(eta_sec)} "
                 f"| Loss {dpo_loss.item():.4f} "
-                f"| Reward Margin {(chosen_rewards.mean() - rejected_rewards.mean()).item():.4f} "
-                f"| Reward Acc {reward_acc.item():.2%}"
+                f"| Margin {(chosen_rewards.mean() - rejected_rewards.mean()).item():.4f} "
+                f"| Acc {reward_acc.item():.2%}"
             )
             step_csv.write({
                 "epoch":           epoch,
                 "step":            step,
                 "global_step":     global_step + step,
+                "step_time_s":     round(s_per_step, 3),
                 "dpo_loss":        round(dpo_loss.item(), 6),
                 "chosen_reward":   round(chosen_rewards.mean().item(), 6),
                 "rejected_reward": round(rejected_rewards.mean().item(), 6),
@@ -262,12 +278,20 @@ def train_dpo_epoch(
             scheduler.step()
             optimizer.zero_grad(set_to_none=True)
 
+    total_epoch_time = time.time() - start_time
+    logger.info(f"  DPO Epoch {epoch} completed: {num_steps}/{num_steps} steps | "
+                f"Duration: {format_time(total_epoch_time)} ({total_epoch_time:.1f}s) | "
+                f"Avg Speed: {total_epoch_time/max(1, num_steps):.3f}s/step")
+
     return {
         "dpo_loss":        loss_m.avg,
         "chosen_reward":   chosen_rewards_m.avg,
         "rejected_reward": rejected_rewards_m.avg,
         "reward_margin":   chosen_rewards_m.avg - rejected_rewards_m.avg,
         "reward_acc":      reward_acc_m.avg,
+        "time_sec":        total_epoch_time,
+        "time_str":        format_time(total_epoch_time),
+        "steps":           num_steps,
     }
 
 
@@ -307,7 +331,7 @@ def main():
     epoch_csv = DPOEpochCSV(os.path.join(log_dir, "dpo_epochs.csv"))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("=" * 70)
+    logger.info("=" * 86)
     logger.info("DeepfakeReasoningModel v2 — DPO Preference Alignment Stage")
     logger.info(f"Device: {device}")
     if device.type == "cuda":
@@ -315,7 +339,7 @@ def main():
         logger.info(f"VRAM  : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
     logger.info(f"Checkpoint source : {args.checkpoint}")
     logger.info(f"DPO Beta: {args.dpo_beta} | DPO LR: {args.dpo_lr} | Epochs: {args.dpo_epochs}")
-    logger.info("=" * 70)
+    logger.info("=" * 86)
 
     # ── Tokenizer & Preference DataLoader ─────────────────────────────
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
@@ -354,7 +378,7 @@ def main():
     for p in ref_model.parameters():
         p.requires_grad = False
 
-    # Freeze cls_head and custom projector during DPO — optimize LoRA only
+    # Freeze non-LoRA parameters during DPO
     for n, p in policy_model.named_parameters():
         if not ("lora_" in n):
             p.requires_grad = False
@@ -363,7 +387,8 @@ def main():
     logger.info(f"Policy model trainable LoRA parameters: {sum(p.numel() for p in lora_params):,}")
 
     optimizer = torch.optim.AdamW(lora_params, lr=args.dpo_lr, weight_decay=0.01)
-    total_steps = args.dpo_epochs * ((len(pref_loader) + args.grad_accum - 1) // args.grad_accum)
+    steps_per_epoch = len(pref_loader)
+    total_steps = args.dpo_epochs * ((steps_per_epoch + args.grad_accum - 1) // args.grad_accum)
     warmup_steps = int(total_steps * args.warmup_ratio)
 
     def lr_lambda(step):
@@ -376,7 +401,12 @@ def main():
 
     best_reward_acc = 0.0
 
+    hdr = f"{'Ep':>4} {'Steps':>10} {'Time':>10} {'DPOLoss':>9} {'RewardMargin':>14} {'RewardAcc':>11} {'Best':>5}"
+    logger.info(hdr)
+    logger.info("=" * 86)
+
     # ── DPO Training Loop ─────────────────────────────────────────────
+    dpo_start_wall = time.time()
     for epoch in range(1, args.dpo_epochs + 1):
         tr = train_dpo_epoch(
             policy_model=policy_model,
@@ -392,27 +422,31 @@ def main():
             grad_accum=args.grad_accum,
         )
 
-        logger.info(
-            f"Epoch {epoch}/{args.dpo_epochs} Complete | "
-            f"Loss: {tr['dpo_loss']:.4f} | "
-            f"Reward Margin: {tr['reward_margin']:.4f} | "
-            f"Reward Acc: {tr['reward_acc']:.2%}"
-        )
+        is_best = tr["reward_acc"] > best_reward_acc
+        if is_best:
+            best_reward_acc = tr["reward_acc"]
+
+        time_display = tr.get("time_str", "N/A")
+        steps_display = f"{tr.get('steps', 0)}/{tr.get('steps', 0)}"
+
+        line = (f"{epoch:>4} {steps_display:>10} {time_display:>10} "
+                f"{tr['dpo_loss']:>9.4f} {tr['reward_margin']:>14.4f} "
+                f"{tr['reward_acc']:>10.2%} {'*' if is_best else '':>5}")
+        logger.info(line)
 
         epoch_csv.write({
             "epoch":           epoch,
+            "steps":           tr.get("steps", 0),
+            "time_sec":        round(tr.get("time_sec", 0.0), 2),
+            "time_str":        time_display,
             "dpo_loss":        round(tr["dpo_loss"], 6),
             "chosen_reward":   round(tr["chosen_reward"], 6),
             "rejected_reward": round(tr["rejected_reward"], 6),
             "reward_margin":   round(tr["reward_margin"], 6),
             "reward_acc":      round(tr["reward_acc"], 4),
+            "is_best":         int(is_best),
         })
 
-        is_best = tr["reward_acc"] > best_reward_acc
-        if is_best:
-            best_reward_acc = tr["reward_acc"]
-
-        # Atomic checkpoint save
         ckpt_path = os.path.join(ckpt_dir, f"dpo_ep{epoch:03d}.pth")
         torch.save({
             "epoch":           epoch,
@@ -420,6 +454,7 @@ def main():
             "dpo_loss":        tr["dpo_loss"],
             "reward_acc":      tr["reward_acc"],
             "arch_version":    args.arch_version,
+            "epoch_time_s":    tr.get("time_sec", 0.0),
         }, ckpt_path)
         logger.info(f"Saved DPO checkpoint: {ckpt_path}")
 
@@ -433,8 +468,9 @@ def main():
             }, best_path)
             logger.info(f"Saved best DPO checkpoint: {best_path}")
 
-    logger.info("=" * 70)
-    logger.info(f"DPO Preference Training Complete. Best Reward Accuracy: {best_reward_acc:.2%}")
+    total_dpo_wall = time.time() - dpo_start_wall
+    logger.info("=" * 86)
+    logger.info(f"DPO Preference Training Complete in {format_time(total_dpo_wall)} ({total_dpo_wall:.1f}s). Best Reward Accuracy: {best_reward_acc:.2%}")
     logger.info(f"Checkpoints directory: {ckpt_dir}")
 
 

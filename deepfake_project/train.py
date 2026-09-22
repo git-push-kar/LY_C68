@@ -12,6 +12,7 @@ Architecture v2 Features & Fixes:
   #6  LM Loss Curriculum       — Linear ramp for lm_loss_weight from start (0.3) to end (0.6).
   #7  Per-Family Diagnostics   — Validation logs per-generator breakdown (cd, cf, cm, id).
   #8  Arch Versioning Guard    — Strict checks on v1 vs v2 checkpoint compatibility.
+  #9  Time & Step Tracking     — Precise per-step timing, ETA, speed (s/step), and epoch duration logging.
 
 Logging:
   - All stdout output written to <output_dir>/logs/train.log
@@ -27,6 +28,7 @@ import logging
 import math
 import os
 import sys
+import time
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -156,7 +158,20 @@ def save_curves(epoch_csv_path: str, out_path: str):
         pass
 
 
-# ── Utils ─────────────────────────────────────────────────────────────────────
+# ── Time & Metric Utils ───────────────────────────────────────────────────────
+
+def format_time(seconds: float) -> str:
+    """Format seconds into a clean human-readable duration (e.g. '1h 24m 10s', '45m 12s', '35.4s')."""
+    if seconds < 0:
+        return "0.0s"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h}h {m:02d}m {s:02d}s"
+    return f"{m}m {s:02d}s"
+
 
 class AverageMeter:
     def __init__(self): self.reset()
@@ -227,6 +242,7 @@ def train_epoch(
     use_lm_loss=False, grad_accum=1, lm_loss_weight=0.3
 ):
     model.train()
+    start_time = time.time()
     loss_m = AverageMeter()
     cls_m  = AverageMeter()
     lm_m   = AverageMeter()
@@ -234,7 +250,8 @@ def train_epoch(
     preds_all, labels_all = [], []
 
     optimizer.zero_grad(set_to_none=True)
-    global_step = (epoch - 1) * len(loader)
+    total_steps = len(loader)
+    global_step = (epoch - 1) * total_steps
 
     for step, batch in enumerate(loader):
         pv     = batch["pixel_values"].to(device, non_blocking=True)
@@ -281,30 +298,37 @@ def train_epoch(
         preds_all.extend(out["cls_logits"].detach().argmax(-1).cpu().tolist())
         labels_all.extend(labels.cpu().tolist())
 
-        if step % 200 == 0:
+        if (step + 1) % 200 == 0 or (step + 1) == total_steps or step == 0:
+            elapsed = time.time() - start_time
+            steps_done = step + 1
+            s_per_step = elapsed / max(1, steps_done)
+            eta_sec = (total_steps - steps_done) * s_per_step
+            progress_pct = (steps_done / total_steps) * 100
+
             lm_str = (f" | LM {out['lm_loss'].item():.4f}" if out["lm_loss"] is not None else "")
             cons_str = (f" | Cons {out['consistency_loss'].item():.4f}" if out["consistency_loss"] is not None else "")
             logger.info(
-                f"Ep {epoch} | Step {step}/{len(loader)} "
-                f"| Loss {out['loss'].item():.4f} "
-                f"| Cls {out['cls_loss'].item():.4f}"
+                f"Ep {epoch} | Step {steps_done:>5}/{total_steps} ({progress_pct:>5.1f}%) "
+                f"| {s_per_step:.2f}s/step | Elapsed {format_time(elapsed)} | ETA {format_time(eta_sec)} "
+                f"| Loss {out['loss'].item():.4f} | Cls {out['cls_loss'].item():.4f}"
                 f"{lm_str}{cons_str}"
             )
             step_csv.write({
                 "epoch":       epoch,
                 "step":        step,
                 "global_step": global_step + step,
+                "step_time_s": round(s_per_step, 3),
                 "loss":        round(out["loss"].item(), 6),
                 "cls_loss":    round(out["cls_loss"].item(), 6) if out["cls_loss"] is not None else "",
                 "lm_loss":     round(out["lm_loss"].item(), 6) if out["lm_loss"] is not None else "",
                 "consistency": round(out["consistency_loss"].item(), 6) if out["consistency_loss"] is not None else "",
             })
 
+    total_epoch_time = time.time() - start_time
     unique = set(preds_all)
     if len(unique) == 1:
         logger.warning(f"  !! COLLAPSE WARNING: model predicts only class {list(unique)[0]}")
 
-    # Check consistency divergence
     if cons_m.avg > 1.5 and cls_m.avg < 0.3:
         logger.warning(
             f"  !! CONSISTENCY DIVERGENCE: consistency_loss ({cons_m.avg:.4f}) is high "
@@ -312,6 +336,10 @@ def train_epoch(
         )
 
     m = compute_metrics(labels_all, preds_all)
+    logger.info(f"  Stage 1 Epoch {epoch} completed: {total_steps}/{total_steps} steps | "
+                f"Duration: {format_time(total_epoch_time)} ({total_epoch_time:.1f}s) | "
+                f"Avg Speed: {total_epoch_time/max(1, total_steps):.3f}s/step")
+
     return {
         "loss":             loss_m.avg,
         "cls_loss":         cls_m.avg,
@@ -319,6 +347,9 @@ def train_epoch(
         "consistency_loss": cons_m.avg if cons_m.count > 0 else 0.0,
         "accuracy":         m["accuracy"],
         "f1":               m["f1"],
+        "time_sec":         total_epoch_time,
+        "time_str":         format_time(total_epoch_time),
+        "steps":            total_steps,
     }
 
 
@@ -336,6 +367,7 @@ def train_joint_epoch(
     Loss = cls_loss + lm_loss_weight * lm_loss + consistency_loss_weight * consistency_loss
     """
     model.train()
+    start_time = time.time()
     loss_m = AverageMeter()
     cls_m  = AverageMeter()
     lm_m   = AverageMeter()
@@ -409,10 +441,17 @@ def train_joint_epoch(
         preds_all.extend(out_cls["cls_logits"].detach().argmax(-1).cpu().tolist())
         labels_all.extend(labels_cls.cpu().tolist())
 
-        if step % 200 == 0:
+        if (step + 1) % 200 == 0 or (step + 1) == joint_steps or step == 0:
+            elapsed = time.time() - start_time
+            steps_done = step + 1
+            s_per_step = elapsed / max(1, steps_done)
+            eta_sec = (joint_steps - steps_done) * s_per_step
+            progress_pct = (steps_done / joint_steps) * 100
+
             cons_str = f" | Cons {consistency_loss.item():.4f}" if consistency_loss is not None else ""
             logger.info(
-                f"Ep {epoch} | Step {step}/{joint_steps} "
+                f"Ep {epoch} | Step {steps_done:>5}/{joint_steps} ({progress_pct:>5.1f}%) "
+                f"| {s_per_step:.2f}s/step | Elapsed {format_time(elapsed)} | ETA {format_time(eta_sec)} "
                 f"| Loss {step_loss.item():.4f} "
                 f"| Cls {cls_loss.item():.4f} | LM {lm_loss.item():.4f} (w={lm_loss_weight:.2f})"
                 f"{cons_str}"
@@ -421,6 +460,7 @@ def train_joint_epoch(
                 "epoch":       epoch,
                 "step":        step,
                 "global_step": global_step + step,
+                "step_time_s": round(s_per_step, 3),
                 "loss":        round(step_loss.item(), 6),
                 "cls_loss":    round(cls_loss.item(), 6),
                 "lm_loss":     round(lm_loss.item(), 6),
@@ -436,6 +476,7 @@ def train_joint_epoch(
             scheduler.step()
             optimizer.zero_grad(set_to_none=True)
 
+    total_epoch_time = time.time() - start_time
     unique = set(preds_all)
     if len(unique) == 1:
         logger.warning(f"  !! COLLAPSE WARNING: model predicts only class {list(unique)[0]}")
@@ -447,7 +488,9 @@ def train_joint_epoch(
 
     m = compute_metrics(labels_all, preds_all)
     opt_updates = (joint_steps + grad_accum - 1) // grad_accum
-    logger.info(f"  Joint steps: {joint_steps} pairs | Optimizer updates: {opt_updates} | "
+    logger.info(f"  Stage 2 Joint Epoch {epoch} completed: {joint_steps}/{joint_steps} pairs | "
+                f"Optimizer updates: {opt_updates} | Duration: {format_time(total_epoch_time)} ({total_epoch_time:.1f}s) | "
+                f"Avg Speed: {total_epoch_time/max(1, joint_steps):.3f}s/step | "
                 f"Curriculum LM weight: {lm_loss_weight:.3f}")
 
     return {
@@ -457,6 +500,9 @@ def train_joint_epoch(
         "consistency_loss": cons_m.avg if cons_m.count > 0 else 0.0,
         "accuracy":         m["accuracy"],
         "f1":               m["f1"],
+        "time_sec":         total_epoch_time,
+        "time_str":         format_time(total_epoch_time),
+        "steps":            joint_steps,
     }
 
 
@@ -466,6 +512,7 @@ def train_joint_epoch(
 def validate(model, loader, device, logger) -> Dict[str, Union[float, dict]]:
     """Cls-only validation with per-generator-family diagnostics."""
     model.eval()
+    val_start = time.time()
     loss_m = AverageMeter()
     preds_all, labels_all, probs_all = [], [], []
     family_stats = {}  # ftype -> {"preds": [], "labels": []}
@@ -502,19 +549,21 @@ def validate(model, loader, device, logger) -> Dict[str, Union[float, dict]]:
     if len(unique) == 1:
         logger.warning(f"  !! VAL COLLAPSE: only class {list(unique)[0]}")
 
+    val_time = time.time() - val_start
     m = compute_metrics(labels_all, preds_all, probs_all)
     m["loss"] = loss_m.avg
+    m["val_time_sec"] = val_time
 
     # Log per-generator family diagnostic breakdown
-    logger.info("  " + "-" * 55)
-    logger.info(f"  Validation Per-Family Diagnostics ({len(family_stats)} categories):")
+    logger.info("  " + "-" * 60)
+    logger.info(f"  Validation Per-Family Diagnostics ({len(family_stats)} categories, elapsed {format_time(val_time)}):")
     for ft, d in sorted(family_stats.items()):
         f_acc = accuracy_score(d["labels"], d["preds"])
         f_n = len(d["labels"])
         f_r = d["labels"].count(0)
         f_f = d["labels"].count(1)
         logger.info(f"    - Family {ft:<12} : Acc={f_acc:>6.2%} | N={f_n:>4} (Real={f_r}, Fake={f_f})")
-    logger.info("  " + "-" * 55)
+    logger.info("  " + "-" * 60)
 
     return m
 
@@ -615,7 +664,7 @@ def main():
     curves_path = os.path.join(log_dir, "curves.png")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("=" * 70)
+    logger.info("=" * 86)
     logger.info(f"DeepfakeReasoningModel v2 Training Pipeline")
     logger.info(f"Device: {device}")
     if device.type == "cuda":
@@ -623,7 +672,7 @@ def main():
         logger.info(f"VRAM  : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
     else:
         logger.info("Running on CPU (Prep mode for GPU execution)")
-    logger.info("=" * 70)
+    logger.info("=" * 86)
 
     # ── Tokenizer & Data ──────────────────────────────────────────────
     logger.info("Loading tokenizer & data ...")
@@ -686,14 +735,12 @@ def main():
         ckpt = torch.load(args.weights_from, map_location=device, weights_only=False)
         state_dict = ckpt.get("model", ckpt)
 
-        # Check for v1 -> v2 migration keys
         missing, unexpected = model.load_state_dict(state_dict, strict=False)
-
         v2_new_prefixes = ("attn_pool.", "freq_branch.", "backbone.vision_model.")
         v2_missing = [k for k in missing if any(k.startswith(p) or p in k for p in v2_new_prefixes)]
 
         if v2_missing and args.arch_version == "v2":
-            logger.warning("=" * 70)
+            logger.warning("=" * 86)
             logger.warning("  [CHECKPOINT COMPATIBILITY NOTICE]")
             logger.warning("  Loaded a checkpoint lacking v2 keys into a v2 model.")
             logger.warning(f"  Missing v2 keys (will be randomly initialized): {len(v2_missing)} tensors")
@@ -701,7 +748,7 @@ def main():
             logger.warning("  RECOMMENDATION: Because v2 updates both classification-feature and")
             logger.warning("  reasoning-input paths, a full retrain of Stage 1 (cls warm-up) and")
             logger.warning("  Stage 2 (joint) is strongly recommended to avoid inconsistent partially-adapted weights.")
-            logger.warning("=" * 70)
+            logger.warning("=" * 86)
 
     # ── Corrective Freezes ────────────────────────────────────────────
     frozen_names = []
@@ -753,7 +800,7 @@ def main():
         logger.info(f"Resumed from epoch {start_epoch-1}, best AUC={best_auc:.4f}")
 
     # ── Run Configuration Summary ─────────────────────────────────────
-    logger.info("=" * 70)
+    logger.info("=" * 86)
     logger.info(f"  batch_size={args.batch_size}  grad_accum={args.grad_accum}  eff_batch={args.batch_size * args.grad_accum}")
     logger.info(f"  lm_seq_len={args.lm_seq_len}  consistency_weight={args.consistency_loss_weight}")
     logger.info(f"  lm_loss_curriculum: start={args.lm_loss_weight_start} -> end={args.lm_loss_weight_end}")
@@ -761,14 +808,15 @@ def main():
     logger.info(f"  lr={args.lr}  llm_lora_rank={args.lora_rank}  vision_lora_rank={args.vision_lora_rank}")
     logger.info(f"  steps/epoch={joint_forward_steps}  optimizer_updates/epoch={optimizer_steps_per_epoch}")
     logger.info(f"  logs -> {log_dir}")
-    logger.info("=" * 70)
+    logger.info("=" * 86)
 
-    hdr = (f"{'Ep':>4} {'Stage':>8} {'TrLoss':>8} {'TrAcc':>7} "
+    hdr = (f"{'Ep':>4} {'Stage':>8} {'Steps':>11} {'Time':>10} {'TrLoss':>8} {'TrAcc':>7} "
            f"{'VaLoss':>8} {'VaAcc':>7} {'VaAUC':>7} {'LM_W':>6} {'Best':>5}")
     logger.info(hdr)
-    logger.info("=" * 70)
+    logger.info("=" * 86)
 
     # ── Epoch Loop ────────────────────────────────────────────────────
+    train_start_wall = time.time()
     for epoch in range(start_epoch, total_epochs + 1):
         use_lm = epoch > args.epochs_cls
         stage  = "joint" if use_lm else "cls_only"
@@ -824,7 +872,10 @@ def main():
         else:
             no_improve += 1
 
-        line = (f"{epoch:>4} {stage:>8} {tr['loss']:>8.4f} {tr['accuracy']:>7.4f} "
+        steps_display = f"{tr.get('steps', 0)}/{tr.get('steps', 0)}"
+        time_display = tr.get("time_str", "N/A")
+        line = (f"{epoch:>4} {stage:>8} {steps_display:>11} {time_display:>10} "
+                f"{tr['loss']:>8.4f} {tr['accuracy']:>7.4f} "
                 f"{va.get('loss', 0):>8.4f} {va.get('accuracy', 0):>7.4f} "
                 f"{cur_auc:>7.4f} {cur_lm_weight:>6.2f} {'*' if is_best else '':>5}")
         logger.info(line)
@@ -832,6 +883,9 @@ def main():
         epoch_csv.write({
             "epoch":          epoch,
             "stage":          stage,
+            "steps":          tr.get("steps", 0),
+            "time_sec":       round(tr.get("time_sec", 0.0), 2),
+            "time_str":       time_display,
             "tr_loss":        round(tr["loss"], 6),
             "tr_cls":         round(tr["cls_loss"], 6),
             "tr_lm":          round(tr["lm_loss"], 6),
@@ -855,6 +909,7 @@ def main():
             "best_auc":     best_auc,
             "stage":        stage,
             "arch_version": args.arch_version,
+            "epoch_time_s": tr.get("time_sec", 0.0),
         }
         save_checkpoint(ckpt_state, os.path.join(ckpt_dir, f"ep{epoch:03d}.pth"), logger)
         if is_best:
@@ -867,8 +922,9 @@ def main():
             logger.info(f"\nEarly stopping at epoch {epoch}. Best AUC: {best_auc:.4f}")
             break
 
-    logger.info("=" * 70)
-    logger.info(f"Training Complete. Best val AUC: {best_auc:.4f}")
+    total_training_wall = time.time() - train_start_wall
+    logger.info("=" * 86)
+    logger.info(f"Training Complete in {format_time(total_training_wall)} ({total_training_wall:.1f}s). Best val AUC: {best_auc:.4f}")
     logger.info(f"Checkpoints : {ckpt_dir}")
     logger.info(f"Logs        : {log_dir}")
     logger.info(f"Curves      : {curves_path}")
