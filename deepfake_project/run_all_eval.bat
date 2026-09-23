@@ -3,8 +3,8 @@ setlocal
 cd /d "%~dp0"
 call conda activate veritas
 
-set DATASET_ROOT=C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake
-set JSON_ROOT=C:\Users\Admin\Desktop\ly project c 68\deepfake_project\datasets\hydrafake\jsons
+set DATASET_ROOT=%~dp0datasets\hydrafake
+set JSON_ROOT=%~dp0datasets\hydrafake\jsons
 set MODEL_PATH=./models/InternVL3-2B
 
 rem ep001-ep003 already evaluated (logs complete) - only eval remaining ep004, ep005 + best

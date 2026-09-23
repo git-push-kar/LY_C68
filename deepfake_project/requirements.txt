@@ -2,17 +2,23 @@
 # ================
 # Dependencies for DeepfakeReasoningModel v2 (InternVL3-2B + LoRA + PyTorch)
 
-# PyTorch with CUDA 12.4 / 12.6 (for RTX A5000 / Modern NVIDIA GPUs)
---extra-index-url https://download.pytorch.org/whl/cu124
+# PyTorch with CUDA 12.6 (verified on RTX A5000, driver CUDA 13.2).
+# Pins mirror the working venv exactly — do NOT unpin without re-running
+# the model-build smoke test (transformers 5.x breaks model load).
+--extra-index-url https://download.pytorch.org/whl/cu126
 
-torch>=2.4.0
-torchvision>=0.19.0
-torchaudio>=2.4.0
+torch==2.6.0
+torchvision==0.21.0
+# NOTE: torchaudio intentionally omitted — unused by the v2 pipeline.
 
 # Hugging Face & Fine-tuning
-transformers>=4.38.0
-peft>=0.7.1
-accelerate>=0.27.0
+# transformers pinned <5: the custom modeling_internvl_chat.py targets the
+# 4.x API (_tied_weights_keys); 5.x renames it (all_tied_weights_keys) and
+# crashes model load. Verified working set: transformers 4.37.2 + peft 0.7.1.
+transformers==4.37.2
+peft==0.7.1
+accelerate==1.14.0
+safetensors>=0.4.0
 einops>=0.7.0
 timm>=0.9.0
 tokenizers>=0.15.0

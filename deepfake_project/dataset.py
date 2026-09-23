@@ -641,9 +641,16 @@ def build_separated_loaders(
         json_dir = os.path.join(json_root, split)
         if not os.path.isdir(json_dir):
             continue
-        ds = HydraFakeDataset(
-            dataset_root, json_dir, tokenizer, split, image_size, max_text_len
-        )
+        try:
+            ds = HydraFakeDataset(
+                dataset_root, json_dir, tokenizer, split, image_size, max_text_len
+            )
+        except FileNotFoundError as e:
+            # e.g. jsons/val/* references hydrafake/val/* images that are not
+            # present in this checkout -> skip validation instead of crashing
+            # training (train.py guards on missing "val" loader).
+            print(f"[{split}] skipped: {e}")
+            continue
         loaders[split] = DataLoader(
             ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True
         )

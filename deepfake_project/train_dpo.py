@@ -14,9 +14,9 @@ Architecture:
   - Both models are conditioned on the same visual input via InternVL3's native multi-token representation.
 
 Usage:
+  # dataset_root/json_root default to config.yaml (./datasets/hydrafake[/jsons]);
+  # pass --dataset_root/--json_root only to override.
   python train_dpo.py ^
-      --dataset_root "C:\\path\\to\\hydrafake" ^
-      --json_root    "C:\\path\\to\\hydrafake\\jsons" ^
       --model_path   "./models/InternVL3-2B" ^
       --checkpoint   "./runs/intern_v2/checkpoints/best.pth" ^
       --output_dir   "./runs/intern_v2_dpo" ^
@@ -297,10 +297,28 @@ def train_dpo_epoch(
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 
+def _load_config(path="config.yaml"):
+    cfg = {}
+    if path and os.path.isfile(path):
+        try:
+            import yaml
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                for k, v in data.items():
+                    if not isinstance(v, dict) and v is not None and not str(k).startswith("_"):
+                        cfg[k] = v
+        except ImportError:
+            pass
+        except Exception:
+            pass
+    return cfg
+
+
 def parse_args():
     p = argparse.ArgumentParser(description="DPO Training for DeepfakeReasoningModel v2")
-    p.add_argument("--dataset_root",  required=True, help="Path to HydraFake root")
-    p.add_argument("--json_root",     required=True, help="Path to JSON annotations root")
+    p.add_argument("--config",        default="config.yaml")
+    p.add_argument("--dataset_root",  required=False, default=None, help="Path to HydraFake root (falls back to config.yaml)")
+    p.add_argument("--json_root",     required=False, default=None, help="Path to JSON annotations root (falls back to config.yaml)")
     p.add_argument("--model_path",    default="./models/InternVL3-2B")
     p.add_argument("--checkpoint",    required=True, help="Checkpoint from joint training stage (e.g. best.pth)")
     p.add_argument("--output_dir",    default="./runs/intern_v2_dpo")
@@ -320,6 +338,14 @@ def parse_args():
 
 def main():
     args = parse_args()
+    _cfg = _load_config(args.config)
+
+    if not args.dataset_root and "dataset_root" in _cfg:
+        args.dataset_root = _cfg["dataset_root"]
+    if not args.json_root and "json_root" in _cfg:
+        args.json_root = _cfg["json_root"]
+    if not args.dataset_root or not args.json_root:
+        sys.exit("ERROR: --dataset_root and --json_root required (via CLI or config.yaml)")
 
     log_dir  = os.path.join(args.output_dir, "logs")
     ckpt_dir = os.path.join(args.output_dir, "checkpoints")

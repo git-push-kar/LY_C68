@@ -109,8 +109,8 @@ Runs the entire end-to-end curriculum: 3 warm-up epochs followed by 2 joint epoc
 
 ```bash
 python train.py \
-    --dataset_root "/path/to/hydrafake" \
-    --json_root "/path/to/hydrafake/jsons" \
+    --dataset_root "./deepfake_project/datasets/hydrafake" \
+    --json_root "./deepfake_project/datasets/hydrafake/jsons" \
     --model_path "./models/InternVL3-2B" \
     --tokenizer_path "./models/InternVL3-2B" \
     --output_dir "./runs/intern_v2" \
@@ -261,3 +261,6 @@ When planning experiments or modifying components, consult this canonical matrix
 
 > [!IMPORTANT]
 > Because changes 2.1 through 2.4 simultaneously modify both the classification-feature path and the reasoning-input path, **a full retrain from scratch (Stage 1 Cls Warm-up $\to$ Stage 2 Joint)** is strongly recommended for v2 to prevent inconsistent, partially-adapted representations.
+
+
+python train.py --resume "./runs/intern_v2/checkpoints/ep001.pth"

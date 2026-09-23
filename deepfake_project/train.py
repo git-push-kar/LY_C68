@@ -39,6 +39,48 @@ from transformers import AutoTokenizer
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 
 from dataset import build_dataloaders, build_separated_loaders
+
+
+def _env_preflight():
+    """Fail fast with a clear message when run under the wrong interpreter.
+
+    Training requires the `veritas` conda env (CUDA torch + transformers 4.x
+    + peft). Running under `venv` (CPU torch, transformers 5.x) or `base`
+    (no peft) produces cryptic tracebacks minutes into startup.
+    """
+    try:
+        import transformers
+        _major = int(transformers.__version__.split(".")[0])
+    except Exception:
+        _major = 0
+    if _major >= 5:
+        sys.exit(
+            f"ERROR: transformers {transformers.__version__} detected. "
+            "This repo's InternVL3 modeling code requires transformers 4.x. "
+            "Run with the veritas env: `conda activate veritas` "
+            f"(current interpreter: {sys.executable})"
+        )
+    try:
+        import peft  # noqa: F401
+    except ImportError:
+        sys.exit(
+            "ERROR: `peft` is not installed for this interpreter. "
+            "Run with the veritas env: `conda activate veritas` "
+            f"(current interpreter: {sys.executable})"
+        )
+    import torch
+    if not torch.cuda.is_available():
+        print(
+            "WARNING: CUDA not available under this interpreter "
+            f"({sys.executable}). Full training needs the veritas env "
+            "(`conda activate veritas`) on the RTX A5000 box. "
+            "Continuing in CPU prep mode ...",
+            flush=True,
+        )
+
+
+_env_preflight()
+
 from model import DeepfakeReasoningModel
 
 
@@ -863,8 +905,12 @@ def main():
         va = {}
         if "val" in loaders:
             va = validate(model, loaders["val"], device, logger)
+        else:
+            logger.info("  [val] no val loader (val images absent) — tracking best by train acc")
 
-        cur_auc = va.get("auc", 0.0)
+        # When val is absent (val images not in this checkout), fall back to
+        # train accuracy so best.pth is still saved and early stopping works.
+        cur_auc = va.get("auc", 0.0) if "val" in loaders else float(tr.get("accuracy", 0.0))
         is_best = cur_auc > best_auc
         if is_best:
             best_auc   = cur_auc

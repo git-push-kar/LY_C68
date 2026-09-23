@@ -7,7 +7,7 @@ echo ================================================================
 REM Check Python installation
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Python is not found on PATH. Please install Python 3.10 or 3.11.
+    echo [ERROR] Python is not found on PATH. Please install Python 3.12.
     pause
     exit /b 1
 )

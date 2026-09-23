@@ -4,8 +4,11 @@
 # Priority: CLI arguments ALWAYS override config file values.
 
 # ── Active Run Configuration: DeepfakeReasoningModel v2 Full Curriculum ──
-# dataset_root: "C:/path/to/hydrafake"
-# json_root: "C:/path/to/hydrafake/jsons"
+# Resolved against this repo: deepfake_project/datasets/hydrafake/
+# (relative => portable across Windows dev box and Linux RTX A5000 box;
+#  CLI --dataset_root / --json_root still override these values)
+dataset_root: "./datasets/hydrafake"
+json_root: "./datasets/hydrafake/jsons"
 model_path: "./models/InternVL3-2B"
 tokenizer_path: "./models/InternVL3-2B"
 output_dir: "./runs/intern_v2"
