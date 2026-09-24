@@ -331,6 +331,9 @@ def parse_args():
     p.add_argument("--num_workers",   type=int,   default=4)
     p.add_argument("--warmup_ratio",  type=float, default=0.1)
     p.add_argument("--arch_version",  default="v2", choices=["v1", "v2"])
+    p.add_argument("--attn_implementation", default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
+    p.add_argument("--no_gradient_checkpointing", action="store_true", help="Disable gradient checkpointing on LLM")
+    p.add_argument("--use_gradient_checkpointing", type=lambda x: str(x).lower() in ('true', '1', 'yes'), default=True)
     return p.parse_args()
 
 
@@ -384,10 +387,13 @@ def main():
     logger.info(f"Loaded {len(pref_ds):,} chosen/rejected pairs for DPO.")
 
     # ── Policy & Reference Models ─────────────────────────────────────
+    use_grad_ckpt = getattr(args, "use_gradient_checkpointing", True) and not getattr(args, "no_gradient_checkpointing", False)
     logger.info("Building Policy Model (trainable) ...")
     policy_model = DeepfakeReasoningModel(
         model_path=args.model_path,
         arch_version=args.arch_version,
+        attn_implementation=getattr(args, "attn_implementation", "sdpa"),
+        use_gradient_checkpointing=use_grad_ckpt,
     ).to(device)
 
     logger.info(f"Loading checkpoint weights into Policy Model: {args.checkpoint}")
@@ -398,6 +404,8 @@ def main():
     ref_model = DeepfakeReasoningModel(
         model_path=args.model_path,
         arch_version=args.arch_version,
+        attn_implementation=getattr(args, "attn_implementation", "sdpa"),
+        use_gradient_checkpointing=False,
     ).to(device)
     ref_model.load_state_dict(ckpt.get("model", ckpt), strict=False)
     ref_model.eval()

@@ -18,7 +18,7 @@ conda-env/
 *.env
 
 # ------------------------------------------------------------------------------
-# 2. Python Cache & Build Artifacts
+# 2. Python Cache, Build & Notebook Artifacts
 # ------------------------------------------------------------------------------
 __pycache__/
 **/__pycache__/
@@ -55,8 +55,22 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
 # ------------------------------------------------------------------------------
-# 3. Model Weights, Checkpoints & Large Binaries
+# 3. Node.js / NPM Artifacts
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# ------------------------------------------------------------------------------
+# 4. Model Weights, Checkpoints & Large Binaries
 # ------------------------------------------------------------------------------
 # PyTorch weights & checkpoints
 *.pth
@@ -78,13 +92,14 @@ models/
 deepfake_project/models/
 
 # ------------------------------------------------------------------------------
-# 4. Datasets & Large Archives
+# 5. Datasets & Large Archives
 # ------------------------------------------------------------------------------
 deepfake_project/HydraFake/
 **/HydraFake/
 deepfake_project/datasets/hydrafake/
 **/datasets/hydrafake/
 **/datasets/data/
+**/datasets/
 
 # Archives
 *.zip
@@ -96,20 +111,27 @@ deepfake_project/datasets/hydrafake/
 *.bz2
 
 # ------------------------------------------------------------------------------
-# 5. Training Runs, Logs & Experiment Tracking
+# 6. Training Runs, Logs, Backups & Screenshots
 # ------------------------------------------------------------------------------
 *.log
-**/logs/*.log
-**/logs/*.csv
-**/logs/*.png
+**/logs/
 **/inference_logs/
 wandb/
 **/wandb/
 tensorboard/
 **/tensorboard/
 
+# Screenshots & Backups
+lab5_screenshots/
+**/lab5_screenshots/
+**/screenshots/
+backups/
+**/backups/
+scratch/
+**/scratch/
+
 # ------------------------------------------------------------------------------
-# 6. IDE, Editors & OS Files
+# 7. IDE, Editors, Agent & OS Files
 # ------------------------------------------------------------------------------
 # VS Code
 .vscode/
@@ -141,7 +163,9 @@ $RECYCLE.BIN/
 # Linux artifacts
 .directory
 
-# Agent & CLI temporary directories
+# Agent & CLI temporary directories / configs
 .kilo/
 .gemini/
+.mcp.json
+**/.mcp.json
 test_gemini.py

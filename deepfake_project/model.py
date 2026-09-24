@@ -280,6 +280,8 @@ class DeepfakeReasoningModel(nn.Module):
         arch_version:            str   = "v2",
         real_token_id:           Optional[int] = None,
         fake_token_id:           Optional[int] = None,
+        attn_implementation:     str   = "sdpa",
+        use_gradient_checkpointing: bool = True,
     ):
         super().__init__()
         self.arch_version = arch_version
@@ -290,14 +292,44 @@ class DeepfakeReasoningModel(nn.Module):
         self.use_focal_loss = use_focal_loss
         self.real_token_id = real_token_id
         self.fake_token_id = fake_token_id
+        self.attn_implementation = attn_implementation
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
-        # ── Step 1: Load backbone ──────────────────────────────────────────
-        print(f"Loading InternVL3-2B from {model_path} (arch_version={arch_version}) ...")
-        self.backbone = AutoModel.from_pretrained(
-            model_path,
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16,
-        )
+        # ── Step 1: Load backbone (Fix #1: Efficient SDPA/FlashAttention) ──
+        print(f"Loading InternVL3-2B from {model_path} (arch_version={arch_version}, attn_implementation={attn_implementation}) ...")
+        load_kwargs = {
+            "trust_remote_code": True,
+            "torch_dtype": torch.bfloat16,
+        }
+        if attn_implementation:
+            load_kwargs["attn_implementation"] = attn_implementation
+
+        try:
+            self.backbone = AutoModel.from_pretrained(
+                model_path,
+                **load_kwargs,
+            )
+        except (ValueError, TypeError, KeyError) as e:
+            print(f"  [Warning] AutoModel.from_pretrained failed with attn_implementation='{attn_implementation}': {e}. Retrying without explicit attn_implementation.")
+            load_kwargs.pop("attn_implementation", None)
+            self.backbone = AutoModel.from_pretrained(
+                model_path,
+                **load_kwargs,
+            )
+
+        # Inspect and record resolved attention implementation
+        actual_attn = "unknown"
+        if hasattr(self.backbone, "language_model") and hasattr(self.backbone.language_model, "config"):
+            actual_attn = getattr(self.backbone.language_model.config, "_attn_implementation",
+                                  getattr(self.backbone.language_model.config, "attn_implementation", "unknown"))
+        if actual_attn == "unknown" and hasattr(self.backbone, "config"):
+            if hasattr(self.backbone.config, "llm_config"):
+                actual_attn = getattr(self.backbone.config.llm_config, "_attn_implementation",
+                                      getattr(self.backbone.config.llm_config, "attn_implementation", "unknown"))
+            if actual_attn == "unknown":
+                actual_attn = getattr(self.backbone.config, "_attn_implementation",
+                                      getattr(self.backbone.config, "attn_implementation", "unknown"))
+        self._attn_implementation_resolved = actual_attn
 
         # ── Step 2: Apply LLM LoRA BEFORE freezing (Fix #1) ────────────────
         llm_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
@@ -347,6 +379,15 @@ class DeepfakeReasoningModel(nn.Module):
         if vision_lora_rank == 0:
             for param in self.backbone.vision_model.parameters():
                 param.requires_grad = False
+
+        # ── Step 4.5: Gradient Checkpointing on LLM (Fix #4) ───────────────
+        if self.use_gradient_checkpointing:
+            if hasattr(self.backbone, "language_model"):
+                lm = self.backbone.language_model
+                if hasattr(lm, "gradient_checkpointing_enable"):
+                    lm.gradient_checkpointing_enable()
+                if hasattr(lm, "enable_input_require_grads"):
+                    lm.enable_input_require_grads()
 
         # ── Step 5: Dimensions & Custom Heads ──────────────────────────────
         cfg = self.backbone.config
@@ -445,6 +486,8 @@ class DeepfakeReasoningModel(nn.Module):
         print("  DeepfakeReasoningModel v2 Parameter Breakdown:")
         print(f"    Total params     : {total:,}")
         print(f"    Trainable params : {trainable:,} ({100 * trainable / max(1, total):.2f}%)")
+        print(f"    Attention Impl   : {getattr(self, '_attn_implementation_resolved', 'unknown')}")
+        print(f"    Grad Checkpoint  : {getattr(self, 'use_gradient_checkpointing', False)}")
         for k, v in counts.items():
             if v > 0 or k in ["llm_lora", "vision_lora", "cls_head", "freq_branch", "attn_pool"]:
                 print(f"      - {k:<18}: {v:>10,} params")
@@ -474,6 +517,55 @@ class DeepfakeReasoningModel(nn.Module):
         pooled_patches = self._pool_patches(patch_tokens)  # (B, D)
         return cls_token, pooled_patches, patch_tokens
 
+    def _apply_pixel_shuffle_and_mlp1(self, patch_tokens: torch.Tensor) -> torch.Tensor:
+        """
+        Applies pixel_shuffle (handling both 3D (B, N, D) and 4D (B, H, W, D) conventions)
+        followed by InternVL mlp1 projection layer.
+        """
+        hs = patch_tokens
+        if hasattr(self.backbone, "pixel_shuffle"):
+            downsample_ratio = getattr(self.backbone, "downsample_ratio", 0.5)
+            if hs.dim() == 3:
+                B, N, C = hs.shape
+                h = w = int(math.isqrt(N))
+                if h * w == N:
+                    hs_4d = hs.view(B, h, w, C)
+                    try:
+                        hs = self.backbone.pixel_shuffle(hs_4d, scale_factor=downsample_ratio)
+                    except (TypeError, ValueError):
+                        hs = self.backbone.pixel_shuffle(hs, scale_factor=downsample_ratio)
+                else:
+                    hs = self.backbone.pixel_shuffle(hs, scale_factor=downsample_ratio)
+            else:
+                hs = self.backbone.pixel_shuffle(hs, scale_factor=downsample_ratio)
+
+            if hs.dim() == 4:
+                hs = hs.reshape(hs.shape[0], -1, hs.shape[-1])
+
+        mlp1_dtype = next(self.backbone.mlp1.parameters()).dtype
+        return self.backbone.mlp1(hs.to(mlp1_dtype))
+
+    def _get_native_visual_tokens_from_patches(
+        self,
+        patch_tokens: torch.Tensor,
+        cls_token: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Build InternVL3's native multi-token visual representation from patch_tokens
+        already computed by _get_vision_features(), avoiding a duplicate vision_model pass (Fix #2).
+        """
+        if hasattr(self.backbone, "mlp1"):
+            return self._apply_pixel_shuffle_and_mlp1(patch_tokens)
+        else:
+            # Fallback for mock backbones
+            if cls_token is not None:
+                patch_mean = patch_tokens.mean(dim=1)
+                return self.custom_projector(cls_token.float(), patch_mean.float())
+            else:
+                patch_mean = patch_tokens.mean(dim=1)
+                dummy_cls = patch_tokens[:, 0, :]
+                return self.custom_projector(dummy_cls.float(), patch_mean.float())
+
     def _get_native_visual_tokens(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Route pixel_values through InternVL3's native visual token pipeline
@@ -481,17 +573,18 @@ class DeepfakeReasoningModel(nn.Module):
         
         This eliminates the 2-token compression bottleneck and feeds dozens/hundreds of
         spatially grounded visual tokens to the reasoning LLM.
+
+        NOTE: This method re-derives features from raw pixel_values and is intentionally
+        kept for predict() at inference time where a clean standalone vision pass is simpler
+        to reason about. For the training forward path, _get_native_visual_tokens_from_patches()
+        is used instead to eliminate redundant vision encoder computation.
         """
         if hasattr(self.backbone, "extract_feature"):
             return self.backbone.extract_feature(pixel_values.to(torch.bfloat16))
         elif hasattr(self.backbone, "mlp1"):
             vision_out = self.backbone.vision_model(pixel_values=pixel_values.to(torch.bfloat16))
             hs = vision_out.last_hidden_state[:, 1:, :]
-            if hasattr(self.backbone, "pixel_shuffle") and hasattr(self.backbone, "downsample_ratio"):
-                hs = self.backbone.pixel_shuffle(hs, scale_factor=self.backbone.downsample_ratio)
-            elif hasattr(self.backbone, "pixel_shuffle"):
-                hs = self.backbone.pixel_shuffle(hs, scale_factor=0.5)
-            return self.backbone.mlp1(hs)
+            return self._apply_pixel_shuffle_and_mlp1(hs)
         else:
             # Fallback for mock backbones
             vision_out = self.backbone.vision_model(pixel_values=pixel_values.to(torch.bfloat16))
@@ -562,8 +655,8 @@ class DeepfakeReasoningModel(nn.Module):
 
         # ── 3. Reasoning Path (Native Visual Tokens) ───────────────────
         if reasoning_tokens is not None and labels is not None:
-            # Native multi-token visual representation
-            vis_tokens = self._get_native_visual_tokens(pixel_values)  # (B, N_vis, llm_dim)
+            # Native multi-token visual representation (Fix #2: reuse precomputed patch tokens)
+            vis_tokens = self._get_native_visual_tokens_from_patches(patch_tokens, cls_token=cls_token)  # (B, N_vis, llm_dim)
             N_vis = vis_tokens.size(1)
 
             token_embeds = self.backbone.language_model.get_input_embeddings()(reasoning_tokens)

@@ -79,6 +79,7 @@ def parse_args():
     p.add_argument("--image_size",   type=int, default=448)
     p.add_argument("--lm_seq_len",   type=int, default=512)
     p.add_argument("--arch_version", default="v2", choices=["v1", "v2"])
+    p.add_argument("--attn_implementation", default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
     p.add_argument("--log_dir",      default=None)
     return p.parse_args()
 
@@ -178,6 +179,8 @@ def main():
     model = DeepfakeReasoningModel(
         model_path=args.model_path,
         arch_version=args.arch_version,
+        attn_implementation=getattr(args, "attn_implementation", "sdpa"),
+        use_gradient_checkpointing=False,
     ).to(device)
 
     logger.info(f"Loading checkpoint: {args.checkpoint}")
