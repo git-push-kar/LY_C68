@@ -1,20 +1,16 @@
 """
 inference.py
 ============
-Run classification + reasoning generation on custom images.
-Logs everything to the run's logs directory.
+Run classification + structured reasoning generation on custom images
+using DeepfakeReasoningModel v2 (InternVL3-2B).
 
-Aligned with corrective training (keep-richest, verbatim tagged
-targets + <answer> + EOS, seq 512, deterministic decoding):
-
-  Training (corrective):  --weights_from ep010 --freeze_cls_head
-                          --freeze_projector --lm_seq_len 512
-  Inference: greedy (do_sample=False) + use_cache + trim after
-             </answer>; max_new_tokens should match lm_seq_len.
+Architecture v2 Alignment:
+  - Fuses ViT features + 2D FFT frequency representation
+  - Utilizes native multi-token visual representation for LLM reasoning
+  - Deterministic greedy generation with structured forensic tag parsing
 
 Usage:
-    python inference.py --model_path  "./models/InternVL3-2B" --checkpoint  "./runs/intern_exp3_corrective/checkpoints/best.pth" --images  1.jpg 2.jpg 3.jpg 4.jpg
-    # or:  --checkpoint ./runs/intern_exp2/checkpoints/ep010.pth
+  python inference.py --model_path "./models/InternVL3-2B" --checkpoint "./runs/intern_v2/checkpoints/best.pth" --images test_images/1.jpg test_images/2.jpg
 """
 
 import argparse
@@ -23,6 +19,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -31,6 +28,7 @@ from PIL import Image
 from transformers import AutoTokenizer
 import torchvision.transforms as T
 
+from dataset import compute_fft_features
 from model import DeepfakeReasoningModel
 
 
@@ -59,13 +57,12 @@ def _load_config(path="config.yaml"):
     cfg = {}
     if path and os.path.isfile(path):
         try:
-            import yaml  # type: ignore
+            import yaml
             with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for k, v in data.items():
                     if not isinstance(v, dict) and v is not None and not str(k).startswith("_"):
                         cfg[k] = v
-                # handle nested inference_images
                 if "inference_images" in data and data["inference_images"]:
                     cfg["inference_images"] = data["inference_images"]
         except ImportError:
@@ -78,21 +75,18 @@ def _load_config(path="config.yaml"):
 # ── Args ──────────────────────────────────────────────────────────────────────
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config",         default="config.yaml",
-                   help="Central config file; CLI overrides it")
+    p = argparse.ArgumentParser(description="Inference for DeepfakeReasoningModel v2")
+    p.add_argument("--config",         default="config.yaml")
     p.add_argument("--model_path",     default="./models/InternVL3-2B")
     p.add_argument("--checkpoint",     required=False, default=None)
-    p.add_argument("--images",         nargs="+",
-                   default=None)
+    p.add_argument("--images",         nargs="+", default=None)
     p.add_argument("--max_new_tokens", type=int, default=512)
     p.add_argument("--image_size",     type=int, default=448)
-    p.add_argument("--log_dir",        default=None,
-                   help="Defaults to <project>/runs/intern_exp2/logs")
+    p.add_argument("--arch_version",   default="v2", choices=["v1", "v2"])
+    p.add_argument("--attn_implementation", default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
+    p.add_argument("--log_dir",        default=None)
     return p.parse_args()
 
-
-# ── Image preprocessing ───────────────────────────────────────────────────────
 
 def build_transform(image_size: int):
     return T.Compose([
@@ -104,7 +98,7 @@ def build_transform(image_size: int):
     ])
 
 
-# ── Reasoning parser ──────────────────────────────────────────────────────────
+# ── Reasoning Parser ──────────────────────────────────────────────────────────
 
 _TAG_RE = re.compile(
     r"<(fast|planning|reasoning|reflection|conclusion)>(.*?)</\1>",
@@ -123,14 +117,6 @@ def parse_reasoning(text: str) -> dict:
 
 
 def trim_after_answer(text: str) -> str:
-    """
-    Cut everything after the LAST '</answer>' tag. Checkpoints trained
-    before the eos-append fix never learned when to stop and ramble until
-    max_new_tokens is exhausted. New checkpoints emit <eos> right after
-    </answer>, so this is a no-op for them but keeps output clean for
-    older checkpoints. Also strips <|im_end|>/<|endoftext|> artifacts.
-    """
-    # strip leftover special-token strings that survive skip_special_tokens
     text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "").replace("<|im_start|>", "")
     end = text.rfind("</answer>")
     if end != -1:
@@ -138,12 +124,10 @@ def trim_after_answer(text: str) -> str:
     return text.strip()
 
 
-# ── Result formatter ──────────────────────────────────────────────────────────
-
 def format_result(img_path: str, cls_label: int, cls_conf: float,
                   raw_text: str, tags: dict) -> str:
     verdict = "FAKE" if cls_label == 1 else "REAL"
-    sep = "=" * 60
+    sep = "=" * 64
     lines = [
         f"\n{sep}",
         f"  Image             : {os.path.basename(img_path)}",
@@ -151,7 +135,7 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
         sep,
     ]
 
-    order  = ["fast", "planning", "reasoning", "reflection", "conclusion"]
+    order = ["fast", "planning", "reasoning", "reflection", "conclusion"]
     labels = {
         "fast":       "Quick take",
         "planning":   "Planning",
@@ -176,13 +160,12 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
             if line:
                 lines.append(f"    {line}")
 
-    # Surface the generated <answer> and flag classifier/reasoning drift
     gen_answer = tags.get("answer", "unknown")
     lines.append(f"\n  Generated answer : {gen_answer.upper()}")
     if gen_answer in ("real", "fake"):
         gen_verdict = "FAKE" if gen_answer == "fake" else "REAL"
         if gen_verdict != verdict:
-            lines.append(f"  [WARNING] reasoning answer ({gen_verdict}) disagrees with classifier ({verdict})")
+            lines.append(f"  [WARNING] Reasoning answer ({gen_verdict}) disagrees with classifier ({verdict})")
 
     lines.append(sep)
     return "\n".join(lines)
@@ -191,19 +174,21 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    args       = parse_args()
+    args = parse_args()
     _cfg = _load_config(args.config)
+
     if not args.checkpoint and "checkpoint" in _cfg:
         args.checkpoint = _cfg["checkpoint"]
     if not args.checkpoint:
         sys.exit("ERROR: --checkpoint required (via CLI or config.yaml)")
+
     if not args.images:
         if "inference_images" in _cfg and _cfg["inference_images"]:
             args.images = _cfg["inference_images"]
         else:
             args.images = ["test_images/1.jpg", "test_images/2.jpg",
                            "test_images/3.jpg", "test_images/4.jpg"]
-    # generic scalar overrides if flag not in sys.argv
+
     for _k, _v in _cfg.items():
         if not hasattr(args, _k):
             continue
@@ -214,15 +199,13 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     transform  = build_transform(args.image_size)
 
-    # ── Log file: inference_<ckpt>_<timestamp>.log ────────────────────
     ckpt_name = os.path.splitext(os.path.basename(args.checkpoint))[0]
-    ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     if args.log_dir is None:
-        args.log_dir = os.path.join(
-            script_dir, "runs", "intern_exp2", "logs")
+        args.log_dir = os.path.join(script_dir, "runs", "inference_logs")
     os.makedirs(args.log_dir, exist_ok=True)
-    log_path  = os.path.join(args.log_dir, f"inference_{ckpt_name}_{ts}.log")
-    logger    = setup_logger(log_path)
+    log_path = os.path.join(args.log_dir, f"inference_{ckpt_name}_{ts}.log")
+    logger = setup_logger(log_path)
 
     logger.info(f"Inference log : {log_path}")
     logger.info(f"Checkpoint    : {args.checkpoint}")
@@ -232,27 +215,30 @@ def main():
         logger.info(f"GPU           : {torch.cuda.get_device_name(0)}")
     logger.info("")
 
-    # ── Tokenizer ─────────────────────────────────────────────────────
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_path, trust_remote_code=True)
+    # Tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # ── Model ─────────────────────────────────────────────────────────
+    # Model
     logger.info("Loading model ...")
-    model = DeepfakeReasoningModel(model_path=args.model_path).to(device)
+    model = DeepfakeReasoningModel(
+        model_path=args.model_path,
+        arch_version=args.arch_version,
+        attn_implementation=getattr(args, "attn_implementation", "sdpa"),
+        use_gradient_checkpointing=False,
+    ).to(device)
 
     logger.info(f"Loading checkpoint: {args.checkpoint}")
-    ckpt    = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
-    epoch   = ckpt.get("epoch", "?")
-    stage   = ckpt.get("stage", "?")
-    logger.info(f"  epoch={epoch}  stage={stage}  "
-                f"missing={len(missing)}  unexpected={len(unexpected)}")
+    ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    state_dict = ckpt.get("model", ckpt)
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    epoch = ckpt.get("epoch", "?")
+    stage = ckpt.get("stage", "?")
+    logger.info(f"  epoch={epoch}  stage={stage}  missing={len(missing)}  unexpected={len(unexpected)}")
     model.eval()
 
     summary = []
-
     logger.info(f"\nProcessing {len(args.images)} image(s) ...\n")
 
     for img_name in args.images:
@@ -270,18 +256,22 @@ def main():
             continue
 
         pv = transform(img).unsqueeze(0).to(device)
+        freq = compute_fft_features(img, target_size=224).unsqueeze(0).to(device)
 
         with torch.no_grad():
-            with autocast("cuda", dtype=torch.bfloat16):
-                out = model(pv)
+            autocast_ctx = autocast("cuda", dtype=torch.bfloat16) if device.type == "cuda" else torch.nullcontext()
+            with autocast_ctx:
+                out = model(pv, freq_features=freq)
 
             logits   = out["cls_logits"].float()
             probs    = F.softmax(logits, dim=-1)
             cls_pred = logits.argmax(-1).item()
             cls_conf = probs[0, cls_pred].item()
 
-            result = model.predict(pv, tokenizer,
-                                   max_new_tokens=args.max_new_tokens)
+            result = model.predict(
+                pv, tokenizer, freq_features=freq,
+                max_new_tokens=args.max_new_tokens
+            )
 
         raw_text = trim_after_answer(result["reasoning"][0])
         tags     = parse_reasoning(raw_text)
@@ -293,17 +283,17 @@ def main():
             "image":   os.path.basename(img_path),
             "verdict": verdict,
             "conf":    cls_conf,
+            "gen_ans": tags.get("answer", "unknown").upper(),
         })
 
-    # ── Summary table ─────────────────────────────────────────────────
-    logger.info("\n" + "=" * 60)
+    logger.info("\n" + "=" * 64)
     logger.info("SUMMARY")
-    logger.info("=" * 60)
-    logger.info(f"  {'Image':<15} {'Verdict':<8} {'Confidence'}")
-    logger.info(f"  {'-'*15} {'-'*8} {'-'*10}")
+    logger.info("=" * 64)
+    logger.info(f"  {'Image':<18} {'Classifier':<10} {'Conf':<8} {'Gen Answer'}")
+    logger.info(f"  {'-'*18} {'-'*10} {'-'*8} {'-'*12}")
     for r in summary:
-        logger.info(f"  {r['image']:<15} {r['verdict']:<8} {r['conf']:.1%}")
-    logger.info("=" * 60)
+        logger.info(f"  {r['image']:<18} {r['verdict']:<10} {r['conf']:<8.1%} {r['gen_ans']}")
+    logger.info("=" * 64)
     logger.info(f"\nLog saved to: {log_path}")
     logger.info("Done.")
 

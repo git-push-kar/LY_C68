@@ -1,31 +1,171 @@
-# ==========================
-# Python
-# ==========================
-deepfake_project/__pycache__/
+# ==============================================================================
+# .gitignore — DeepfakeReasoningModel / InternVL3-2B Project
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Virtual Environments
+# ------------------------------------------------------------------------------
+venv/
+**/venv/
+.venv/
+**/.venv/
+env/
+**/env/
+ENV/
+env.bak/
+venv.bak/
+conda-env/
+*.env
+
+# ------------------------------------------------------------------------------
+# 2. Python Cache, Build & Notebook Artifacts
+# ------------------------------------------------------------------------------
+__pycache__/
 **/__pycache__/
 *.py[cod]
-*.pyo
+*$py.class
+*.so
 *.pyd
+*.pyo
 
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
 
-# Ignore Gemini test script
-test_gemini.py
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
-# ==========================
-# Project-specific
-# ==========================
+# ------------------------------------------------------------------------------
+# 3. Node.js / NPM Artifacts
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
 
-# Large folders
+# ------------------------------------------------------------------------------
+# 4. Model Weights, Checkpoints & Large Binaries
+# ------------------------------------------------------------------------------
+# PyTorch weights & checkpoints
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.ckpt
+*.onnx
+*.tmp
+*.pth.tmp
+
+# Checkpoints directories
+**/checkpoints/
+checkpoints/
+
+# Pretrained model caches / downloads
+models/
+**/models/
 deepfake_project/models/
+
+# ------------------------------------------------------------------------------
+# 5. Datasets & Large Archives
+# ------------------------------------------------------------------------------
 deepfake_project/HydraFake/
-
-# Dataset
+**/HydraFake/
 deepfake_project/datasets/hydrafake/
-deepfake_project/datasets/__pycache__/
+**/datasets/hydrafake/
+**/datasets/data/
+**/datasets/
 
-# ==========================
-# Training checkpoints
-# ==========================
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
 
-**/checkpoints/*.pth
+# ------------------------------------------------------------------------------
+# 6. Training Runs, Logs, Backups & Screenshots
+# ------------------------------------------------------------------------------
+*.log
+**/logs/
+**/inference_logs/
+wandb/
+**/wandb/
+tensorboard/
+**/tensorboard/
+
+# Screenshots & Backups
+lab5_screenshots/
+**/lab5_screenshots/
+**/screenshots/
+backups/
+**/backups/
+scratch/
+**/scratch/
+
+# ------------------------------------------------------------------------------
+# 7. IDE, Editors, Agent & OS Files
+# ------------------------------------------------------------------------------
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm / JetBrains
+.idea/
+
+# Editors & swap files
+*.swp
+*.swo
+*~
+*.bak
+
+# Windows OS artifacts
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS artifacts
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux artifacts
+.directory
+
+# Agent & CLI temporary directories / configs
+.kilo/
+.gemini/
+.mcp.json
+**/.mcp.json
+test_gemini.py
