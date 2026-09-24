@@ -624,6 +624,9 @@ def parse_args():
     p.add_argument("--weights_from",            default=None)
     p.add_argument("--freeze_cls_head",         action="store_true")
     p.add_argument("--freeze_projector",        action="store_true")
+    p.add_argument("--attn_implementation",     default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
+    p.add_argument("--no_gradient_checkpointing", action="store_true", help="Disable gradient checkpointing on LLM")
+    p.add_argument("--use_gradient_checkpointing", type=lambda x: str(x).lower() in ('true', '1', 'yes'), default=True)
     return p.parse_args()
 
 
@@ -707,8 +710,7 @@ def main():
     real_id, fake_id = get_answer_token_ids(tokenizer)
     logger.info(f"Answer token IDs: real={real_id}, fake={fake_id}")
 
-    # ── Model Build ───────────────────────────────────────────────────
-    logger.info(f"Building DeepfakeReasoningModel (arch_version={args.arch_version}) ...")
+    use_grad_ckpt = getattr(args, "use_gradient_checkpointing", True) and not getattr(args, "no_gradient_checkpointing", False)
     model = DeepfakeReasoningModel(
         model_path=args.model_path,
         lora_rank=args.lora_rank,
@@ -725,6 +727,8 @@ def main():
         arch_version=args.arch_version,
         real_token_id=real_id,
         fake_token_id=fake_id,
+        attn_implementation=getattr(args, "attn_implementation", "sdpa"),
+        use_gradient_checkpointing=use_grad_ckpt,
     ).to(device)
 
     # ── Checkpoint Loading Guard (3.0) ────────────────────────────────
@@ -806,6 +810,7 @@ def main():
     logger.info(f"  lm_loss_curriculum: start={args.lm_loss_weight_start} -> end={args.lm_loss_weight_end}")
     logger.info(f"  epochs_cls={args.epochs_cls}  epochs_joint={args.epochs_joint}  total_epochs={total_epochs}")
     logger.info(f"  lr={args.lr}  llm_lora_rank={args.lora_rank}  vision_lora_rank={args.vision_lora_rank}")
+    logger.info(f"  attn_impl={getattr(args, 'attn_implementation', 'sdpa')}  grad_ckpt={use_grad_ckpt}")
     logger.info(f"  steps/epoch={joint_forward_steps}  optimizer_updates/epoch={optimizer_steps_per_epoch}")
     logger.info(f"  logs -> {log_dir}")
     logger.info("=" * 86)

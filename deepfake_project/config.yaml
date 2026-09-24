@@ -31,6 +31,8 @@ weight_decay: 0.01
 warmup_ratio: 0.05
 patience: 5
 num_workers: 8
+attn_implementation: "sdpa"
+use_gradient_checkpointing: true
 
 # ── Loss Weights & Curriculum ─────────────────────────────────────────────
 # Linear ramp across joint epochs: start at 0.3 -> end at 0.6
