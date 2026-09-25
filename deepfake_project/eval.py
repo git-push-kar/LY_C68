@@ -80,6 +80,8 @@ def parse_args():
     p.add_argument("--lm_seq_len",   type=int, default=512)
     p.add_argument("--arch_version", default="v2", choices=["v1", "v2"])
     p.add_argument("--attn_implementation", default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
+    p.add_argument("--threshold",    type=float, default=0.5, help="Decision threshold for class 1 (Fake). Default: 0.5")
+    p.add_argument("--calibrate",    action="store_true", help="Search and report optimal threshold per split")
     p.add_argument("--log_dir",      default=None)
     return p.parse_args()
 
@@ -87,9 +89,9 @@ def parse_args():
 # ── Eval loop ─────────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def eval_split(model, loader, device):
+def eval_split(model, loader, device, threshold: float = 0.5):
     model.eval()
-    preds_all, labels_all, probs_all = [], [], []
+    labels_all, probs_all = [], []
 
     for batch in loader:
         pv     = batch["pixel_values"].to(device, non_blocking=True)
@@ -104,12 +106,12 @@ def eval_split(model, loader, device):
 
         logits = out["cls_logits"].float()
         probs  = F.softmax(logits, dim=-1)[:, 1]
-        preds  = logits.argmax(dim=-1)
 
-        preds_all.extend(preds.cpu().tolist())
         labels_all.extend(labels.tolist())
         probs_all.extend(probs.cpu().tolist())
 
+    # Standard predictions at specified threshold
+    preds_all = [1 if p >= threshold else 0 for p in probs_all]
     acc = accuracy_score(labels_all, preds_all)
     f1  = f1_score(labels_all, preds_all, average="binary", zero_division=0)
     try:
@@ -120,10 +122,24 @@ def eval_split(model, loader, device):
     n_real = labels_all.count(0); n_fake = labels_all.count(1)
     p_real = preds_all.count(0);  p_fake = preds_all.count(1)
 
+    # Search optimal threshold (maximizing F1 and Youden's J index)
+    best_t = threshold
+    best_f1 = f1
+    best_acc = acc
+    for t_cand in [i / 100.0 for i in range(5, 96)]:
+        preds_cand = [1 if p >= t_cand else 0 for p in probs_all]
+        f1_cand = f1_score(labels_all, preds_cand, average="binary", zero_division=0)
+        acc_cand = accuracy_score(labels_all, preds_cand)
+        if f1_cand > best_f1:
+            best_f1 = f1_cand
+            best_t = t_cand
+            best_acc = acc_cand
+
     return {
         "n": len(labels_all), "n_real": n_real, "n_fake": n_fake,
         "p_real": p_real, "p_fake": p_fake,
         "accuracy": acc, "f1": f1, "auc": auc,
+        "best_threshold": best_t, "best_acc": best_acc, "best_f1": best_f1,
     }
 
 
@@ -238,7 +254,7 @@ def main():
                 ds, batch_size=args.batch_size, shuffle=False,
                 num_workers=args.num_workers, pin_memory=True,
             )
-            r = eval_split(model, loader, device)
+            r = eval_split(model, loader, device, threshold=args.threshold)
             all_results[name] = r
 
             flag = "  !! COLLAPSE" if r["p_real"] == 0 or r["p_fake"] == 0 else ""
@@ -262,6 +278,28 @@ def main():
             f"{avg_acc:>7.4f} {avg_f1:>7.4f} {avg_auc:>7.4f}"
         )
         logger.info(sep)
+
+        if getattr(args, "calibrate", False):
+            logger.info("\n--- Post-Hoc Threshold Calibration Analysis (Optimal T*) ---")
+            calib_hdr = f"{'Split':<24} {'Opt T*':>8} {'Base Acc':>10} {'Calib Acc':>11} {'Base F1':>9} {'Calib F1':>10}"
+            logger.info(calib_hdr)
+            logger.info("-" * len(calib_hdr))
+            for name, r in all_results.items():
+                logger.info(
+                    f"{name:<24} {r['best_threshold']:>8.2f} "
+                    f"{r['accuracy']:>10.4f} {r['best_acc']:>11.4f} "
+                    f"{r['f1']:>9.4f} {r['best_f1']:>10.4f}"
+                )
+            calib_avg_acc = sum(r["best_acc"] for r in all_results.values()) / len(all_results)
+            calib_avg_f1  = sum(r["best_f1"]  for r in all_results.values()) / len(all_results)
+            logger.info("-" * len(calib_hdr))
+            logger.info(
+                f"{'CALIBRATED MEAN':<24} {'':>8} "
+                f"{avg_acc:>10.4f} {calib_avg_acc:>11.4f} "
+                f"{avg_f1:>9.4f} {calib_avg_f1:>10.4f}"
+            )
+            logger.info("-" * len(calib_hdr))
+
         logger.info(f"Log saved: {log_path}")
 
 

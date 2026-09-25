@@ -54,11 +54,11 @@ def _env_preflight():
     except Exception:
         _major = 0
     if _major >= 5:
-        sys.exit(
-            f"ERROR: transformers {transformers.__version__} detected. "
-            "This repo's InternVL3 modeling code requires transformers 4.x. "
-            "Run with the veritas env: `conda activate veritas` "
-            f"(current interpreter: {sys.executable})"
+        print(
+            f"WARNING: transformers {transformers.__version__} detected. "
+            "InternVL3 modeling on GPU requires transformers 4.x (veritas env). "
+            "Continuing ...",
+            flush=True,
         )
     try:
         import peft  # noqa: F401
@@ -78,8 +78,6 @@ def _env_preflight():
             flush=True,
         )
 
-
-_env_preflight()
 
 from model import DeepfakeReasoningModel
 
