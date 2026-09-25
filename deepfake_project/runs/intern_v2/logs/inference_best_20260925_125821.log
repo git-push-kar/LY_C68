@@ -1,0 +1,39 @@
+Inference log : ./runs/intern_v2/logs\inference_best_20260925_125821.log
+Checkpoint    : ./runs/intern_v2/checkpoints/best.pth
+Images        : ['test_images/real/160932.png', 'test_images/real/161022.jpg', 'test_images/real/300013.jpg', 'test_images/real/31000095.jpg', 'test_images/real/31000171.jpg', 'test_images/real/31000177.jpg', 'test_images/real/31000187.jpg', 'test_images/real/310151.png', 'test_images/real/310160.png', 'test_images/real/310189.jpg', 'test_images/real/310203.jpg', 'test_images/real/32000017.png', 'test_images/real/40000001.jpg', 'test_images/real/6.jpg', 'test_images/real/9.jpg', 'test_images/real/mar.jpg', 'test_images/real/omi.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_v2/checkpoints/best.pth
+  epoch=5  stage=?  missing=0  unexpected=0
+
+Processing 17 image(s) ...
+
+  [test_images/real/160932.png]  NOT FOUND — skipping
+  [test_images/real/161022.jpg]  NOT FOUND — skipping
+  [test_images/real/300013.jpg]  NOT FOUND — skipping
+  [test_images/real/31000095.jpg]  NOT FOUND — skipping
+  [test_images/real/31000171.jpg]  NOT FOUND — skipping
+  [test_images/real/31000177.jpg]  NOT FOUND — skipping
+  [test_images/real/31000187.jpg]  NOT FOUND — skipping
+  [test_images/real/310151.png]  NOT FOUND — skipping
+  [test_images/real/310160.png]  NOT FOUND — skipping
+  [test_images/real/310189.jpg]  NOT FOUND — skipping
+  [test_images/real/310203.jpg]  NOT FOUND — skipping
+  [test_images/real/32000017.png]  NOT FOUND — skipping
+  [test_images/real/40000001.jpg]  NOT FOUND — skipping
+  [test_images/real/6.jpg]  NOT FOUND — skipping
+  [test_images/real/9.jpg]  NOT FOUND — skipping
+  [test_images/real/mar.jpg]  NOT FOUND — skipping
+  [test_images/real/omi.jpg]  NOT FOUND — skipping
+
+================================================================
+SUMMARY
+================================================================
+  Image              Classifier Conf     Gen Answer
+  ------------------ ---------- -------- ------------
+================================================================
+
+Log saved to: ./runs/intern_v2/logs\inference_best_20260925_125821.log
+Done.

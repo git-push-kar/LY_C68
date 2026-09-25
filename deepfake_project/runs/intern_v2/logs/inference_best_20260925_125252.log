@@ -1,0 +1,12 @@
+Inference log : ./runs/intern_v2/logs\inference_best_20260925_125252.log
+Checkpoint    : ./runs/intern_v2/checkpoints/best.pth
+Images        : ['C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\id\\FaceForensics++\\0_real\\306_680.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\id\\Hallo2\\0_real\\19602.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cm\\StarryAI\\0_real\\11143.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cf\\PuLID\\0_real\\24404.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cd\\FFIW\\0_real\\test_00001301\\080.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\id\\StyleGAN\\1_fake\\img_329.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cm\\Flux11Pro\\1_fake\\img_259.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cf\\StarGANv2\\1_fake\\1717.jpg', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cd\\deepfacelab\\1_fake\\0012_0014_047.png', 'C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\datasets\\hydrafake\\test\\cd\\gpt4o\\1_fake\\img_116.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_v2/checkpoints/best.pth
+  epoch=5  stage=?  missing=0  unexpected=0
+
+Processing 10 image(s) ...
+
