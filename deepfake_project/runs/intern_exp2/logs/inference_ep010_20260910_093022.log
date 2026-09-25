@@ -1,0 +1,70 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260910_093022.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['test1.png', 'test2.png', 'test3.png', 'test4.png']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 4 image(s) ...
+
+
+============================================================
+  Image             : test1.png
+  Classifier verdict: FAKE  (conf 99.7%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : test2.png
+  Classifier verdict: FAKE  (conf 98.4%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+  Image             : test3.png
+  Classifier verdict: REAL  (conf 78.9%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> <answer> fake </answer> The answer is questionable at first glance due to the image's high quality and realism, which could easily mislead an initial judgment. However, upon closer inspection, multiple visual anomalies become apparent. The face exhibits structural inconsistencies such as asymmetrical eyes and unnatural facial proportions, which are typical in AI-generated images. The expression also appears mismatched between the mouth and eyes, suggesting a lack of natural emotional coherence. Further inspection reveals subtle artifacts like jagged edges around the hairline, overly smooth skin texture, and visible blending boundaries, all of which are common in synthetic image generation. Finally, the lighting and shadows on the face do not align with the background, indicating a contextual mismatch that violates basic physical laws. Considering the structural flaws, generator-specific artifacts, and inconsistencies in lighting and context, the image is most likely AI-generated. These combined elements strongly indicate that the image is not authentic. While the image appears realistic initially, the presence of multiple detectable artifacts supports the conclusion that it is fake. Therefore, the image is judged to be AI-generated based on the detailed forensic analysis. It is a medium-difficulty case because it required careful inspection across multiple analytical dimensions to reach a confident judgment, but overall, it is straightforward reasoning involving visual and logical inference. The image is determined to be fake based on the cumulative evidence of structural abnormalities, generator artifacts, and violations of physical realism. Despite its realistic appearance, the presence of multiple detectable artifacts supports the conclusion that it is AI-generated. Therefore, the image is classified as easy. <answer> fake </answer> Upon close inspection, the image displays several visual structural abnormalities such as asymmetrical eyes, unnatural facial proportions, and a mismatched expression, all of which are commonly associated with AI-generated faces. Additionally, subtle artifacts like jagged edges, overly smooth skin texture, and hard blending boundaries further suggest synthetic generation. Even more telling are the violations of physical realism: the lighting and shadows on the face do not match the background, and the makeup application appears inconsistent with natural human skin behavior. These clues, while not immediately obvious, collectively form a coherent pattern indicative of AI generation. Given the combination of structural inconsistencies, generator-specific artifacts, and implausible physical properties, the image is best classified as AI-generated. The lack of glaring anomalies makes this a medium-level detection task, but the cumulative evidence strongly supports the final judgment. <answer> fake </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+  Image             : test4.png
+  Classifier verdict: REAL  (conf 93.9%)
+============================================================
+
+  [Raw LM output]
+    <answer> real </answer> The answer is real.answer real <answer> fake </answer>
+
+  Generated answer : REAL
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  test1.png       FAKE     99.7%
+  test2.png       FAKE     98.4%
+  test3.png       REAL     78.9%
+  test4.png       REAL     93.9%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260910_093022.log
+Done.

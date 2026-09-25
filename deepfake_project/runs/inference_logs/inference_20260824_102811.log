@@ -1,0 +1,44 @@
+==============================================================================
+DEEPFAKE INFERENCE
+==============================================================================
+Model      : ./models/InternVL3-2B
+Checkpoint : ./runs/intern_exp2/checkpoints/ep011.pth
+Images     : ['1.jpg', '2.jpg', '3.jpg', '4.jpg']
+Image size : 448
+Max tokens : 192
+Device     : cuda
+GPU        : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep011.pth
+Epoch      : 11
+Stage      : joint
+Missing    : 0
+Unexpected : 0
+Model loaded successfully.
+
+Processing: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\1.jpg
+
+==============================================================================
+IMAGE       : 1.jpg
+VERDICT     : FAKE
+CONFIDENCE  : 66.71%
+REAL PROB   : 33.29%
+FAKE PROB   : 66.71%
+==============================================================================
+
+[MODEL GENERATED ANSWER] FAKE
+==============================================================================
+Processing: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\2.jpg
+
+==============================================================================
+IMAGE       : 2.jpg
+VERDICT     : FAKE
+CONFIDENCE  : 77.93%
+REAL PROB   : 22.07%
+FAKE PROB   : 77.93%
+==============================================================================
+
+[MODEL GENERATED ANSWER] UNKNOWN
+==============================================================================
+Processing: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\3.jpg

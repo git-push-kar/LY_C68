@@ -1,0 +1,48 @@
+Inference log : .\runs\intern_exp3_corrective\logs\inference_best_20260831_093538.log
+Checkpoint    : .\runs\intern_exp3_corrective\checkpoints\best.pth
+Images        : ['chick.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: .\runs\intern_exp3_corrective\checkpoints\best.pth
+  epoch=1  stage=?  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : chick.jpg
+  Classifier verdict: FAKE  (conf 93.6%)
+============================================================
+
+  [Quick take]
+    At first glance, the image appears realistic and does not exhibit any glaring inconsistencies that would immediately suggest it is fake.
+
+  [Planning]
+    Given the lack of obvious structural flaws, a deeper forensic analysis is necessary. The evaluation should follow a progressive approach: starting with visual structure, then examining subtle generator artifacts, and finally assessing physical plausibility to determine whether the image aligns with real-world constraints.
+
+  [Reasoning]
+    Upon closer inspection, the facial structure appears proportionate and symmetrical, with consistent skin tone and natural expression--features typically found in real images. There are no distortions or mismatches in lighting, shadow, or background context that would raise immediate suspicion.
+    However, when analyzing finer details, subtle signs of artificial generation emerge. The skin texture, while smooth, lacks the high-frequency detail characteristic of real human skin, such as pores and fine lines. Additionally, there is a slight blur around key facial features like the eyes and mouth, which may indicate post-processing or blending artifacts introduced during image generation.
+    These observations, though not overtly suspicious, accumulate into a pattern commonly associated with AI-generated faces. While the image passes initial scrutiny, the presence of subtle generator artifacts suggests that it is likely AI-generated rather than a photograph of a real person.
+
+  [Reflection]
+    Although the image appears authentic at first glance and shows no major structural or contextual inconsistencies, the absence of fine skin details and the presence of minor blurring anomalies point toward artificial generation. This places the sample in the medium difficulty category, requiring careful but not exhaustive analysis.
+
+  [Conclusion]
+    Based on the detailed examination of texture, edges, and fine biological details, the image exhibits subtle but telling signs of being AI-generated. Despite its realistic appearance, these artifacts collectively indicate that the image is not a genuine photograph of a real person.
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  chick.jpg       FAKE     93.6%
+============================================================
+
+Log saved to: .\runs\intern_exp3_corrective\logs\inference_best_20260831_093538.log
+Done.

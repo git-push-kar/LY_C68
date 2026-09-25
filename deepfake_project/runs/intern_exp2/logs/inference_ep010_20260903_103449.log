@@ -1,0 +1,34 @@
+Inference log : C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260903_103449.log
+Checkpoint    : ./runs/intern_exp2/checkpoints/ep010.pth
+Images        : ['3-people.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_exp2/checkpoints/ep010.pth
+  epoch=10  stage=joint  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+============================================================
+  Image             : 3-people.jpg
+  Classifier verdict: FAKE  (conf 99.8%)
+============================================================
+
+  [Raw LM output]
+    <answer> fake </answer> <answer> real </answer> The answer is fake.answer fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer> fake <answer> real </answer>
+
+  Generated answer : FAKE
+============================================================
+
+============================================================
+SUMMARY
+============================================================
+  Image           Verdict  Confidence
+  --------------- -------- ----------
+  3-people.jpg    FAKE     99.8%
+============================================================
+
+Log saved to: C:\Users\Admin\Desktop\ly project c 68\deepfake_project\runs\intern_exp2\logs\inference_ep010_20260903_103449.log
+Done.

@@ -1,0 +1,16 @@
+Device : cuda
+
+── Test results ──
+  Accuracy : 0.5001
+  F1       : 0.0000
+  AUC-ROC  : 0.5000
+
+              precision    recall  f1-score   support
+
+        real       0.50      1.00      0.67     26639
+        fake       0.00      0.00      0.00     26633
+
+    accuracy                           0.50     53272
+   macro avg       0.25      0.50      0.33     53272
+weighted avg       0.25      0.50      0.33     53272
+
