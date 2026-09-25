@@ -28,7 +28,7 @@ vision_lora_dropout: 0.05
 batch_size: 4
 grad_accum: 8
 epochs_cls: 3
-epochs_joint: 2
+epochs_joint: 10
 lr: 5.0e-05
 weight_decay: 0.01
 warmup_ratio: 0.05

@@ -80,10 +80,16 @@ class AttentionPool(nn.Module):
         Returns:
             (B, D) — single attention-pooled visual vector
         """
+        # NOTE: nn.MultiheadAttention is not autocast-safe: under bf16 autocast
+        # the packed in-projection mixes fp32 inputs with bf16 weights
+        # (RuntimeError in _in_projection_packed). Feed it tensors already in
+        # the module's own weight dtype so autocast has nothing to mix.
         B = patch_tokens.size(0)
-        q = self.query.expand(B, -1, -1)  # (B, 1, D)
+        dtype = self.mha.in_proj_weight.dtype
+        pt = patch_tokens.to(dtype)
+        q = self.query.expand(B, -1, -1).to(dtype)  # (B, 1, D)
         # Query attends over patch key/values
-        attn_out, _ = self.mha(query=q, key=patch_tokens, value=patch_tokens)
+        attn_out, _ = self.mha(query=q, key=pt, value=pt)
         return self.norm(attn_out.squeeze(1))  # (B, D)
 
 
@@ -135,7 +141,10 @@ class FrequencyBranch(nn.Module):
         Returns:
             (B, out_dim) — 256-dim frequency embedding
         """
-        return self.net(x.float())
+        # NOTE: intern_v2 checkpoints store custom weights in bf16; a hardcoded
+        # .float() here mismatches them (conv2d: Float input vs BFloat16 bias).
+        # Align input to the module's own weight dtype instead.
+        return self.net(x.to(self.net[0].weight.dtype))
 
 
 # ── Classification Head ───────────────────────────────────────────────────────
@@ -497,7 +506,7 @@ class DeepfakeReasoningModel(nn.Module):
 
     def _pool_patches(self, patch_tokens: torch.Tensor) -> torch.Tensor:
         """Attention-pool patch tokens using learned query."""
-        return self.attn_pool(patch_tokens.float())
+        return self.attn_pool(patch_tokens)
 
     def _get_vision_features(self, pixel_values: torch.Tensor):
         """
@@ -634,8 +643,10 @@ class DeepfakeReasoningModel(nn.Module):
             freq_emb = torch.zeros((B, self.freq_dim), dtype=torch.float32, device=device)
 
         # Concatenate CLS + Attention-Pooled Patches + Frequency Embedding
+        # (align to cls_head weight dtype: intern_v2 ckpts store it in bf16)
+        _cls_dtype = self.cls_head.net[0].weight.dtype
         vis_for_cls = torch.cat(
-            [cls_token.float(), pooled_patches.float(), freq_emb.float()], dim=-1
+            [cls_token.to(_cls_dtype), pooled_patches.to(_cls_dtype), freq_emb.to(_cls_dtype)], dim=-1
         )  # (B, vision_dim*2 + 256)
 
         cls_logits = self.cls_head(vis_for_cls)  # (B, 2)
@@ -744,8 +755,10 @@ class DeepfakeReasoningModel(nn.Module):
         else:
             freq_emb = torch.zeros((B, self.freq_dim), dtype=torch.float32, device=device)
 
+        # (align to cls_head weight dtype: intern_v2 ckpts store it in bf16)
+        _cls_dtype = self.cls_head.net[0].weight.dtype
         vis_for_cls = torch.cat(
-            [cls_token.float(), pooled_patches.float(), freq_emb.float()], dim=-1
+            [cls_token.to(_cls_dtype), pooled_patches.to(_cls_dtype), freq_emb.to(_cls_dtype)], dim=-1
         )
         cls_logits = self.cls_head(vis_for_cls)
         probs = F.softmax(cls_logits.float(), dim=-1)
