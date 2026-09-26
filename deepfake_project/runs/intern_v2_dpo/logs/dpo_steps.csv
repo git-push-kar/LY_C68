@@ -1,0 +1,2 @@
+epoch,step,global_step,step_time_s,dpo_loss,chosen_reward,rejected_reward,reward_margin,reward_acc
+1,0,0,26.182,0.692074,-0.089727,-0.111196,0.021469,0.5

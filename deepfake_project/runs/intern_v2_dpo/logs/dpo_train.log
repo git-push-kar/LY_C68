@@ -1,0 +1,29 @@
+16:06:25 | ======================================================================================
+16:06:25 | DeepfakeReasoningModel v2 — DPO Preference Alignment Stage
+16:06:25 | Device: cuda
+16:06:25 | GPU   : NVIDIA RTX A5000
+16:06:25 | VRAM  : 25.8 GB
+16:06:25 | Checkpoint source : ./runs/intern_v2/checkpoints/best.pth
+16:06:25 | DPO Beta: 0.1 | DPO LR: 1e-06 | Epochs: 2
+16:06:25 | ======================================================================================
+16:06:25 | Loading preference dataset (mipo_3k.json) ...
+16:06:31 | Loaded 3,480 chosen/rejected pairs for DPO.
+16:06:31 | Building Policy Model (trainable) ...
+16:06:38 | Loading checkpoint weights into Policy Model: ./runs/intern_v2/checkpoints/best.pth
+16:06:40 | Building Reference Model (frozen copy) ...
+16:06:45 | Policy model trainable LoRA parameters: 80,150,528
+16:06:45 |   Ep      Steps       Time   DPOLoss   RewardMargin   RewardAcc  Best
+16:06:45 | ======================================================================================
+16:07:12 | DPO Ep 1 | Step    1/870 (  0.1%) | 26.18s/step | Elapsed 26.2s | ETA 6h 19m 12s | Loss 0.6921 | Margin 0.0215 | Acc 50.00%
+16:16:16 | ======================================================================================
+16:16:16 | DeepfakeReasoningModel v2 — DPO Preference Alignment Stage
+16:16:16 | Device: cuda
+16:16:16 | GPU   : NVIDIA RTX A5000
+16:16:16 | VRAM  : 25.8 GB
+16:16:16 | Checkpoint source : ./runs/intern_v2/checkpoints/best.
+16:16:16 | DPO Beta: 0.1 | DPO LR: 1e-06 | Epochs: 2
+16:16:16 | ======================================================================================
+16:16:16 | Loading preference dataset (mipo_3k.json) ...
+16:16:22 | Loaded 3,480 chosen/rejected pairs for DPO.
+16:16:22 | Building Policy Model (trainable) ...
+16:16:30 | Loading checkpoint weights into Policy Model: ./runs/intern_v2/checkpoints/best.

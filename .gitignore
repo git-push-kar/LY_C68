@@ -111,7 +111,7 @@ deepfake_project/datasets/hydrafake/
 *.bz2
 
 # ------------------------------------------------------------------------------
-# 6. Training Runs, Backups & Screenshots (logs are TRACKED — do not ignore)
+# 6. Training Runs, Backups & Screenshots (logs are TRACKED — do not ignore)`
 # ------------------------------------------------------------------------------
 wandb/
 **/wandb/
