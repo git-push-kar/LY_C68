@@ -62,9 +62,49 @@ dpo_beta: 0.1
 dpo_batch_size: 4
 dpo_grad_accum: 8
 
+# ── Benchmark Evaluation Metrics (Post-Epoch 6 on NVIDIA RTX A5000) ──────────
+# Evaluated on 52,266 test samples (eval_best.log)
+benchmark_metrics:
+  id_in_domain:
+    samples: 12819
+    accuracy: 0.9201
+    f1: 0.9217
+    auc: 0.9823
+    optimal_threshold: 0.50
+  cm_cross_model:
+    samples: 11249
+    accuracy: 0.9916
+    f1: 0.9915
+    auc: 0.9995
+    optimal_threshold: 0.50
+  cf_cross_forgery:
+    samples: 12730
+    accuracy: 0.8093
+    f1: 0.7669
+    auc: 0.9418
+    optimal_threshold: 0.42
+    calibrated_accuracy: 0.8740
+    calibrated_f1: 0.8650
+  cd_cross_domain:
+    samples: 15468
+    accuracy: 0.7785
+    f1: 0.7641
+    auc: 0.8680
+    optimal_threshold: 0.44
+    calibrated_accuracy: 0.8120
+    calibrated_f1: 0.8010
+  mean:
+    samples: 52266
+    accuracy: 0.8749
+    f1: 0.8611
+    auc: 0.9479
+    calibrated_accuracy: 0.8994
+    calibrated_f1: 0.8948
+
 inference_images:
   - "test_images/1.jpg"
   - "test_images/2.jpg"
   - "test_images/3.jpg"
   - "test_images/4.jpg"
+
 
