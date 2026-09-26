@@ -27,3 +27,68 @@
 16:16:22 | Loaded 3,480 chosen/rejected pairs for DPO.
 16:16:22 | Building Policy Model (trainable) ...
 16:16:30 | Loading checkpoint weights into Policy Model: ./runs/intern_v2/checkpoints/best.
+11:08:49 | ======================================================================================
+11:08:49 | DeepfakeReasoningModel v2 — DPO Preference Alignment Stage
+11:08:49 | Device: cuda
+11:08:49 | GPU   : NVIDIA RTX A5000
+11:08:49 | VRAM  : 25.8 GB
+11:08:49 | Checkpoint source : ./runs/intern_v2/checkpoints/ep006.pth
+11:08:49 | DPO Beta: 0.1 | DPO LR: 1e-06 | Epochs: 2
+11:08:49 | ======================================================================================
+11:08:49 | Loading preference dataset (mipo_3k.json) ...
+11:08:56 | Loaded 3,480 chosen/rejected pairs for DPO.
+11:08:56 | Building Policy Model (trainable) ...
+11:09:03 | Loading checkpoint weights into Policy Model: ./runs/intern_v2/checkpoints/ep006.pth
+11:09:07 | Building Reference Model (frozen copy) ...
+11:09:13 | Policy model trainable LoRA parameters: 80,150,528
+11:09:13 |   Ep      Steps       Time   DPOLoss   RewardMargin   RewardAcc  Best
+11:09:13 | ======================================================================================
+11:09:41 | DPO Ep 1 | Step    1/870 (  0.1%) | 27.88s/step | Elapsed 27.9s | ETA 6h 43m 44s | Loss 0.6730 | Margin 0.0681 | Acc 50.00%
+11:13:34 | DPO Ep 1 | Step   50/870 (  5.7%) | 5.23s/step | Elapsed 4m 21s | ETA 1h 11m 25s | Loss 0.7485 | Margin -0.0974 | Acc 50.00%
+11:17:33 | DPO Ep 1 | Step  100/870 ( 11.5%) | 5.00s/step | Elapsed 8m 20s | ETA 1h 04m 12s | Loss 0.7802 | Margin -0.1626 | Acc 25.00%
+11:21:33 | DPO Ep 1 | Step  150/870 ( 17.2%) | 4.93s/step | Elapsed 12m 19s | ETA 59m 10s | Loss 0.6399 | Margin 0.1160 | Acc 75.00%
+11:25:33 | DPO Ep 1 | Step  200/870 ( 23.0%) | 4.90s/step | Elapsed 16m 19s | ETA 54m 42s | Loss 0.6296 | Margin 0.1535 | Acc 75.00%
+11:29:32 | DPO Ep 1 | Step  250/870 ( 28.7%) | 4.88s/step | Elapsed 20m 18s | ETA 50m 22s | Loss 0.4640 | Margin 0.7577 | Acc 50.00%
+11:33:31 | DPO Ep 1 | Step  300/870 ( 34.5%) | 4.86s/step | Elapsed 24m 17s | ETA 46m 09s | Loss 0.3827 | Margin 0.8691 | Acc 100.00%
+11:37:30 | DPO Ep 1 | Step  350/870 ( 40.2%) | 4.85s/step | Elapsed 28m 16s | ETA 42m 00s | Loss 0.7569 | Margin -0.1076 | Acc 25.00%
+11:41:29 | DPO Ep 1 | Step  400/870 ( 46.0%) | 4.84s/step | Elapsed 32m 15s | ETA 37m 54s | Loss 0.4551 | Margin 0.8010 | Acc 75.00%
+11:45:28 | DPO Ep 1 | Step  450/870 ( 51.7%) | 4.83s/step | Elapsed 36m 14s | ETA 33m 49s | Loss 0.5100 | Margin 0.5761 | Acc 75.00%
+11:49:27 | DPO Ep 1 | Step  500/870 ( 57.5%) | 4.83s/step | Elapsed 40m 13s | ETA 29m 46s | Loss 0.4339 | Margin 0.9804 | Acc 75.00%
+11:53:26 | DPO Ep 1 | Step  550/870 ( 63.2%) | 4.82s/step | Elapsed 44m 12s | ETA 25m 43s | Loss 0.2985 | Margin 1.4781 | Acc 75.00%
+11:57:25 | DPO Ep 1 | Step  600/870 ( 69.0%) | 4.82s/step | Elapsed 48m 11s | ETA 21m 41s | Loss 0.2591 | Margin 1.7380 | Acc 75.00%
+12:01:24 | DPO Ep 1 | Step  650/870 ( 74.7%) | 4.82s/step | Elapsed 52m 10s | ETA 17m 39s | Loss 0.3835 | Margin 1.2149 | Acc 100.00%
+12:05:23 | DPO Ep 1 | Step  700/870 ( 80.5%) | 4.81s/step | Elapsed 56m 10s | ETA 13m 38s | Loss 0.6341 | Margin 0.2453 | Acc 75.00%
+12:09:22 | DPO Ep 1 | Step  750/870 ( 86.2%) | 4.81s/step | Elapsed 1h 00m 09s | ETA 9m 37s | Loss 0.5879 | Margin 0.2277 | Acc 100.00%
+12:13:21 | DPO Ep 1 | Step  800/870 ( 92.0%) | 4.81s/step | Elapsed 1h 04m 08s | ETA 5m 36s | Loss 0.3959 | Margin 1.2888 | Acc 100.00%
+12:17:20 | DPO Ep 1 | Step  850/870 ( 97.7%) | 4.81s/step | Elapsed 1h 08m 07s | ETA 1m 36s | Loss 0.4248 | Margin 0.7831 | Acc 100.00%
+12:18:56 | DPO Ep 1 | Step  870/870 (100.0%) | 4.81s/step | Elapsed 1h 09m 42s | ETA 0.0s | Loss 0.5236 | Margin 0.5839 | Acc 75.00%
+12:18:57 |   DPO Epoch 1 completed: 870/870 steps | Duration: 1h 09m 43s (4183.8s) | Avg Speed: 4.809s/step
+12:18:57 |    1    870/870 1h 09m 43s    0.4916         0.7518     75.55%     *
+12:19:03 | Saved DPO checkpoint: ./runs/intern_v2_dpo\checkpoints\dpo_ep001.pth
+12:19:08 | Saved best DPO checkpoint: ./runs/intern_v2_dpo\checkpoints\dpo_best.pth
+12:19:38 | DPO Ep 2 | Step    1/870 (  0.1%) | 29.44s/step | Elapsed 29.4s | ETA 7h 06m 19s | Loss 0.3434 | Margin 1.3987 | Acc 100.00%
+12:23:32 | DPO Ep 2 | Step   50/870 (  5.7%) | 5.27s/step | Elapsed 4m 23s | ETA 1h 11m 59s | Loss 0.3399 | Margin 1.5351 | Acc 100.00%
+12:27:31 | DPO Ep 2 | Step  100/870 ( 11.5%) | 5.03s/step | Elapsed 8m 22s | ETA 1h 04m 29s | Loss 0.4807 | Margin 0.6180 | Acc 100.00%
+12:31:30 | DPO Ep 2 | Step  150/870 ( 17.2%) | 4.94s/step | Elapsed 12m 21s | ETA 59m 19s | Loss 0.3289 | Margin 1.2260 | Acc 75.00%
+12:35:29 | DPO Ep 2 | Step  200/870 ( 23.0%) | 4.90s/step | Elapsed 16m 20s | ETA 54m 45s | Loss 0.3291 | Margin 1.2763 | Acc 100.00%
+12:39:28 | DPO Ep 2 | Step  250/870 ( 28.7%) | 4.88s/step | Elapsed 20m 19s | ETA 50m 24s | Loss 0.3330 | Margin 1.9239 | Acc 100.00%
+12:43:27 | DPO Ep 2 | Step  300/870 ( 34.5%) | 4.86s/step | Elapsed 24m 18s | ETA 46m 11s | Loss 0.5302 | Margin 0.4442 | Acc 75.00%
+12:47:26 | DPO Ep 2 | Step  350/870 ( 40.2%) | 4.85s/step | Elapsed 28m 17s | ETA 42m 02s | Loss 0.5235 | Margin 0.6928 | Acc 75.00%
+12:51:25 | DPO Ep 2 | Step  400/870 ( 46.0%) | 4.84s/step | Elapsed 32m 16s | ETA 37m 55s | Loss 0.2769 | Margin 2.0729 | Acc 100.00%
+12:55:24 | DPO Ep 2 | Step  450/870 ( 51.7%) | 4.83s/step | Elapsed 36m 15s | ETA 33m 50s | Loss 0.3961 | Margin 1.0836 | Acc 100.00%
+12:59:23 | DPO Ep 2 | Step  500/870 ( 57.5%) | 4.83s/step | Elapsed 40m 14s | ETA 29m 46s | Loss 0.4031 | Margin 1.0914 | Acc 75.00%
+13:03:22 | DPO Ep 2 | Step  550/870 ( 63.2%) | 4.82s/step | Elapsed 44m 13s | ETA 25m 43s | Loss 0.4939 | Margin 0.4558 | Acc 100.00%
+13:07:21 | DPO Ep 2 | Step  600/870 ( 69.0%) | 4.82s/step | Elapsed 48m 12s | ETA 21m 41s | Loss 0.1416 | Margin 2.3558 | Acc 100.00%
+13:11:20 | DPO Ep 2 | Step  650/870 ( 74.7%) | 4.82s/step | Elapsed 52m 11s | ETA 17m 39s | Loss 0.2326 | Margin 2.3127 | Acc 75.00%
+13:15:19 | DPO Ep 2 | Step  700/870 ( 80.5%) | 4.82s/step | Elapsed 56m 10s | ETA 13m 38s | Loss 0.3436 | Margin 1.2985 | Acc 75.00%
+13:19:18 | DPO Ep 2 | Step  750/870 ( 86.2%) | 4.81s/step | Elapsed 1h 00m 09s | ETA 9m 37s | Loss 0.1296 | Margin 2.8266 | Acc 100.00%
+13:23:17 | DPO Ep 2 | Step  800/870 ( 92.0%) | 4.81s/step | Elapsed 1h 04m 08s | ETA 5m 36s | Loss 0.3405 | Margin 1.9355 | Acc 75.00%
+13:27:16 | DPO Ep 2 | Step  850/870 ( 97.7%) | 4.81s/step | Elapsed 1h 08m 07s | ETA 1m 36s | Loss 0.4780 | Margin 0.7419 | Acc 75.00%
+13:28:52 | DPO Ep 2 | Step  870/870 (100.0%) | 4.81s/step | Elapsed 1h 09m 43s | ETA 0.0s | Loss 0.2182 | Margin 1.7478 | Acc 100.00%
+13:28:53 |   DPO Epoch 2 completed: 870/870 steps | Duration: 1h 09m 44s (4184.3s) | Avg Speed: 4.810s/step
+13:28:53 |    2    870/870 1h 09m 44s    0.3552         1.3783     91.03%     *
+13:28:58 | Saved DPO checkpoint: ./runs/intern_v2_dpo\checkpoints\dpo_ep002.pth
+13:29:04 | Saved best DPO checkpoint: ./runs/intern_v2_dpo\checkpoints\dpo_best.pth
+13:29:04 | ======================================================================================
+13:29:04 | DPO Preference Training Complete in 2h 19m 50s (8390.8s). Best Reward Accuracy: 91.03%
+13:29:04 | Checkpoints directory: ./runs/intern_v2_dpo\checkpoints

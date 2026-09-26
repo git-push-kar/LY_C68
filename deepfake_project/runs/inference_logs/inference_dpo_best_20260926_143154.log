@@ -1,0 +1,7 @@
+Inference log : C:\Users\Admin\Desktop\LY_C68\deepfake_project\runs\inference_logs\inference_dpo_best_20260926_143154.log
+Checkpoint    : ./runs/intern_v2_dpo/checkpoints/dpo_best.pth
+Images        : ['test_images/test1.jpg', 'test_images/test2.jpg', 'test_images/test3.jpg', 'test_images/test4.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...

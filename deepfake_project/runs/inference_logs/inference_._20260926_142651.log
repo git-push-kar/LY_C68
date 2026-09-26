@@ -1,0 +1,8 @@
+Inference log : C:\Users\Admin\Desktop\LY_C68\deepfake_project\runs\inference_logs\inference_._20260926_142651.log
+Checkpoint    : .
+Images        : ['test_images/1.jpg', 'test_images/2.jpg', 'test_images/3.jpg', 'test_images/4.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: .

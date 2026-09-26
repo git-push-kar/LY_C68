@@ -1,0 +1,40 @@
+Inference log : ./runs/intern_v2_dpo/logs\inference_dpo_best_20260926_144619.log
+Checkpoint    : ./runs/intern_v2_dpo/checkpoints/dpo_best.pth
+Images        : ['test_images/real/99.png']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_v2_dpo/checkpoints/dpo_best.pth
+  epoch=2  stage=?  missing=0  unexpected=0
+
+Processing 1 image(s) ...
+
+
+================================================================
+  Image             : 99.png
+  Classifier verdict: REAL  (conf 85.1%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and no obvious signs of manipulation.
+
+  [Reasoning]
+    Upon inspection, the image shows consistent skin tone, normal facial proportions, and a natural expression without distortion or asymmetry. The edges are smooth, textures are realistic, and there are no visible blending boundaries or unnatural blurring. Fine details such as hair strands and skin texture are preserved, indicating high fidelity. Lighting and shadows align naturally, and there is no mismatch between the subject and background. Makeup, if present, appears realistically applied, and the overall focus remains uniform across the face.
+
+  [Conclusion]
+    Considering all visual, textural, and physical aspects, the image exhibits no signs of artificial generation or manipulation and is judged to be authentic.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+SUMMARY
+================================================================
+  Image              Classifier Conf     Gen Answer
+  ------------------ ---------- -------- ------------
+  99.png             REAL       85.1%    REAL
+================================================================
+
+Log saved to: ./runs/intern_v2_dpo/logs\inference_dpo_best_20260926_144619.log
+Done.

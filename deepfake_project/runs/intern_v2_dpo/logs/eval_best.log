@@ -1,0 +1,5 @@
+13:33:57 | Eval log : ./runs/intern_v2_dpo\logs\eval_best.log
+13:33:57 | Device   : cuda
+13:33:57 | GPU      : NVIDIA RTX A5000
+13:33:58 | Loading model ...
+13:34:04 | Loading checkpoint: ./runs/intern_v2_dpo/checkpoints/best.pth
