@@ -4,14 +4,15 @@
 # Priority: CLI arguments ALWAYS override config file values.
 
 # ── Active Run Configuration: DeepfakeReasoningModel v2 Full Curriculum ──
+# Base: fused LoRA-merged InternVL3-2B (internvl3_2b_lr_fused), fresh run.
 # Resolved against this repo: deepfake_project/datasets/hydrafake/
 # (relative => portable across Windows dev box and Linux RTX A5000 box;
 #  CLI --dataset_root / --json_root still override these values)
 dataset_root: "./datasets/hydrafake"
 json_root: "./datasets/hydrafake/jsons"
-model_path: "./models/InternVL3-2B"
-tokenizer_path: "./models/InternVL3-2B"
-output_dir: "./runs/intern_v2"
+model_path: "./models/internvl3_2b_lr_fused"
+tokenizer_path: "./models/internvl3_2b_lr_fused"
+output_dir: "./runs/intern_fused"
 arch_version: "v2"
 
 # ── Architecture Hyperparameters ──────────────────────────────────────────
@@ -52,10 +53,10 @@ max_new_tokens: 512
 eval_batch_size: 8
 eval_num_workers: 8
 eval_threshold: 0.5
-checkpoint: "./runs/intern_v2/checkpoints/best.pth"
+checkpoint: "./runs/intern_fused/checkpoints/best.pth"
 
 # ── Stage 3: DPO Preference Optimization Defaults ────────────────────────
-dpo_output_dir: "./runs/intern_v2_dpo"
+dpo_output_dir: "./runs/intern_fused_dpo"
 dpo_epochs: 2
 dpo_lr: 1.0e-06
 dpo_beta: 0.1
