@@ -1,0 +1,63 @@
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py", line 385, in cached_file
+    resolved_file = hf_hub_download(
+                    ^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 106, in _inner_fn
+    validate_repo_id(arg_value)
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 154, in validate_repo_id
+    raise HFValidationError(
+huggingface_hub.errors.HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name': './models/internvl3_2b_lr_fused'. Use `repo_type` argument if needed.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\train.py", line 723, in main
+    loaders, tokenizer = build_separated_loaders(
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\dataset.py", line 616, in build_separated_loaders
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\models\auto\tokenization_auto.py", line 758, in from_pretrained
+    tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\models\auto\tokenization_auto.py", line 590, in get_tokenizer_config
+    resolved_config_file = cached_file(
+                           ^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py", line 450, in cached_file
+    raise EnvironmentError(
+OSError: Incorrect path_or_model_id: './models/internvl3_2b_lr_fused'. Please provide either the path to a local folder or the repo_id of a model on the Hub.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py", line 385, in cached_file
+    resolved_file = hf_hub_download(
+                    ^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 106, in _inner_fn
+    validate_repo_id(arg_value)
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 154, in validate_repo_id
+    raise HFValidationError(
+huggingface_hub.errors.HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name': './models/internvl3_2b_lr_fused'. Use `repo_type` argument if needed.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\train.py", line 983, in <module>
+    main()
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\train.py", line 738, in main
+    loaders, tokenizer = build_dataloaders(
+                         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\dataset.py", line 510, in build_dataloaders
+    tokenizer = AutoTokenizer.from_pretrained(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\models\auto\tokenization_auto.py", line 758, in from_pretrained
+    tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\models\auto\tokenization_auto.py", line 590, in get_tokenizer_config
+    resolved_config_file = cached_file(
+                           ^^^^^^^^^^^^
+  File "C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py", line 450, in cached_file
+    raise EnvironmentError(
+OSError: Incorrect path_or_model_id: './models/internvl3_2b_lr_fused'. Please provide either the path to a local folder or the repo_id of a model on the Hub.

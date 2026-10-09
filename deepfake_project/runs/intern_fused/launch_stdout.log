@@ -1,0 +1,8 @@
+12:05:35 | ======================================================================================
+12:05:35 | DeepfakeReasoningModel v2 Training Pipeline
+12:05:35 | Device: cuda
+12:05:35 | GPU   : NVIDIA RTX A5000
+12:05:35 | VRAM  : 25.8 GB
+12:05:35 | ======================================================================================
+12:05:35 | Loading tokenizer & data ...
+12:05:35 | Separated loaders fallback (Incorrect path_or_model_id: './models/internvl3_2b_lr_fused'. Please provide either the path to a local folder or the repo_id of a model on the Hub.) -> legacy build_dataloaders
