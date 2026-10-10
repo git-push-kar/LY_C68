@@ -92,3 +92,21 @@
 13:29:04 | ======================================================================================
 13:29:04 | DPO Preference Training Complete in 2h 19m 50s (8390.8s). Best Reward Accuracy: 91.03%
 13:29:04 | Checkpoints directory: ./runs/intern_v2_dpo\checkpoints
+22:22:25 | ======================================================================================
+22:22:25 | DeepfakeReasoningModel v2 — DPO Preference Alignment Stage
+22:22:25 | Device: cuda
+22:22:25 | GPU   : NVIDIA RTX A5000
+22:22:25 | VRAM  : 25.8 GB
+22:22:25 | Checkpoint source : ./runs/intern_fused/checkpoints/best.pth
+22:22:25 | DPO Beta: 0.1 | DPO LR: 1e-06 | Epochs: 2
+22:22:25 | ======================================================================================
+22:22:25 | Loading preference dataset (mipo_3k.json) ...
+22:22:32 | Loaded 3,480 chosen/rejected pairs for DPO.
+22:22:32 | Building Policy Model (trainable) ...
+22:22:39 | Loading checkpoint weights into Policy Model: ./runs/intern_fused/checkpoints/best.pth
+22:22:41 | Building Reference Model (frozen copy) ...
+22:22:46 | Policy model trainable LoRA parameters: 80,150,528
+22:22:46 |   Ep      Steps       Time   DPOLoss   RewardMargin   RewardAcc  Best
+22:22:46 | ======================================================================================
+22:23:15 | DPO Ep 1 | Step    1/870 (  0.1%) | 28.17s/step | Elapsed 28.2s | ETA 6h 47m 57s | Loss 0.9725 | Margin -0.4896 | Acc 0.00%
+22:28:56 | DPO Ep 1 | Step   50/870 (  5.7%) | 7.38s/step | Elapsed 6m 09s | ETA 1h 40m 53s | Loss 0.7433 | Margin -0.0571 | Acc 25.00%

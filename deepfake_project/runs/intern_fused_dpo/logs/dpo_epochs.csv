@@ -1,0 +1,3 @@
+epoch,steps,time_sec,time_str,dpo_loss,chosen_reward,rejected_reward,reward_margin,reward_acc,is_best
+1,870,6045.13,1h 40m 45s,0.44811,0.798931,-0.143267,0.942198,0.8017,1
+2,870,6068.67,1h 41m 08s,0.237814,1.370699,-0.467016,1.837715,0.9661,1
