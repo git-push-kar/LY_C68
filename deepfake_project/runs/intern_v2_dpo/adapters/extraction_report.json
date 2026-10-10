@@ -1,0 +1,35 @@
+{
+  "source_checkpoint": "C:\\Users\\Admin\\Desktop\\LY_C68\\deepfake_project\\runs\\intern_v2_dpo\\checkpoints\\dpo_best.pth",
+  "epoch": 2,
+  "adapters": {
+    "llm_adapter": {
+      "tensors": 392,
+      "params": 73859072,
+      "dtype": "torch.bfloat16",
+      "target_modules": [
+        "down_proj",
+        "gate_proj",
+        "k_proj",
+        "o_proj",
+        "q_proj",
+        "up_proj",
+        "v_proj"
+      ],
+      "r": 64,
+      "lora_alpha": 128
+    },
+    "vision_adapter": {
+      "tensors": 192,
+      "params": 6291456,
+      "dtype": "torch.bfloat16",
+      "target_modules": [
+        "fc1",
+        "fc2",
+        "proj",
+        "qkv"
+      ],
+      "r": 16,
+      "lora_alpha": 32
+    }
+  }
+}

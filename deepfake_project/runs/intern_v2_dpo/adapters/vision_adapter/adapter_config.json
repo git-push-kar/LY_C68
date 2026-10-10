@@ -1,0 +1,28 @@
+{
+  "peft_type": "LORA",
+  "auto_mapping": null,
+  "base_model_name_or_path": "./deepfake_project/models/InternVL3-2B",
+  "revision": null,
+  "task_type": null,
+  "inference_mode": false,
+  "r": 16,
+  "target_modules": [
+    "fc1",
+    "fc2",
+    "proj",
+    "qkv"
+  ],
+  "lora_alpha": 32,
+  "lora_dropout": 0.05,
+  "fan_in_fan_out": false,
+  "bias": "none",
+  "modules_to_save": null,
+  "init_lora_weights": true,
+  "layers_to_transform": null,
+  "layers_pattern": null,
+  "rank_pattern": {},
+  "alpha_pattern": {},
+  "megatron_config": null,
+  "megatron_core": "megatron.core",
+  "loftq_config": {}
+}

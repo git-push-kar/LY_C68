@@ -489,3 +489,83 @@
 10:26:13 | VRAM  : 25.8 GB
 10:26:13 | ======================================================================================
 10:26:13 | Loading tokenizer & data ...
+10:27:29 |   CLS pool : 48,320 samples (all.json, bare allowed)
+10:27:29 |   SFT pool : 35,063 samples (sft_36k.json, rich only)
+10:27:29 |   PREF pool: 3,480 pairs (mipo_3k.json, ready for DPO)
+10:27:29 | Answer token IDs: real=7951, fake=30570
+10:27:38 | Optimizer param groups: LoRA=584 tensors, Custom=47 tensors
+10:27:42 | Resumed from epoch 3, best AUC=0.9915
+10:27:42 | ======================================================================================
+10:27:42 |   batch_size=4  grad_accum=8  eff_batch=32
+10:27:42 |   lm_seq_len=512  consistency_weight=0.05
+10:27:42 |   lm_loss_curriculum: start=0.3 -> end=0.6
+10:27:42 |   epochs_cls=3  epochs_joint=3  total_epochs=6
+10:27:42 |   lr=5e-05  llm_lora_rank=64  vision_lora_rank=16
+10:27:42 |   attn_impl=sdpa  grad_ckpt=True
+10:27:42 |   steps/epoch=8765  optimizer_updates/epoch=1096
+10:27:42 |   logs -> ./runs/intern_fused\logs
+10:27:42 | ======================================================================================
+10:27:42 |   Ep    Stage       Steps       Time   TrLoss   TrAcc   VaLoss   VaAcc   VaAUC   LM_W  Best
+10:27:42 | ======================================================================================
+10:39:18 | Ep 4 | Step     1/8765 (  0.0%) | 696.28s/step | Elapsed 11m 36s | ETA 1695h 02m 41s | Loss 2.4423 | Cls 0.2620 | LM 7.0730 (w=0.30) | Cons 1.1685
+10:46:46 | Ep 4 | Step   200/8765 (  2.3%) | 5.72s/step | Elapsed 19m 04s | ETA 13h 36m 39s | Loss 1.2384 | Cls 0.2049 | LM 3.4063 (w=0.30) | Cons 0.2335
+10:54:24 | Ep 4 | Step   400/8765 (  4.6%) | 4.01s/step | Elapsed 26m 42s | ETA 9h 18m 32s | Loss 0.9634 | Cls 0.2215 | LM 2.4705 (w=0.30) | Cons 0.0159
+11:01:58 | Ep 4 | Step   600/8765 (  6.8%) | 3.43s/step | Elapsed 34m 16s | ETA 7h 46m 22s | Loss 0.9918 | Cls 0.3336 | LM 2.1792 (w=0.30) | Cons 0.0899
+11:09:29 | Ep 4 | Step   800/8765 (  9.1%) | 3.13s/step | Elapsed 41m 46s | ETA 6h 55m 56s | Loss 0.8012 | Cls 0.2233 | LM 1.9111 (w=0.30) | Cons 0.0924
+11:17:01 | Ep 4 | Step  1000/8765 ( 11.4%) | 2.96s/step | Elapsed 49m 18s | ETA 6h 22m 54s | Loss 0.7816 | Cls 0.2190 | LM 1.7517 (w=0.30) | Cons 0.7425
+11:24:36 | Ep 4 | Step  1200/8765 ( 13.7%) | 2.85s/step | Elapsed 56m 54s | ETA 5h 58m 45s | Loss 0.8227 | Cls 0.3188 | LM 1.6676 (w=0.30) | Cons 0.0724
+11:39:13 | Ep 4 | Step  1400/8765 ( 16.0%) | 3.06s/step | Elapsed 1h 11m 30s | ETA 6h 16m 12s | Loss 0.6586 | Cls 0.2348 | LM 1.3939 (w=0.30) | Cons 0.1133
+11:46:44 | Ep 4 | Step  1600/8765 ( 18.3%) | 2.96s/step | Elapsed 1h 19m 01s | ETA 5h 53m 54s | Loss 0.7220 | Cls 0.2508 | LM 1.5403 (w=0.30) | Cons 0.1818
+11:54:14 | Ep 4 | Step  1800/8765 ( 20.5%) | 2.88s/step | Elapsed 1h 26m 32s | ETA 5h 34m 51s | Loss 0.6804 | Cls 0.2242 | LM 1.5139 (w=0.30) | Cons 0.0409
+12:01:44 | Ep 4 | Step  2000/8765 ( 22.8%) | 2.82s/step | Elapsed 1h 34m 02s | ETA 5h 18m 05s | Loss 0.7916 | Cls 0.3314 | LM 1.5086 (w=0.30) | Cons 0.1545
+12:09:15 | Ep 4 | Step  2200/8765 ( 25.1%) | 2.77s/step | Elapsed 1h 41m 33s | ETA 5h 03m 02s | Loss 0.8721 | Cls 0.4988 | LM 1.2322 (w=0.30) | Cons 0.0732
+12:16:45 | Ep 4 | Step  2400/8765 ( 27.4%) | 2.73s/step | Elapsed 1h 49m 03s | ETA 4h 49m 13s | Loss 0.5828 | Cls 0.2033 | LM 1.2627 (w=0.30) | Cons 0.0143
+12:24:15 | Ep 4 | Step  2600/8765 ( 29.7%) | 2.69s/step | Elapsed 1h 56m 33s | ETA 4h 36m 22s | Loss 0.6344 | Cls 0.2067 | LM 1.4223 (w=0.30) | Cons 0.0201
+12:31:46 | Ep 4 | Step  2800/8765 ( 31.9%) | 2.66s/step | Elapsed 2h 04m 04s | ETA 4h 24m 18s | Loss 1.0401 | Cls 0.6159 | LM 1.4141 (w=0.30) | Cons 0.0007
+12:39:17 | Ep 4 | Step  3000/8765 ( 34.2%) | 2.63s/step | Elapsed 2h 11m 35s | ETA 4h 12m 51s | Loss 0.5723 | Cls 0.2120 | LM 1.1989 (w=0.30) | Cons 0.0127
+12:46:48 | Ep 4 | Step  3200/8765 ( 36.5%) | 2.61s/step | Elapsed 2h 19m 06s | ETA 4h 01m 54s | Loss 0.5636 | Cls 0.2020 | LM 1.1897 (w=0.30) | Cons 0.0930
+12:54:19 | Ep 4 | Step  3400/8765 ( 38.8%) | 2.59s/step | Elapsed 2h 26m 37s | ETA 3h 51m 21s | Loss 0.7756 | Cls 0.3111 | LM 1.5479 (w=0.30) | Cons 0.0041
+13:01:51 | Ep 4 | Step  3600/8765 ( 41.1%) | 2.57s/step | Elapsed 2h 34m 08s | ETA 3h 41m 09s | Loss 1.1409 | Cls 0.7134 | LM 1.4220 (w=0.30) | Cons 0.0169
+13:09:23 | Ep 4 | Step  3800/8765 ( 43.4%) | 2.55s/step | Elapsed 2h 41m 40s | ETA 3h 31m 14s | Loss 0.5618 | Cls 0.2362 | LM 1.0717 (w=0.30) | Cons 0.0815
+13:16:54 | Ep 4 | Step  4000/8765 ( 45.6%) | 2.54s/step | Elapsed 2h 49m 11s | ETA 3h 21m 33s | Loss 0.7855 | Cls 0.4345 | LM 1.1654 (w=0.30) | Cons 0.0291
+13:24:25 | Ep 4 | Step  4200/8765 ( 47.9%) | 2.52s/step | Elapsed 2h 56m 43s | ETA 3h 12m 04s | Loss 0.5957 | Cls 0.2258 | LM 1.2320 (w=0.30) | Cons 0.0058
+13:31:56 | Ep 4 | Step  4400/8765 ( 50.2%) | 2.51s/step | Elapsed 3h 04m 14s | ETA 3h 02m 46s | Loss 0.5625 | Cls 0.2013 | LM 1.1925 (w=0.30) | Cons 0.0694
+13:39:28 | Ep 4 | Step  4600/8765 ( 52.5%) | 2.50s/step | Elapsed 3h 11m 45s | ETA 2h 53m 37s | Loss 0.5143 | Cls 0.2101 | LM 1.0067 (w=0.30) | Cons 0.0433
+13:46:59 | Ep 4 | Step  4800/8765 ( 54.8%) | 2.49s/step | Elapsed 3h 19m 16s | ETA 2h 44m 36s | Loss 0.6301 | Cls 0.2255 | LM 1.3422 (w=0.30) | Cons 0.0393
+13:54:30 | Ep 4 | Step  5000/8765 ( 57.0%) | 2.48s/step | Elapsed 3h 26m 47s | ETA 2h 35m 43s | Loss 0.6729 | Cls 0.3514 | LM 1.0477 (w=0.30) | Cons 0.1444
+14:02:01 | Ep 4 | Step  5200/8765 ( 59.3%) | 2.47s/step | Elapsed 3h 34m 18s | ETA 2h 26m 55s | Loss 0.5633 | Cls 0.2160 | LM 1.1561 (w=0.30) | Cons 0.0093
+14:09:33 | Ep 4 | Step  5400/8765 ( 61.6%) | 2.46s/step | Elapsed 3h 41m 50s | ETA 2h 18m 14s | Loss 0.9672 | Cls 0.6361 | LM 1.1006 (w=0.30) | Cons 0.0185
+14:17:06 | Ep 4 | Step  5600/8765 ( 63.9%) | 2.46s/step | Elapsed 3h 49m 24s | ETA 2h 09m 39s | Loss 0.5489 | Cls 0.2072 | LM 1.1317 (w=0.30) | Cons 0.0423
+14:24:48 | Ep 4 | Step  5800/8765 ( 66.2%) | 2.45s/step | Elapsed 3h 57m 05s | ETA 2h 01m 12s | Loss 0.6044 | Cls 0.2002 | LM 1.3446 (w=0.30) | Cons 0.0164
+14:32:23 | Ep 4 | Step  6000/8765 ( 68.5%) | 2.45s/step | Elapsed 4h 04m 40s | ETA 1h 52m 45s | Loss 0.6148 | Cls 0.2025 | LM 1.3692 (w=0.30) | Cons 0.0293
+14:39:59 | Ep 4 | Step  6200/8765 ( 70.7%) | 2.44s/step | Elapsed 4h 12m 16s | ETA 1h 44m 22s | Loss 0.6065 | Cls 0.2198 | LM 1.2883 (w=0.30) | Cons 0.0036
+14:47:30 | Ep 4 | Step  6400/8765 ( 73.0%) | 2.44s/step | Elapsed 4h 19m 48s | ETA 1h 36m 00s | Loss 1.0022 | Cls 0.7188 | LM 0.9416 (w=0.30) | Cons 0.0195
+14:55:02 | Ep 4 | Step  6600/8765 ( 75.3%) | 2.43s/step | Elapsed 4h 27m 19s | ETA 1h 27m 41s | Loss 0.5156 | Cls 0.2049 | LM 1.0296 (w=0.30) | Cons 0.0378
+15:02:33 | Ep 4 | Step  6800/8765 ( 77.6%) | 2.43s/step | Elapsed 4h 34m 50s | ETA 1h 19m 25s | Loss 0.6008 | Cls 0.2512 | LM 1.1624 (w=0.30) | Cons 0.0172
+15:10:04 | Ep 4 | Step  7000/8765 ( 79.9%) | 2.42s/step | Elapsed 4h 42m 22s | ETA 1h 11m 11s | Loss 0.6331 | Cls 0.3043 | LM 1.0923 (w=0.30) | Cons 0.0232
+15:17:36 | Ep 4 | Step  7200/8765 ( 82.1%) | 2.42s/step | Elapsed 4h 49m 53s | ETA 1h 03m 00s | Loss 0.7960 | Cls 0.4011 | LM 1.2997 (w=0.30) | Cons 0.0997
+15:25:07 | Ep 4 | Step  7400/8765 ( 84.4%) | 2.41s/step | Elapsed 4h 57m 25s | ETA 54m 51s | Loss 0.5800 | Cls 0.2412 | LM 1.1251 (w=0.30) | Cons 0.0255
+15:32:39 | Ep 4 | Step  7600/8765 ( 86.7%) | 2.41s/step | Elapsed 5h 04m 56s | ETA 46m 44s | Loss 0.5310 | Cls 0.2326 | LM 0.9705 (w=0.30) | Cons 0.1451
+15:40:10 | Ep 4 | Step  7800/8765 ( 89.0%) | 2.40s/step | Elapsed 5h 12m 27s | ETA 38m 39s | Loss 0.6202 | Cls 0.2161 | LM 1.3446 (w=0.30) | Cons 0.0148
+15:47:41 | Ep 4 | Step  8000/8765 ( 91.3%) | 2.40s/step | Elapsed 5h 19m 59s | ETA 30m 35s | Loss 0.5869 | Cls 0.2194 | LM 1.2038 (w=0.30) | Cons 0.1280
+15:55:13 | Ep 4 | Step  8200/8765 ( 93.6%) | 2.40s/step | Elapsed 5h 27m 30s | ETA 22m 33s | Loss 1.0610 | Cls 0.7197 | LM 1.1311 (w=0.30) | Cons 0.0399
+16:02:44 | Ep 4 | Step  8400/8765 ( 95.8%) | 2.39s/step | Elapsed 5h 35m 02s | ETA 14m 33s | Loss 0.6600 | Cls 0.3024 | LM 1.1869 (w=0.30) | Cons 0.0316
+16:10:15 | Ep 4 | Step  8600/8765 ( 98.1%) | 2.39s/step | Elapsed 5h 42m 33s | ETA 6m 34s | Loss 0.6116 | Cls 0.2241 | LM 1.2775 (w=0.30) | Cons 0.0842
+16:16:28 | Ep 4 | Step  8765/8765 (100.0%) | 2.39s/step | Elapsed 5h 48m 46s | ETA 0.0s | Loss 0.5736 | Cls 0.2229 | LM 1.1647 (w=0.30) | Cons 0.0242
+16:16:32 |   Stage 2 Joint Epoch 4 completed: 8765/8765 pairs | Optimizer updates: 1096 | Duration: 5h 48m 49s (20929.6s) | Avg Speed: 2.388s/step | Curriculum LM weight: 0.300
+16:21:08 |   ------------------------------------------------------------
+16:21:08 |   Validation Per-Family Diagnostics (1 categories, elapsed 4m 31s):
+16:21:08 |     - Family unknown      : Acc=94.67% | N=4000 (Real=2000, Fake=2000)
+16:21:08 |   ------------------------------------------------------------
+16:21:08 |    4    joint   8765/8765 5h 48m 49s   0.7277  0.9431   0.2958  0.9467  0.9914   0.30      
+16:21:15 |   Saved: ./runs/intern_fused\checkpoints\ep004.pth
+16:43:26 | Ep 5 | Step     1/8765 (  0.0%) | 1331.02s/step | Elapsed 22m 11s | ETA 3240h 18m 07s | Loss 0.6734 | Cls 0.2125 | LM 1.0211 (w=0.45) | Cons 0.0273
+16:50:52 | Ep 5 | Step   200/8765 (  2.3%) | 8.89s/step | Elapsed 29m 37s | ETA 21h 08m 34s | Loss 0.7855 | Cls 0.2871 | LM 1.1062 (w=0.45) | Cons 0.0113
+16:58:24 | Ep 5 | Step   400/8765 (  4.6%) | 5.57s/step | Elapsed 37m 08s | ETA 12h 56m 43s | Loss 0.7699 | Cls 0.2163 | LM 1.2267 (w=0.45) | Cons 0.0321
+17:05:55 | Ep 5 | Step   600/8765 (  6.8%) | 4.47s/step | Elapsed 44m 39s | ETA 10h 07m 45s | Loss 0.7834 | Cls 0.2055 | LM 1.2837 (w=0.45) | Cons 0.0046
+17:13:27 | Ep 5 | Step   800/8765 (  9.1%) | 3.92s/step | Elapsed 52m 12s | ETA 8h 39m 43s | Loss 0.8097 | Cls 0.2019 | LM 1.3502 (w=0.45) | Cons 0.0038
+17:20:58 | Ep 5 | Step  1000/8765 ( 11.4%) | 3.58s/step | Elapsed 59m 43s | ETA 7h 43m 45s | Loss 0.7216 | Cls 0.2139 | LM 1.1265 (w=0.45) | Cons 0.0168
+17:28:30 | Ep 5 | Step  1200/8765 ( 13.7%) | 3.36s/step | Elapsed 1h 07m 14s | ETA 7h 03m 55s | Loss 0.7433 | Cls 0.2184 | LM 1.1488 (w=0.45) | Cons 0.1593
+17:36:01 | Ep 5 | Step  1400/8765 ( 16.0%) | 3.20s/step | Elapsed 1h 14m 45s | ETA 6h 33m 19s | Loss 0.7086 | Cls 0.2094 | LM 1.0783 (w=0.45) | Cons 0.2780
+17:43:33 | Ep 5 | Step  1600/8765 ( 18.3%) | 3.09s/step | Elapsed 1h 22m 17s | ETA 6h 08m 32s | Loss 0.8261 | Cls 0.2358 | LM 1.3078 (w=0.45) | Cons 0.0360
+17:51:04 | Ep 5 | Step  1800/8765 ( 20.5%) | 2.99s/step | Elapsed 1h 29m 49s | ETA 5h 47m 33s | Loss 1.0713 | Cls 0.5313 | LM 1.1968 (w=0.45) | Cons 0.0294
