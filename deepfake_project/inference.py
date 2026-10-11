@@ -108,10 +108,6 @@ def parse_args():
                         "(sycophancy audit: feed a deliberately wrong verdict and check "
                         "whether the reasoning parrots it or weighs the evidence). "
                         "Classifier logits/confidence are still reported unmodified.")
-    p.add_argument("--verdict_source",   default="classifier", choices=["classifier", "both"],
-                   help="classifier (default): classifier verdict is the only decision shown; "
-                        "LLM <answer> is hidden and mismatches route to a review queue. "
-                        "both: legacy display with Generated answer + WARNING (debugging).")
     return p.parse_args()
 
 
@@ -221,22 +217,15 @@ def build_telemetry_prompt(telemetry: dict) -> str:
 
 
 def format_result(img_path: str, cls_label: int, cls_conf: float,
-                   raw_text: str, tags: dict, telemetry: Optional[dict] = None,
-                   verdict_source: str = "both") -> str:
+                   raw_text: str, tags: dict, telemetry: Optional[dict] = None) -> str:
     """Render one image block.
 
-    verdict_source="classifier" (production rule): the classifier verdict is
-    the only decision shown — the LLM's <answer> is never displayed. A
-    mismatch (or unparsable answer) is routed to the human review queue
-    instead of a WARNING. "both" keeps the legacy display (gen answer +
-    WARNING) for debugging.
+    Production rule: the classifier verdict is the ONLY decision. The LLM
+    produces reasoning text only — its <answer> is never displayed, never
+    compared, and no WARNING/conflict/review lines exist. There is nothing
+    to conflict with because the LLM classification is not consumed.
     """
     verdict = "FAKE" if cls_label == 1 else "REAL"
-    gen_answer = tags.get("answer", "unknown")
-    mismatch = gen_answer in ("real", "fake") and (
-        ("FAKE" if gen_answer == "fake" else "REAL") != verdict)
-    unparsed = gen_answer == "unknown"
-    needs_review = mismatch or unparsed
 
     sep = "=" * 64
     lines = [
@@ -273,21 +262,6 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
             line = line.strip()
             if line:
                 lines.append(f"    {line}")
-
-    gen_answer = tags.get("answer", "unknown")
-    if verdict_source == "classifier":
-        # Production rule: LLM classification is never shown and never decides.
-        if mismatch:
-            lines.append(f"\n  [REVIEW] Reasoning disagrees with classifier verdict — queued for human review")
-        elif unparsed:
-            lines.append(f"\n  [REVIEW] Reasoning answer unparsable — queued for human review")
-    else:
-        lines.append(f"\n  Generated answer : {gen_answer.upper()}")
-        if tags.get("answer_heuristic"):
-            lines.append(f"  [NOTE] Answer tag was boolean (true/false); mapped heuristically")
-        if mismatch:
-            gen_verdict = "FAKE" if gen_answer == "fake" else "REAL"
-            lines.append(f"  [WARNING] Reasoning answer ({gen_verdict}) disagrees with classifier ({verdict})")
 
     lines.append(sep)
     return "\n".join(lines)
@@ -366,8 +340,6 @@ def main():
     model.eval()
 
     summary = []
-    review_queue = []
-    verdict_source = getattr(args, "verdict_source", "both")
     logger.info(f"\nProcessing {len(args.images)} image(s) ...\n")
 
     for img_name in args.images:
@@ -429,43 +401,22 @@ def main():
         verdict  = "FAKE" if cls_pred == 1 else "REAL"
 
         logger.info(format_result(img_path, cls_pred, cls_conf, raw_text, tags,
-                                  telemetry=telemetry, verdict_source=verdict_source))
+                                  telemetry=telemetry))
 
-        gen_ans = tags.get("answer", "unknown").upper()
         summary.append({
             "image":   os.path.basename(img_path),
             "verdict": verdict,
             "conf":    cls_conf,
-            "gen_ans": gen_ans,
         })
-        if verdict_source == "classifier":
-            if gen_ans == "UNKNOWN":
-                review_queue.append((os.path.basename(img_path), verdict, "unparsable answer"))
-            elif gen_ans != verdict:
-                review_queue.append((os.path.basename(img_path), verdict,
-                                     f"reasoning says {gen_ans}"))
 
     logger.info("\n" + "=" * 64)
     logger.info("SUMMARY")
     logger.info("=" * 64)
-    if verdict_source == "classifier":
-        logger.info(f"  {'Image':<18} {'Verdict':<10} {'Conf'}")
-        logger.info(f"  {'-'*18} {'-'*10} {'-'*8}")
-        for r in summary:
-            logger.info(f"  {r['image']:<18} {r['verdict']:<10} {r['conf']:<8.1%}")
-    else:
-        logger.info(f"  {'Image':<18} {'Classifier':<10} {'Conf':<8} {'Gen Answer'}")
-        logger.info(f"  {'-'*18} {'-'*10} {'-'*8} {'-'*12}")
-        for r in summary:
-            logger.info(f"  {r['image']:<18} {r['verdict']:<10} {r['conf']:<8.1%} {r['gen_ans']}")
+    logger.info(f"  {'Image':<18} {'Verdict':<10} {'Conf'}")
+    logger.info(f"  {'-'*18} {'-'*10} {'-'*8}")
+    for r in summary:
+        logger.info(f"  {r['image']:<18} {r['verdict']:<10} {r['conf']:<8.1%}")
     logger.info("=" * 64)
-    if verdict_source == "classifier":
-        logger.info(f"\nREVIEW QUEUE ({len(review_queue)}): mismatches + unparsable answers for human review")
-        for img, ver, reason in review_queue:
-            logger.info(f"  {img:<18} classifier={ver:<5} reason: {reason}")
-        if not review_queue:
-            logger.info("  (empty — all reasoning agreed and parsed)")
-        logger.info("=" * 64)
     logger.info(f"\nLog saved to: {log_path}")
     logger.info("Done.")
 
