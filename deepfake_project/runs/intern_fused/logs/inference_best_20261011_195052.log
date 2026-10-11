@@ -1,0 +1,70 @@
+Inference log : ./deepfake_project/runs/intern_fused/logs\inference_best_20261011_195052.log
+Checkpoint    : ./deepfake_project/runs/intern_fused/checkpoints/best.pth
+Images        : ['deepfake_project/test_images/real/160932.png', 'deepfake_project/test_images/real/310151.png', 'deepfake_project/test_images/real/40000001.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./deepfake_project/runs/intern_fused/checkpoints/best.pth
+  epoch=5  stage=?  missing=0  unexpected=0
+
+Processing 3 image(s) ...
+
+
+================================================================
+  Image             : 160932.png
+  Classifier verdict: FAKE  (conf 94.7%)
+  Anomaly Hotspots  : Peripheral / Ear & Hair blending seams, Eyes & Facial midline
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.22 (lower ratio = smoother image with less high-frequency detail)
+================================================================
+
+  [Planning]
+    [@1: The image is real.[(((((triple10 triple7) -> rule3)) -> rule1))]
+
+  [Conclusion]
+    True
+
+  Generated answer : REAL
+  [WARNING] Reasoning answer (REAL) disagrees with classifier (FAKE)
+================================================================
+
+================================================================
+  Image             : 310151.png
+  Classifier verdict: FAKE  (conf 70.2%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.23 (lower ratio = smoother image with less high-frequency detail)
+================================================================
+
+  [Raw LM output]
+    </quick>
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 40000001.jpg
+  Classifier verdict: REAL  (conf 94.1%)
+  Anomaly Hotspots  : Nose & Cheek region, Forehead / Upper hairline
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.25 (lower ratio = smoother image with less high-frequency detail)
+================================================================
+
+  [Raw LM output]
+    </quick>
+    <answer>True</answer>
+
+  Generated answer : REAL
+  [NOTE] Answer tag was boolean (true/false); mapped heuristically
+================================================================
+
+================================================================
+SUMMARY
+================================================================
+  Image              Classifier Conf     Gen Answer
+  ------------------ ---------- -------- ------------
+  160932.png         FAKE       94.7%    REAL
+  310151.png         FAKE       70.2%    UNKNOWN
+  40000001.jpg       REAL       94.1%    REAL
+================================================================
+
+Log saved to: ./deepfake_project/runs/intern_fused/logs\inference_best_20261011_195052.log
+Done.

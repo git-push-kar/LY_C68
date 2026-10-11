@@ -89,8 +89,15 @@ def parse_args():
                    help="Condition LLM on classifier telemetry (verdict, attention hotspots, FFT)")
     p.add_argument("--no_grounded_reasoning", action="store_false", dest="grounded_reasoning",
                    help="Disable telemetry conditioning (pure visual reasoning)")
-    p.add_argument("--temperature",    type=float, default=0.6)
-    p.add_argument("--repetition_penalty", type=float, default=1.15)
+    p.add_argument("--temperature",    type=float, default=1.0)
+    p.add_argument("--top_p",          type=float, default=1.0)
+    p.add_argument("--repetition_penalty", type=float, default=1.05)
+    p.add_argument("--do_sample",      action="store_true", default=False,
+                   help="Enable stochastic sampling (default: deterministic greedy, "
+                        "which is what the model was validated with)")
+    p.add_argument("--raw",            action="store_true",
+                   help="Run the base pretrained model without any fine-tuned checkpoint "
+                        "(randomly-initialized v2 heads). Skips --checkpoint.")
     return p.parse_args()
 
 
@@ -113,12 +120,27 @@ _TAG_RE = re.compile(
 _ANSWER_RE = re.compile(
     r"<answer>\s*(real|fake)\s*</answer>", re.IGNORECASE
 )
+# Fallback: model sometimes emits a boolean instead of real/fake.
+# Interpreted as "is the image real?" -> True=real, False=fake.
+_ANSWER_BOOL_RE = re.compile(
+    r"<answer>\s*(true|false)\s*</answer>", re.IGNORECASE
+)
 
 def parse_reasoning(text: str) -> dict:
     tags = {m.group(1).lower(): m.group(2).strip()
             for m in _TAG_RE.finditer(text)}
     m = _ANSWER_RE.search(text)
-    tags["answer"] = m.group(1).lower() if m else "unknown"
+    if m:
+        tags["answer"] = m.group(1).lower()
+        tags["answer_heuristic"] = False
+    else:
+        mb = _ANSWER_BOOL_RE.search(text)
+        if mb:
+            tags["answer"] = "real" if mb.group(1).lower() == "true" else "fake"
+            tags["answer_heuristic"] = True
+        else:
+            tags["answer"] = "unknown"
+            tags["answer_heuristic"] = False
     return tags
 
 
@@ -194,13 +216,15 @@ def extract_forensic_telemetry(
         lf_energy = ff[:, low_mask].mean().item() if ff.dim() == 3 else ff[low_mask].mean().item()
         ratio = hf_energy / (lf_energy + 1e-6)
 
-        if cls_pred == 1:
-            if ratio < 0.65:
-                spectral_desc = f"High-frequency attenuation (ratio={ratio:.2f}); generative over-smoothing detected"
-            else:
-                spectral_desc = f"Spectral peak irregularities (ratio={ratio:.2f}); synthetic grid harmonics detected"
-        else:
-            spectral_desc = f"Natural spectral roll-off (ratio={ratio:.2f}); consistent optical sensor noise"
+        # NOTE: keep this description verdict-NEUTRAL (a bare measurement).
+        # The old version branched on cls_pred and wrote the conclusion
+        # ("over-smoothing detected" vs "consistent sensor noise") into the
+        # "evidence" itself, which only parroted the classifier back to the LLM
+        # instead of giving it independent proof to weigh.
+        spectral_desc = (
+            f"HF/LF log-magnitude energy ratio={ratio:.2f} "
+            f"(lower ratio = smoother image with less high-frequency detail)"
+        )
 
     regions_str = ", ".join(regions)
     return {
@@ -212,7 +236,14 @@ def extract_forensic_telemetry(
 
 
 def build_telemetry_prompt(telemetry: dict) -> str:
-    """Builds structured forensic context passed to the LLM."""
+    """Builds structured forensic context passed to the LLM.
+
+    Mirrors the training-target format (dataset.py): only the known tag
+    vocabulary (<fast>/<planning>/<reasoning>/<reflection>/<conclusion>/
+    <answer>) and an explicit answer vocabulary (real|fake). Without the
+    explicit format instruction the model emits booleans, pseudo-tags and
+    unterminated ramble (all of which parse as UNKNOWN).
+    """
     v = telemetry["verdict"]
     c = telemetry["conf"]
     s = telemetry["spectral_desc"]
@@ -220,10 +251,12 @@ def build_telemetry_prompt(telemetry: dict) -> str:
 
     return (
         f"[Forensic Telemetry]\n"
-        f"- Statistical Classification : {v} (Confidence: {c:.1%})\n"
-        f"- Frequency Domain Analysis  : {s}\n"
-        f"- Primary Anomaly Hotspots   : {r}\n\n"
-        f"Synthesize the visual tokens with this forensic telemetry to formulate a structured authenticity explanation with <fast>, <planning>, <reasoning>, <reflection>, <conclusion>, and <answer> tags:\n"
+        f"- Statistical read-out (verify against what you see, do not blindly repeat): {v} (confidence {c:.1%})\n"
+        f"- Frequency measurement: {s}\n"
+        f"- Attention hotspots: {r}\n\n"
+        f"Weigh the telemetry numbers against the visual evidence, then explain using "
+        f"<fast>, <planning>, <reasoning>, <reflection> and <conclusion> tags only. "
+        f"Finish with exactly <answer>real</answer> or <answer>fake</answer> and nothing after it.\n"
     )
 
 
@@ -268,6 +301,8 @@ def format_result(img_path: str, cls_label: int, cls_conf: float,
 
     gen_answer = tags.get("answer", "unknown")
     lines.append(f"\n  Generated answer : {gen_answer.upper()}")
+    if tags.get("answer_heuristic"):
+        lines.append(f"  [NOTE] Answer tag was boolean (true/false); mapped heuristically")
     if gen_answer in ("real", "fake"):
         gen_verdict = "FAKE" if gen_answer == "fake" else "REAL"
         if gen_verdict != verdict:
@@ -283,10 +318,10 @@ def main():
     args = parse_args()
     _cfg = _load_config(args.config)
 
-    if not args.checkpoint and "checkpoint" in _cfg:
+    if not args.checkpoint and "checkpoint" in _cfg and not args.raw:
         args.checkpoint = _cfg["checkpoint"]
-    if not args.checkpoint:
-        sys.exit("ERROR: --checkpoint required (via CLI or config.yaml)")
+    if not args.checkpoint and not args.raw:
+        sys.exit("ERROR: --checkpoint required (via CLI or config.yaml), or pass --raw for the base model")
 
     if not args.images:
         if "inference_images" in _cfg and _cfg["inference_images"]:
@@ -305,7 +340,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     transform  = build_transform(args.image_size)
 
-    ckpt_name = os.path.splitext(os.path.basename(args.checkpoint))[0]
+    ckpt_name = "raw" if args.raw else os.path.splitext(os.path.basename(args.checkpoint))[0]
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     if args.log_dir is None:
         args.log_dir = os.path.join(script_dir, "runs", "inference_logs")
@@ -314,7 +349,7 @@ def main():
     logger = setup_logger(log_path)
 
     logger.info(f"Inference log : {log_path}")
-    logger.info(f"Checkpoint    : {args.checkpoint}")
+    logger.info(f"Checkpoint    : {'(none — raw base model)' if args.raw else args.checkpoint}")
     logger.info(f"Images        : {args.images}")
     logger.info(f"Device        : {device}")
     if device.type == "cuda":
@@ -335,13 +370,18 @@ def main():
         use_gradient_checkpointing=False,
     ).to(device)
 
-    logger.info(f"Loading checkpoint: {args.checkpoint}")
-    ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    state_dict = ckpt.get("model", ckpt)
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    epoch = ckpt.get("epoch", "?")
-    stage = ckpt.get("stage", "?")
-    logger.info(f"  epoch={epoch}  stage={stage}  missing={len(missing)}  unexpected={len(unexpected)}")
+    if args.raw:
+        logger.info("Raw base model: no checkpoint loaded "
+                    "(pretrained backbone + randomly-initialized v2 heads; "
+                    "classifier verdict is untrained, reasoning comes from the base LLM)")
+    else:
+        logger.info(f"Loading checkpoint: {args.checkpoint}")
+        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+        state_dict = ckpt.get("model", ckpt)
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        epoch = ckpt.get("epoch", "?")
+        stage = ckpt.get("stage", "?")
+        logger.info(f"  epoch={epoch}  stage={stage}  missing={len(missing)}  unexpected={len(unexpected)}")
     model.eval()
 
     summary = []
@@ -390,9 +430,9 @@ def main():
             result = model.predict(
                 pv, tokenizer, freq_features=freq,
                 max_new_tokens=args.max_new_tokens,
-                do_sample=True,
+                do_sample=args.do_sample,
                 temperature=args.temperature,
-                top_p=0.9,
+                top_p=args.top_p,
                 repetition_penalty=args.repetition_penalty,
                 prompt_text=prompt_text,
             )

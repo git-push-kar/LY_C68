@@ -782,9 +782,13 @@ class DeepfakeReasoningModel(nn.Module):
             vis_tokens = self._get_native_visual_tokens(pixel_values[i:i+1])
             inputs_embeds = vis_tokens.to(torch.bfloat16)
 
-            # If forensic telemetry prompt is supplied, append its embeddings
+            # If forensic telemetry prompt is supplied, append its embeddings.
+            # NOTE: add_special_tokens=False — a BOS/EOS injected mid-sequence
+            # derails the fine-tuned continuation pattern into tag soup.
             if prompt_text:
-                prompt_ids = tokenizer(prompt_text, return_tensors="pt").input_ids.to(device)
+                prompt_ids = tokenizer(
+                    prompt_text, return_tensors="pt",
+                    add_special_tokens=False).input_ids.to(device)
                 prompt_embeds = self.backbone.language_model.get_input_embeddings()(prompt_ids)
                 inputs_embeds = torch.cat([inputs_embeds, prompt_embeds.to(inputs_embeds.dtype)], dim=1)
 
@@ -793,6 +797,24 @@ class DeepfakeReasoningModel(nn.Module):
                 dtype=torch.long,
                 device=device,
             )
+
+            # Stop as soon as the closing answer tag is produced: the fine-tuned
+            # format ends at </answer>, and anything generated past it is ramble
+            # (pseudo-tags, repeated boilerplate) that only adds parse failures.
+            stopping = None
+            try:
+                from transformers import StoppingCriteria, StoppingCriteriaList
+                stop_ids = tokenizer(
+                    "</answer>", add_special_tokens=False).input_ids
+
+                class _StopOnAnswer(StoppingCriteria):
+                    def __call__(self, input_ids, scores, **kwargs):
+                        tail = input_ids[0, -len(stop_ids):].tolist()
+                        return tail == stop_ids
+
+                stopping = StoppingCriteriaList([_StopOnAnswer()])
+            except Exception:
+                stopping = None
 
             out = self.backbone.language_model.generate(
                 inputs_embeds=inputs_embeds,
@@ -805,6 +827,7 @@ class DeepfakeReasoningModel(nn.Module):
                 use_cache=True,
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
+                stopping_criteria=stopping,
             )
             text = tokenizer.decode(out[0], skip_special_tokens=True)
             results.append(text)
