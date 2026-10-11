@@ -103,6 +103,11 @@ def parse_args():
     p.add_argument("--raw",            action="store_true",
                    help="Run the base pretrained model without any fine-tuned checkpoint "
                         "(randomly-initialized v2 heads). Skips --checkpoint.")
+    p.add_argument("--force_verdict",    default=None, choices=["REAL", "FAKE"],
+                   help="Override the classifier verdict word in the telemetry prefix "
+                        "(sycophancy audit: feed a deliberately wrong verdict and check "
+                        "whether the reasoning parrots it or weighs the evidence). "
+                        "Classifier logits/confidence are still reported unmodified.")
     return p.parse_args()
 
 
@@ -376,6 +381,10 @@ def main():
                     freq_features=freq,
                     attn_weights=attn_weights,
                 )
+                if getattr(args, "force_verdict", None):
+                    telemetry = dict(telemetry, verdict=args.force_verdict)
+                    logger.info(f"  [AUDIT] telemetry verdict overridden to {args.force_verdict} "
+                                f"(classifier still says {'FAKE' if cls_pred == 1 else 'REAL'})")
                 prompt_text = build_telemetry_prompt(telemetry)
 
             result = model.predict(
