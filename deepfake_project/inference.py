@@ -270,7 +270,11 @@ def main():
 
             result = model.predict(
                 pv, tokenizer, freq_features=freq,
-                max_new_tokens=args.max_new_tokens
+                max_new_tokens=args.max_new_tokens,
+                do_sample=True,
+                temperature=0.6,            # 2. Controls variance (0.6 - 0.7 is the sweet spot)
+                top_p=0.9,                  # 3. Focuses only on the top 90% probable tokens
+                repetition_penalty=1.15
             )
 
         raw_text = trim_after_answer(result["reasoning"][0])
