@@ -73,12 +73,13 @@ class AttentionPool(nn.Module):
     def _init(self):
         nn.init.trunc_normal_(self.query, std=0.02)
 
-    def forward(self, patch_tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, patch_tokens: torch.Tensor, return_weights: bool = False):
         """
         Args:
             patch_tokens: (B, N, D) — all patch tokens from vision encoder
+            return_weights: if True, returns (normed_vector, attn_weights)
         Returns:
-            (B, D) — single attention-pooled visual vector
+            (B, D) — single attention-pooled visual vector, or ((B, D), (B, N))
         """
         # NOTE: nn.MultiheadAttention is not autocast-safe: under bf16 autocast
         # the packed in-projection mixes fp32 inputs with bf16 weights
@@ -89,8 +90,11 @@ class AttentionPool(nn.Module):
         pt = patch_tokens.to(dtype)
         q = self.query.expand(B, -1, -1).to(dtype)  # (B, 1, D)
         # Query attends over patch key/values
-        attn_out, _ = self.mha(query=q, key=pt, value=pt)
-        return self.norm(attn_out.squeeze(1))  # (B, D)
+        attn_out, attn_weights = self.mha(query=q, key=pt, value=pt, need_weights=True)
+        normed = self.norm(attn_out.squeeze(1))  # (B, D)
+        if return_weights:
+            return normed, attn_weights.squeeze(1)  # (B, N)
+        return normed
 
 
 # ── Frequency Branch (v2: FFT / spectral fusion) ──────────────────────────────
@@ -504,11 +508,11 @@ class DeepfakeReasoningModel(nn.Module):
 
     # ── Feature Extraction ────────────────────────────────────────────────────
 
-    def _pool_patches(self, patch_tokens: torch.Tensor) -> torch.Tensor:
+    def _pool_patches(self, patch_tokens: torch.Tensor, return_weights: bool = False):
         """Attention-pool patch tokens using learned query."""
-        return self.attn_pool(patch_tokens)
+        return self.attn_pool(patch_tokens, return_weights=return_weights)
 
-    def _get_vision_features(self, pixel_values: torch.Tensor):
+    def _get_vision_features(self, pixel_values: torch.Tensor, return_attn_weights: bool = False):
         """
         Extracts CLS token, attention-pooled patch vector, and full patch tokens.
         
@@ -516,6 +520,7 @@ class DeepfakeReasoningModel(nn.Module):
             cls_token     : (B, vision_dim)
             pooled_patches: (B, vision_dim) — attention-pooled over all N patches
             patch_tokens  : (B, N, vision_dim) — full patch token grid
+            attn_weights  : (B, N) optional attention weights if return_attn_weights=True
         """
         vision_out = self.backbone.vision_model(
             pixel_values=pixel_values.to(torch.bfloat16)
@@ -523,6 +528,9 @@ class DeepfakeReasoningModel(nn.Module):
         hs = vision_out.last_hidden_state           # (B, N+1, D)
         cls_token = hs[:, 0, :]                    # (B, D)
         patch_tokens = hs[:, 1:, :]                # (B, N, D)
+        if return_attn_weights:
+            pooled_patches, weights = self._pool_patches(patch_tokens, return_weights=True)
+            return cls_token, pooled_patches, patch_tokens, weights
         pooled_patches = self._pool_patches(patch_tokens)  # (B, D)
         return cls_token, pooled_patches, patch_tokens
 
@@ -740,15 +748,19 @@ class DeepfakeReasoningModel(nn.Module):
         temperature: float = 1.0,
         top_p: float = 1.0,
         repetition_penalty: float = 1.05,
-    ) -> Dict[str, list]:
+        prompt_text: Optional[str] = None,
+        return_telemetry: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Deterministic (greedy) inference with native visual token sequence.
+        Inference with native visual token sequence and optional forensic telemetry conditioning.
         """
         self.eval()
         device = pixel_values.device
         B = pixel_values.size(0)
 
-        cls_token, pooled_patches, _ = self._get_vision_features(pixel_values)
+        cls_token, pooled_patches, _, attn_weights = self._get_vision_features(
+            pixel_values, return_attn_weights=True
+        )
 
         if freq_features is not None:
             freq_emb = self.freq_branch(freq_features.to(device))
@@ -769,6 +781,12 @@ class DeepfakeReasoningModel(nn.Module):
         for i in range(B):
             vis_tokens = self._get_native_visual_tokens(pixel_values[i:i+1])
             inputs_embeds = vis_tokens.to(torch.bfloat16)
+
+            # If forensic telemetry prompt is supplied, append its embeddings
+            if prompt_text:
+                prompt_ids = tokenizer(prompt_text, return_tensors="pt").input_ids.to(device)
+                prompt_embeds = self.backbone.language_model.get_input_embeddings()(prompt_ids)
+                inputs_embeds = torch.cat([inputs_embeds, prompt_embeds.to(inputs_embeds.dtype)], dim=1)
 
             attention_mask = torch.ones(
                 inputs_embeds.shape[:2],
@@ -791,8 +809,11 @@ class DeepfakeReasoningModel(nn.Module):
             text = tokenizer.decode(out[0], skip_special_tokens=True)
             results.append(text)
 
-        return {
+        out_dict = {
             "labels":      pred.cpu().tolist(),
             "confidences": conf.cpu().tolist(),
             "reasoning":   results,
         }
+        if return_telemetry:
+            out_dict["attn_weights"] = attn_weights.cpu()
+        return out_dict

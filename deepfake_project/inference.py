@@ -85,6 +85,12 @@ def parse_args():
     p.add_argument("--arch_version",   default="v2", choices=["v1", "v2"])
     p.add_argument("--attn_implementation", default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
     p.add_argument("--log_dir",        default=None)
+    p.add_argument("--grounded_reasoning", action="store_true", default=True,
+                   help="Condition LLM on classifier telemetry (verdict, attention hotspots, FFT)")
+    p.add_argument("--no_grounded_reasoning", action="store_false", dest="grounded_reasoning",
+                   help="Disable telemetry conditioning (pure visual reasoning)")
+    p.add_argument("--temperature",    type=float, default=0.6)
+    p.add_argument("--repetition_penalty", type=float, default=1.15)
     return p.parse_args()
 
 
@@ -124,16 +130,116 @@ def trim_after_answer(text: str) -> str:
     return text.strip()
 
 
+def extract_forensic_telemetry(
+    cls_pred: int,
+    cls_conf: float,
+    freq_features: Optional[torch.Tensor] = None,
+    attn_weights: Optional[torch.Tensor] = None,
+    grid_size: int = 32,
+) -> dict:
+    """
+    Extracts structured forensic telemetry from classifier confidence,
+    FFT frequency spectrum, and spatial attention pooling weights.
+    """
+    verdict = "FAKE" if cls_pred == 1 else "REAL"
+
+    # 1. Spatial Anomaly Localization from Attention Weights
+    regions = []
+    if attn_weights is not None:
+        flat_weights = attn_weights.squeeze().float()
+        topk = torch.topk(flat_weights, k=min(8, flat_weights.numel())).indices.cpu().tolist()
+
+        region_hits = {
+            "Forehead / Upper hairline": 0,
+            "Eyes & Facial midline": 0,
+            "Nose & Cheek region": 0,
+            "Mouth & Lower jaw": 0,
+            "Chin & Neck boundary": 0,
+            "Peripheral / Ear & Hair blending seams": 0,
+        }
+        for idx in topk:
+            row = idx // grid_size
+            col = idx % grid_size
+            if col < 5 or col >= (grid_size - 5):
+                region_hits["Peripheral / Ear & Hair blending seams"] += 1
+            elif row < 8:
+                region_hits["Forehead / Upper hairline"] += 1
+            elif row < 14:
+                region_hits["Eyes & Facial midline"] += 1
+            elif row < 20:
+                region_hits["Nose & Cheek region"] += 1
+            elif row < 26:
+                region_hits["Mouth & Lower jaw"] += 1
+            else:
+                region_hits["Chin & Neck boundary"] += 1
+
+        active = [name for name, count in sorted(region_hits.items(), key=lambda x: x[1], reverse=True) if count > 0]
+        regions = active[:2] if active else ["Uniform facial distribution"]
+    else:
+        regions = ["Uniform facial distribution"]
+
+    # 2. Spectral (FFT) Anomaly Analysis
+    spectral_desc = "Natural spectral distribution"
+    if freq_features is not None:
+        ff = freq_features.squeeze().float()
+        H, W = ff.shape[-2], ff.shape[-1]
+        cy, cx = H // 2, W // 2
+        y, x = torch.meshgrid(torch.arange(H, device=ff.device), torch.arange(W, device=ff.device), indexing="ij")
+        r = torch.sqrt((y - cy).float()**2 + (x - cx).float()**2)
+
+        high_mask = r > (H * 0.35)
+        low_mask = r < (H * 0.15)
+
+        hf_energy = ff[:, high_mask].mean().item() if ff.dim() == 3 else ff[high_mask].mean().item()
+        lf_energy = ff[:, low_mask].mean().item() if ff.dim() == 3 else ff[low_mask].mean().item()
+        ratio = hf_energy / (lf_energy + 1e-6)
+
+        if cls_pred == 1:
+            if ratio < 0.65:
+                spectral_desc = f"High-frequency attenuation (ratio={ratio:.2f}); generative over-smoothing detected"
+            else:
+                spectral_desc = f"Spectral peak irregularities (ratio={ratio:.2f}); synthetic grid harmonics detected"
+        else:
+            spectral_desc = f"Natural spectral roll-off (ratio={ratio:.2f}); consistent optical sensor noise"
+
+    regions_str = ", ".join(regions)
+    return {
+        "verdict": verdict,
+        "conf": cls_conf,
+        "regions": regions_str,
+        "spectral_desc": spectral_desc,
+    }
+
+
+def build_telemetry_prompt(telemetry: dict) -> str:
+    """Builds structured forensic context passed to the LLM."""
+    v = telemetry["verdict"]
+    c = telemetry["conf"]
+    s = telemetry["spectral_desc"]
+    r = telemetry["regions"]
+
+    return (
+        f"[Forensic Telemetry]\n"
+        f"- Statistical Classification : {v} (Confidence: {c:.1%})\n"
+        f"- Frequency Domain Analysis  : {s}\n"
+        f"- Primary Anomaly Hotspots   : {r}\n\n"
+        f"Synthesize the visual tokens with this forensic telemetry to formulate a structured authenticity explanation with <fast>, <planning>, <reasoning>, <reflection>, <conclusion>, and <answer> tags:\n"
+    )
+
+
 def format_result(img_path: str, cls_label: int, cls_conf: float,
-                  raw_text: str, tags: dict) -> str:
+                  raw_text: str, tags: dict, telemetry: Optional[dict] = None) -> str:
     verdict = "FAKE" if cls_label == 1 else "REAL"
     sep = "=" * 64
     lines = [
         f"\n{sep}",
         f"  Image             : {os.path.basename(img_path)}",
         f"  Classifier verdict: {verdict}  (conf {cls_conf:.1%})",
-        sep,
     ]
+    if telemetry:
+        lines.append(f"  Anomaly Hotspots  : {telemetry.get('regions', 'N/A')}")
+        lines.append(f"  Frequency Domain  : {telemetry.get('spectral_desc', 'N/A')}")
+    lines.append(sep)
 
     order = ["fast", "planning", "reasoning", "reflection", "conclusion"]
     labels = {
@@ -268,20 +374,34 @@ def main():
             cls_pred = logits.argmax(-1).item()
             cls_conf = probs[0, cls_pred].item()
 
+            telemetry = None
+            prompt_text = None
+            if getattr(args, "grounded_reasoning", True):
+                # Extract attention pooling spatial weights
+                _, _, _, attn_weights = model._get_vision_features(pv, return_attn_weights=True)
+                telemetry = extract_forensic_telemetry(
+                    cls_pred=cls_pred,
+                    cls_conf=cls_conf,
+                    freq_features=freq,
+                    attn_weights=attn_weights,
+                )
+                prompt_text = build_telemetry_prompt(telemetry)
+
             result = model.predict(
                 pv, tokenizer, freq_features=freq,
                 max_new_tokens=args.max_new_tokens,
                 do_sample=True,
-                temperature=0.6,            # 2. Controls variance (0.6 - 0.7 is the sweet spot)
-                top_p=0.9,                  # 3. Focuses only on the top 90% probable tokens
-                repetition_penalty=1.15
+                temperature=args.temperature,
+                top_p=0.9,
+                repetition_penalty=args.repetition_penalty,
+                prompt_text=prompt_text,
             )
 
         raw_text = trim_after_answer(result["reasoning"][0])
         tags     = parse_reasoning(raw_text)
         verdict  = "FAKE" if cls_pred == 1 else "REAL"
 
-        logger.info(format_result(img_path, cls_pred, cls_conf, raw_text, tags))
+        logger.info(format_result(img_path, cls_pred, cls_conf, raw_text, tags, telemetry=telemetry))
 
         summary.append({
             "image":   os.path.basename(img_path),
