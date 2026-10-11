@@ -29,7 +29,12 @@ from transformers import AutoTokenizer
 import torchvision.transforms as T
 
 from dataset import compute_fft_features
-from model import DeepfakeReasoningModel
+from model import (
+    DeepfakeReasoningModel,
+    build_grounding_prompt,
+    describe_frequency,
+    regions_from_topk,
+)
 
 
 # ── Logger ────────────────────────────────────────────────────────────────────
@@ -165,68 +170,24 @@ def extract_forensic_telemetry(
     """
     verdict = "FAKE" if cls_pred == 1 else "REAL"
 
-    # 1. Spatial Anomaly Localization from Attention Weights
-    regions = []
+    # 1. Spatial Anomaly Localization from Attention Weights.
+    # Shared bucketing with model.regions_from_topk (also used to build
+    # training-time telemetry) so train/inference region names can never drift.
+    regions = "Uniform facial distribution"
     if attn_weights is not None:
         flat_weights = attn_weights.squeeze().float()
         topk = torch.topk(flat_weights, k=min(8, flat_weights.numel())).indices.cpu().tolist()
+        regions = regions_from_topk(topk)
 
-        region_hits = {
-            "Forehead / Upper hairline": 0,
-            "Eyes & Facial midline": 0,
-            "Nose & Cheek region": 0,
-            "Mouth & Lower jaw": 0,
-            "Chin & Neck boundary": 0,
-            "Peripheral / Ear & Hair blending seams": 0,
-        }
-        for idx in topk:
-            row = idx // grid_size
-            col = idx % grid_size
-            if col < 5 or col >= (grid_size - 5):
-                region_hits["Peripheral / Ear & Hair blending seams"] += 1
-            elif row < 8:
-                region_hits["Forehead / Upper hairline"] += 1
-            elif row < 14:
-                region_hits["Eyes & Facial midline"] += 1
-            elif row < 20:
-                region_hits["Nose & Cheek region"] += 1
-            elif row < 26:
-                region_hits["Mouth & Lower jaw"] += 1
-            else:
-                region_hits["Chin & Neck boundary"] += 1
-
-        active = [name for name, count in sorted(region_hits.items(), key=lambda x: x[1], reverse=True) if count > 0]
-        regions = active[:2] if active else ["Uniform facial distribution"]
-    else:
-        regions = ["Uniform facial distribution"]
-
-    # 2. Spectral (FFT) Anomaly Analysis
+    # 2. Spectral (FFT) Anomaly Analysis — shared neutral measurement
+    # (model.describe_frequency). Deliberately verdict-neutral: the verdict
+    # lives on its own line; the spectrum is independent evidence.
     spectral_desc = "Natural spectral distribution"
     if freq_features is not None:
-        ff = freq_features.squeeze().float()
-        H, W = ff.shape[-2], ff.shape[-1]
-        cy, cx = H // 2, W // 2
-        y, x = torch.meshgrid(torch.arange(H, device=ff.device), torch.arange(W, device=ff.device), indexing="ij")
-        r = torch.sqrt((y - cy).float()**2 + (x - cx).float()**2)
+        ff = freq_features.squeeze()
+        spectral_desc = describe_frequency(ff.unsqueeze(0) if ff.dim() == 2 else ff)
 
-        high_mask = r > (H * 0.35)
-        low_mask = r < (H * 0.15)
-
-        hf_energy = ff[:, high_mask].mean().item() if ff.dim() == 3 else ff[high_mask].mean().item()
-        lf_energy = ff[:, low_mask].mean().item() if ff.dim() == 3 else ff[low_mask].mean().item()
-        ratio = hf_energy / (lf_energy + 1e-6)
-
-        # NOTE: keep this description verdict-NEUTRAL (a bare measurement).
-        # The old version branched on cls_pred and wrote the conclusion
-        # ("over-smoothing detected" vs "consistent sensor noise") into the
-        # "evidence" itself, which only parroted the classifier back to the LLM
-        # instead of giving it independent proof to weigh.
-        spectral_desc = (
-            f"HF/LF log-magnitude energy ratio={ratio:.2f} "
-            f"(lower ratio = smoother image with less high-frequency detail)"
-        )
-
-    regions_str = ", ".join(regions)
+    regions_str = regions
     return {
         "verdict": verdict,
         "conf": cls_conf,
@@ -238,25 +199,15 @@ def extract_forensic_telemetry(
 def build_telemetry_prompt(telemetry: dict) -> str:
     """Builds structured forensic context passed to the LLM.
 
-    Mirrors the training-target format (dataset.py): only the known tag
-    vocabulary (<fast>/<planning>/<reasoning>/<reflection>/<conclusion>/
-    <answer>) and an explicit answer vocabulary (real|fake). Without the
-    explicit format instruction the model emits booleans, pseudo-tags and
-    unterminated ramble (all of which parse as UNKNOWN).
+    Thin wrapper over model.build_grounding_prompt — the single canonical
+    template also used for training-time telemetry. See model.py.
     """
-    v = telemetry["verdict"]
     c = telemetry["conf"]
-    s = telemetry["spectral_desc"]
-    r = telemetry["regions"]
-
-    return (
-        f"[Forensic Telemetry]\n"
-        f"- Statistical read-out (verify against what you see, do not blindly repeat): {v} (confidence {c:.1%})\n"
-        f"- Frequency measurement: {s}\n"
-        f"- Attention hotspots: {r}\n\n"
-        f"Weigh the telemetry numbers against the visual evidence, then explain using "
-        f"<fast>, <planning>, <reasoning>, <reflection> and <conclusion> tags only. "
-        f"Finish with exactly <answer>real</answer> or <answer>fake</answer> and nothing after it.\n"
+    return build_grounding_prompt(
+        verdict=telemetry["verdict"],
+        conf_str=f"confidence {c:.1%}",
+        spectral_desc=telemetry["spectral_desc"],
+        regions_str=telemetry["regions"],
     )
 
 

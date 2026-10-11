@@ -50,6 +50,94 @@ SYSTEM_PROMPT = (
 USER_PROMPT = "Please determine the authenticity of this image."
 
 
+# ── Grounding Telemetry (shared train/inference format) ─────────────────────
+# The LLM conditions on a short forensic-telemetry prefix:
+#   vis_tokens + telemetry_embeds + target_embeds (train)
+#   vis_tokens + telemetry_embeds                (inference, then generate)
+# BOTH paths must build byte-identical structure via build_grounding_prompt().
+# Training uses the TRUE label as verdict; inference uses the predicted verdict.
+
+REGION_NAMES = [
+    "Forehead / Upper hairline",
+    "Eyes & Facial midline",
+    "Nose & Cheek region",
+    "Mouth & Lower jaw",
+    "Chin & Neck boundary",
+    "Peripheral / Ear & Hair blending seams",
+]
+
+TELEMETRY_GRID = 32
+
+
+def regions_from_topk(topk_indices, grid_size: int = TELEMETRY_GRID) -> str:
+    """Map top-attention patch indices to the top-2 named face regions."""
+    region_hits = {name: 0 for name in REGION_NAMES}
+    for idx in list(topk_indices):
+        idx = int(idx)
+        row = idx // grid_size
+        col = idx % grid_size
+        if col < 5 or col >= (grid_size - 5):
+            region_hits["Peripheral / Ear & Hair blending seams"] += 1
+        elif row < 8:
+            region_hits["Forehead / Upper hairline"] += 1
+        elif row < 14:
+            region_hits["Eyes & Facial midline"] += 1
+        elif row < 20:
+            region_hits["Nose & Cheek region"] += 1
+        elif row < 26:
+            region_hits["Mouth & Lower jaw"] += 1
+        else:
+            region_hits["Chin & Neck boundary"] += 1
+    active = [n for n, c in sorted(region_hits.items(), key=lambda x: x[1], reverse=True) if c > 0]
+    return ", ".join(active[:2]) if active else "Uniform facial distribution"
+
+
+def describe_frequency(freq: torch.Tensor) -> str:
+    """Verdict-neutral HF/LF log-magnitude energy ratio description.
+
+    NOTE: must stay neutral (a bare measurement). Branching the wording on the
+    verdict would bake the conclusion into the "evidence" and teach sycophancy.
+    """
+    ff = freq.detach().float()
+    if ff.dim() == 4:
+        ff = ff[0]
+    H, W = ff.shape[-2], ff.shape[-1]
+    cy, cx = H // 2, W // 2
+    y, x = torch.meshgrid(torch.arange(H, device=ff.device),
+                          torch.arange(W, device=ff.device), indexing="ij")
+    r = torch.sqrt((y - cy).float() ** 2 + (x - cx).float() ** 2)
+    high_mask = r > (H * 0.35)
+    low_mask = r < (H * 0.15)
+    if ff.dim() == 3:
+        hf_energy = ff[:, high_mask].mean().item()
+        lf_energy = ff[:, low_mask].mean().item()
+    else:
+        hf_energy = ff[high_mask].mean().item()
+        lf_energy = ff[low_mask].mean().item()
+    ratio = hf_energy / (lf_energy + 1e-6)
+    return (f"HF/LF log-magnitude energy ratio={ratio:.2f} "
+            f"(lower ratio = smoother image with less high-frequency detail)")
+
+
+def build_grounding_prompt(verdict: str, conf_str: str,
+                           spectral_desc: str, regions_str: str) -> str:
+    """Single canonical telemetry template for training AND inference.
+
+    Mirrors the training-target format: only the known tag vocabulary and an
+    explicit real|fake answer vocabulary, so the fine-tuned continuation
+    pattern is never broken by unseen prose.
+    """
+    return (
+        f"[Forensic Telemetry]\n"
+        f"- Statistical read-out (verify against what you see, do not blindly repeat): {verdict} ({conf_str})\n"
+        f"- Frequency measurement: {spectral_desc}\n"
+        f"- Attention hotspots: {regions_str}\n\n"
+        f"Weigh the telemetry numbers against the visual evidence, then explain using "
+        f"<fast>, <planning>, <reasoning>, <reflection> and <conclusion> tags only. "
+        f"Finish with exactly <answer>real</answer> or <answer>fake</answer> and nothing after it.\n"
+    )
+
+
 # ── Attention Pooling (v2: replaces mean-pooling) ──────────────────────────────
 
 class AttentionPool(nn.Module):
@@ -295,6 +383,8 @@ class DeepfakeReasoningModel(nn.Module):
         fake_token_id:           Optional[int] = None,
         attn_implementation:     str   = "sdpa",
         use_gradient_checkpointing: bool = True,
+        grounding:               bool  = True,
+        grounding_flip_prob:     float = 0.0,
     ):
         super().__init__()
         self.arch_version = arch_version
@@ -307,6 +397,15 @@ class DeepfakeReasoningModel(nn.Module):
         self.fake_token_id = fake_token_id
         self.attn_implementation = attn_implementation
         self.use_gradient_checkpointing = use_gradient_checkpointing
+        # Reasoning grounding: condition the LLM on a forensic-telemetry prefix
+        # (true-label verdict + neutral FFT ratio + attention hotspots) inserted as
+        #   vis_tokens + telemetry_embeds + target_embeds
+        # during training; inference builds the identical structure via
+        # build_grounding_prompt(). grounding_flip_prob optionally flips the
+        # verdict word on a fraction of samples (robustness to wrong telemetry).
+        self.grounding = grounding
+        self.grounding_flip_prob = grounding_flip_prob
+        self._tokenizer = None
 
         # ── Step 1: Load backbone (Fix #1: Efficient SDPA/FlashAttention) ──
         print(f"Loading InternVL3-2B from {model_path} (arch_version={arch_version}, attn_implementation={attn_implementation}) ...")
@@ -610,6 +709,49 @@ class DeepfakeReasoningModel(nn.Module):
             patch_mean = hs[:, 1:, :].mean(dim=1)
             return self.custom_projector(cls_token.float(), patch_mean.float())
 
+    def set_tokenizer(self, tokenizer) -> None:
+        """Attach the tokenizer used to encode grounding-telemetry prefixes
+        in forward(). Must be called before joint training with grounding on;
+        without it forward() falls back to the ungrounded input pattern."""
+        self._tokenizer = tokenizer
+
+    def _grounding_prefix(self, labels: torch.Tensor,
+                          freq_features: Optional[torch.Tensor],
+                          attn_weights: Optional[torch.Tensor],
+                          device) -> Optional[tuple]:
+        """Build per-sample telemetry embed blocks for the joint LM path.
+
+        Returns (tele_embeds_padded, tele_mask, tele_len) or None when
+        grounding is disabled/unavailable. Telemetry uses TRUE labels.
+        """
+        if not self.grounding or self._tokenizer is None:
+            return None
+        B = labels.size(0)
+        texts = []
+        for i in range(B):
+            lab = int(labels[i].item())
+            verdict = "FAKE" if lab == 1 else "REAL"
+            if self.grounding_flip_prob > 0.0 and torch.rand(()).item() < self.grounding_flip_prob:
+                verdict = "REAL" if verdict == "FAKE" else "FAKE"
+            spectral = describe_frequency(freq_features[i]) if freq_features is not None else \
+                "Natural spectral distribution"
+            if attn_weights is not None:
+                w = attn_weights[i].detach().float()
+                k = min(8, w.numel())
+                topk = torch.topk(w, k=k).indices.cpu().tolist()
+                regions = regions_from_topk(topk)
+            else:
+                regions = "Uniform facial distribution"
+            texts.append(build_grounding_prompt(
+                verdict=verdict, conf_str="dataset label",
+                spectral_desc=spectral, regions_str=regions))
+        enc = self._tokenizer(texts, padding=True, truncation=True,
+                              max_length=160, return_tensors="pt")
+        tele_ids = enc["input_ids"].to(device)
+        tele_mask = enc["attention_mask"].to(device)
+        tele_embeds = self.backbone.language_model.get_input_embeddings()(tele_ids)
+        return tele_embeds, tele_mask, tele_ids.size(1)
+
     # ── Forward ───────────────────────────────────────────────────────────────
 
     def forward(
@@ -642,7 +784,16 @@ class DeepfakeReasoningModel(nn.Module):
         device = pixel_values.device
 
         # ── 1. Vision features & Frequency fusion ──────────────────────
-        cls_token, pooled_patches, patch_tokens = self._get_vision_features(pixel_values)
+        # Request attention weights when the joint LM path may need grounding
+        # telemetry (weights double as the hotspot source; no extra ViT pass).
+        _need_weights = (reasoning_tokens is not None and labels is not None
+                         and self.grounding and self._tokenizer is not None)
+        _vis = self._get_vision_features(pixel_values, return_attn_weights=_need_weights)
+        if _need_weights:
+            cls_token, pooled_patches, patch_tokens, attn_weights = _vis
+        else:
+            cls_token, pooled_patches, patch_tokens = _vis
+            attn_weights = None
 
         if freq_features is not None:
             freq_emb = self.freq_branch(freq_features.to(device))  # (B, 256)
@@ -679,16 +830,32 @@ class DeepfakeReasoningModel(nn.Module):
             N_vis = vis_tokens.size(1)
 
             token_embeds = self.backbone.language_model.get_input_embeddings()(reasoning_tokens)
-            inputs_embeds = torch.cat([vis_tokens.to(token_embeds.dtype), token_embeds], dim=1)
 
-            # Mask visual prefix tokens from LM loss
+            # Grounding: insert the telemetry prefix between visual tokens and
+            # targets — identical structure to predict() at inference time.
+            # Telemetry positions carry -100 labels (conditioning only, never
+            # trained to generate), and answer_token_pos shifts by N_tele.
+            tele = self._grounding_prefix(labels, freq_features, attn_weights, device)
+            if tele is not None:
+                tele_embeds, tele_mask, N_tele = tele
+                tele_embeds = tele_embeds.to(token_embeds.dtype)
+                inputs_embeds = torch.cat([vis_tokens.to(token_embeds.dtype), tele_embeds, token_embeds], dim=1)
+            else:
+                tele_mask, N_tele = None, 0
+                inputs_embeds = torch.cat([vis_tokens.to(token_embeds.dtype), token_embeds], dim=1)
+
+            # Mask visual + telemetry prefix tokens from LM loss
             lm_labels = reasoning_tokens.clone()
             lm_labels[reasoning_attention_mask == 0] = -100
-            prefix_ignore = torch.full((B, N_vis), -100, dtype=torch.long, device=device)
+            prefix_ignore = torch.full((B, N_vis + N_tele), -100, dtype=torch.long, device=device)
             full_lm_labels = torch.cat([prefix_ignore, lm_labels], dim=1)
 
             prefix_mask = torch.ones((B, N_vis), dtype=reasoning_attention_mask.dtype, device=device)
+            if tele_mask is not None:
+                prefix_mask = torch.cat(
+                    [prefix_mask, tele_mask.to(reasoning_attention_mask.dtype)], dim=1)
             full_mask = torch.cat([prefix_mask, reasoning_attention_mask], dim=1)
+            N_prefix = N_vis + N_tele
 
             lm_out = self.backbone.language_model(
                 inputs_embeds=inputs_embeds,
@@ -703,8 +870,9 @@ class DeepfakeReasoningModel(nn.Module):
                 valid_mask = (answer_token_pos >= 0) & (answer_token_pos < reasoning_tokens.size(1))
                 if valid_mask.any():
                     valid_idx = torch.where(valid_mask)[0]
-                    # In causal LM, token at text pos `ans_pos` is predicted at index `N_vis + ans_pos - 1`
-                    pred_pos = N_vis + answer_token_pos[valid_idx] - 1
+                    # In causal LM, token at text pos `ans_pos` is predicted at index `N_prefix + ans_pos - 1`
+                    # (N_prefix = N_vis visual tokens + N_tele telemetry tokens; N_tele=0 ungrounded)
+                    pred_pos = N_prefix + answer_token_pos[valid_idx] - 1
                     ans_logits = lm_out.logits[valid_idx, pred_pos, :]  # (valid_B, vocab_size)
 
                     if self.real_token_id is not None and self.fake_token_id is not None:

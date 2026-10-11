@@ -664,6 +664,11 @@ def parse_args():
     p.add_argument("--weights_from",            default=None)
     p.add_argument("--freeze_cls_head",         action="store_true")
     p.add_argument("--freeze_projector",        action="store_true")
+    p.add_argument("--no_grounding",            action="store_true",
+                   help="Disable reasoning-grounding telemetry prefix in the joint LM path")
+    p.add_argument("--ground_flip_prob",        type=float, default=0.0,
+                   help="Fraction of training samples whose telemetry verdict word is flipped "
+                        "(robustness to wrong classifier read-outs at inference)")
     p.add_argument("--attn_implementation",     default="sdpa", choices=["sdpa", "flash_attention_2", "eager"])
     p.add_argument("--no_gradient_checkpointing", action="store_true", help="Disable gradient checkpointing on LLM")
     p.add_argument("--use_gradient_checkpointing", type=lambda x: str(x).lower() in ('true', '1', 'yes'), default=True)
@@ -794,6 +799,14 @@ def main():
             logger.warning("  Stage 2 (joint) is strongly recommended to avoid inconsistent partially-adapted weights.")
             logger.warning("=" * 86)
 
+    # ── Reasoning Grounding ───────────────────────────────────────────
+    # Attach the tokenizer (needed to encode the telemetry prefix) and apply
+    # grounding flags. Plain attributes: unaffected by load_state_dict.
+    model.set_tokenizer(tokenizer)
+    model.grounding = not args.no_grounding
+    model.grounding_flip_prob = args.ground_flip_prob
+    logger.info(f"  grounding={model.grounding}  ground_flip_prob={model.grounding_flip_prob}")
+
     # ── Corrective Freezes ────────────────────────────────────────────
     frozen_names = []
     for n, p_ in model.named_parameters():
@@ -850,6 +863,7 @@ def main():
     logger.info(f"  lm_loss_curriculum: start={args.lm_loss_weight_start} -> end={args.lm_loss_weight_end}")
     logger.info(f"  epochs_cls={args.epochs_cls}  epochs_joint={args.epochs_joint}  total_epochs={total_epochs}")
     logger.info(f"  lr={args.lr}  llm_lora_rank={args.lora_rank}  vision_lora_rank={args.vision_lora_rank}")
+    logger.info(f"  grounding={model.grounding}  flip={model.grounding_flip_prob}")
     logger.info(f"  attn_impl={getattr(args, 'attn_implementation', 'sdpa')}  grad_ckpt={use_grad_ckpt}")
     logger.info(f"  steps/epoch={joint_forward_steps}  optimizer_updates/epoch={optimizer_steps_per_epoch}")
     logger.info(f"  logs -> {log_dir}")
