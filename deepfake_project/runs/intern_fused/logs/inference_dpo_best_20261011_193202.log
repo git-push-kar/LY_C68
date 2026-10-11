@@ -1,0 +1,310 @@
+Inference log : ./runs/intern_fused/logs\inference_dpo_best_20261011_193202.log
+Checkpoint    : ./runs/intern_fused_dpo/checkpoints/dpo_best.pth
+Images        : ['test_images/real/160932.png', 'test_images/real/161022.jpg', 'test_images/real/300013.jpg', 'test_images/real/31000095.jpg', 'test_images/real/31000171.jpg', 'test_images/real/31000177.jpg', 'test_images/real/31000187.jpg', 'test_images/real/310151.png', 'test_images/real/310160.png', 'test_images/real/310189.jpg', 'test_images/real/310203.jpg', 'test_images/real/32000017.png', 'test_images/real/40000001.jpg', 'test_images/real/6.jpg', 'test_images/real/9.jpg', 'test_images/real/99.png', 'test_images/real/mar.jpg', 'test_images/real/omi.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_fused_dpo/checkpoints/dpo_best.pth
+  epoch=2  stage=?  missing=0  unexpected=0
+
+Processing 18 image(s) ...
+
+
+================================================================
+  Image             : 160932.png
+  Classifier verdict: FAKE  (conf 94.7%)
+  Anomaly Hotspots  : Peripheral / Ear & Hair blending seams, Eyes & Facial midline
+  Frequency Domain  : High-frequency attenuation (ratio=-0.22); generative over-smoothing detected
+================================================================
+
+  [Raw LM output]
+    [@1: The image appears authentic.[(((tripleM) -> rule5))]
+    </fast>
+    <answer>False</answer>
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 161022.jpg
+  Classifier verdict: REAL  (conf 95.3%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.23); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    The image is authentic, with no visual inconsistencies or anomalies detected by the observer. The facial structure and proportions are natural and symmetrical, without any signs of artificial generation such as mismatched skin tones or unnatural expressions.
+    Further analysis reveals that while there may be subtle hints at digital manipulation like slight blurring around edges in certain areas, it does not significantly obscure the overall realism—these artifacts typically appear during high-frequency resolution scans rather than being a definitive artifact associated with synthetic images. </root>
+    <answer> real </answer>
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 300013.jpg
+  Classifier verdict: REAL  (conf 95.4%)
+  Anomaly Hotspots  : Nose & Cheek region, Mouth & Lower jaw
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.23); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    Based on the visual structure, physical realism, and absence of subtle anomalies typically associated with AI-generated or synthetic images; a high confidence is established. The image aligns well with real-world characteristics across multiple forensic dimensions.
+    </sub> answer>
+    <answer>real </answer>
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 31000095.jpg
+  Classifier verdict: REAL  (conf 95.4%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.25); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    <reasoning>
+    At first glance, the image appears authentic with natural facial features and consistent lighting. However, a deeper inspection reveals subtle signs of artificial generation--such as unnatural skin texture around edges or missing fine details like hair strands that are typically present in real human faces.
+    Subtle artifacts emerge only after careful observation over time; they do not raise immediate concerns about authenticity but require more focused scrutiny to reveal their presence. These aspects include edge sharpness around eyebrows, blurriness at a medium depth without noticeable focus loss, and an overall lack of high-frequency detail such as pores on cheeks which could be easily missed by casual observers.
+    To fully assess this complexity requires both contextual understanding and advanced forensic techniques from experts who have developed methods for detecting AI-generated images specifically designed to mimic realistic ones under controlled conditions. This layered analysis is necessary because it allows us to evaluate whether any aspect of visual structure aligns with known laws of physical reality. Furthermore, even when we see no obvious flaws immediately apparent to the naked eye, there is still lingering uncertainty due to its subtlety--this highlights the difficulty associated with identifying genuine fake images among others.</refigners>
+    Considering all these factors together, while visually convincing initially, the evidence points toward being synthetic rather than naturally captured imagery. The cumulative effect of multiple layers suggests a carefully constructed digital composite rather than one where individual elements appear plausible individually yet collectively fail to validate realism through simple lensed criteria.<brink/>
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 31000171.jpg
+  Classifier verdict: REAL  (conf 94.8%)
+  Anomaly Hotspots  : Nose & Cheek region, Peripheral / Ear & Hair blending seams
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.23); consistent optical sensor noise
+================================================================
+
+  [Conclusion]
+    Based on the absence of visual anomalies and structural coherence, it is determined to be real.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 31000177.jpg
+  Classifier verdict: REAL  (conf 95.6%)
+  Anomaly Hotspots  : Eyes & Facial midline, Forehead / Upper hairline
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.23); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    <synopsis>
+    The image appears to be authentic at first glance, but upon closer inspection reveals subtle signs of potential artificial generation. The facial structure is natural and symmetrical without noticeable distortions or asymmetries that would raise immediate suspicion in a real face.
+    Upon further analysis through structural integrity, texture realism, and contextual coherence with the background setting, it becomes evident that this object has been intentionally manipulated for authenticity rather than being naturally captured by an unseen camera lens. While no major flaws are present--the skin tone matches, expressions appear realistic, and there's no visible blending boundary--further forensic examination uncovers inconsistencies such as overly sharp edges around hairline regions and unnatural blur across different parts of the face.</senscraper>
+    <!-- question= "Is this AI-generated? Yes."
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 31000187.jpg
+  Classifier verdict: REAL  (conf 95.2%)
+  Anomaly Hotspots  : Nose & Cheek region, Eyes & Facial midline
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.22); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    <issue> The facial structure appears normal with no obvious signs of manipulation. However, subtle artifacts such as a slight asymmetry in the eyes and eyebrows may raise suspicion at first glance. Upon closer inspection, however, these features are not easily detectable--they seem more like natural variations or imperfections that could be expected to occur naturally across different regions.
+    In summary, while there is an absence of overt anomalies indicative of artificial generation, the presence of slightly less definitive but notable texture inconsistencies suggests this might be due to deeper forensic analysis rather than being purely optical effects. These findings align well with what one would expect from real-world photography when taken together. </fast>
+    <planning> To fully understand why it was difficult to definitively classify the image without needing extensive visual scrutiny, we must rely on layered reasoning based on both physical realism and contextual coherence within known domains. This multi-layered approach requires careful consideration for missing cues that can sometimes mask their authenticity even under the most stringent examination criteria.</pananas>
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 310151.png
+  Classifier verdict: FAKE  (conf 69.8%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : High-frequency attenuation (ratio=-0.23); generative over-smoothing detected
+================================================================
+
+  [Raw LM output]
+    The image appears realistic at first glance, but subtle artifacts hint toward synthetic generation. Upon closer inspection, structural inconsistencies are found in the nose and hairline patterns that deviate from natural human characteristics--a clear indicator of artificial manipulation. Additionally, a hard transition between facial features suggests blending or face-swapping techniques used during capture.
+    In summary, while not immediately obvious due to high quality and realism, multiple forensic cues point towards being generated by AI generators such as models like GAN, generating faces with stylized appearances is likely common across many real-world scenarios. However, this analysis relies on visual evidence which was initially straightforward before requiring deeper scrutiny for potential optical anomalies missed by novice observers.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 310160.png
+  Classifier verdict: FAKE  (conf 93.1%)
+  Anomaly Hotspots  : Nose & Cheek region, Peripheral / Ear & Hair blending seams
+  Frequency Domain  : High-frequency attenuation (ratio=-0.21); generative over-smoothing detected
+================================================================
+
+  [Conclusion]
+    Given the presence of only moderate abnormalities in key areas like eye shape, expression, and detail-to-rule violations, along with the lack of definitive forensic indicators, it suggests that the image may actually be real rather than synthetic AI-generated. This raises uncertainty due to the need for careful observation at multiple levels.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 310189.jpg
+  Classifier verdict: REAL  (conf 94.4%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.24); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    [@1: The image appears authentic.[(((tripleM) -> rule9))]
+    </fast>
+    <planning>
+    The facial expression is consistent, with natural skin tone and no signs of artificial smoothing. There are also subtle but telling hints that the lighting on the face does not conform to typical real-world illumination patterns--a slight shadowing around the eyes suggests a possible optical sensor or lens focus issue.
+    Upon closer inspection, several artifacts emerge as indicative of AI generation. These include unnatural blurring along edges where fine details like hair strands would typically be visible, missing high-frequency textures such as wrinkles beneath the nose bridge, and overly smooth transitions between different parts of the face (especially near the jawline). Additionally, there's an absence of clear structural abnormalities commonly found in low-resolution images when viewed through more abstract filters.
+    While these elements do not point directly toward synthetic creation, they collectively suggest it may have been generated by an AI model trained for realism. However, this analysis requires careful observation beyond simple visual cues.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 310203.jpg
+  Classifier verdict: REAL  (conf 93.9%)
+  Anomaly Hotspots  : Nose & Cheek region, Peripheral / Ear & Hair blending seams
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.28); consistent optical sensor noise
+================================================================
+
+  [Conclusion]
+    Given the absence of overt anomalies while exhibiting signs suggestive of artificial generation, this case presents itself as an intermediate difficulty for AI detectors due to their inherent complexity.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 32000017.png
+  Classifier verdict: FAKE  (conf 89.2%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : High-frequency attenuation (ratio=-0.23); generative over-smoothing detected
+================================================================
+
+  [Raw LM output]
+    <fast> The image appears authentic at first glance, but certain inconsistencies suggest a need for closer inspection. However, the overall appearance is realistic and no definitive flaws are evident upon initial observation.
+    To dive deeper into subtle artifacts that might not be immediately apparent or hard to detect--we must rely on careful examination of physical properties such as lighting consistency across facial regions, edge sharpness (a telltale sign in AI generation), texture uniformity along fine lines, and adherence to natural optical laws -- all pointing toward realism rather than synthetic origins.
+    Despite this lack of obvious anomalies, the presence of high-frequency variations implies that these aspects could potentially fool even advanced forensic analysis without causing significant misperception by itself. To fully confirm authenticity requires synthesizing multiple layers of evidence from both visual structure and more granular detail.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 40000001.jpg
+  Classifier verdict: REAL  (conf 94.1%)
+  Anomaly Hotspots  : Forehead / Upper hairline, Nose & Cheek region
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.25); consistent optical sensor noise
+================================================================
+
+  [Conclusion]
+    Considering all observed elements -- while being visually convincing, these do not align perfectly with real-world expectations; thus suggesting the image was likely generated using generative models rather than through human photography.
+
+  Generated answer : FAKE
+  [WARNING] Reasoning answer (FAKE) disagrees with classifier (REAL)
+================================================================
+
+================================================================
+  Image             : 6.jpg
+  Classifier verdict: REAL  (conf 93.5%)
+  Anomaly Hotspots  : Nose & Cheek region, Mouth & Lower jaw
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.25); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    Based on the visual structure and physical consistency observed, this image is most likely authentic. However, it lacks a definitive facial expression that could raise suspicion in real-world scenarios.
+    While not immediately obvious due to its realism, subtle artifacts such as unnatural skin tone variations or inconsistent lighting patterns suggest possible manipulation at an intermediate stage of authenticity detection. These clues are present but do not strongly confirm the sample's genuineness.
+    </real>
+    <answer>True </answer>
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 9.jpg
+  Classifier verdict: REAL  (conf 95.7%)
+  Anomaly Hotspots  : Nose & Cheek region, Eyes & Facial midline
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.23); consistent optical sensor noise
+================================================================
+
+  [Planning]
+    The image is authentic, with no obvious signs of AI generation. Facial features are realistic and consistent in expression--no mismatched skin tone or unnatural proportions.
+    Derived intermediate fact: The face appears natural.
+    Proof derivation structure: facial symmetry aligns well with real human anatomy.
+
+  [Conclusion]
+    Given the absence of detectable artifacts across multiple physical dimensions, it does not violate any basic forensic criteria for authenticity. However, a slight anomaly exists at an intuitive level where subtle generator biases might be present; making this case more difficult to confidently classify as genuine without deeper inspection.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 99.png
+  Classifier verdict: REAL  (conf 92.1%)
+  Anomaly Hotspots  : Forehead / Upper hairline, Peripheral / Ear & Hair blending seams
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.24); consistent optical sensor noise
+================================================================
+
+  [Conclusion]
+    Considering multiple layers from structural integrity through microscopic subtleties, the evidence strongly supports the conclusion that the image contains genuine human faces -- though exhibiting moderate artistic manipulation for realism -- and therefore cannot be confidently determined as fake.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : mar.jpg
+  Classifier verdict: REAL  (conf 96.2%)
+  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.25); consistent optical sensor noise
+================================================================
+
+  [Raw LM output]
+    The image appears authentic at first glance, but a deeper forensic inspection reveals subtle artifacts that raise suspicion. The lighting and focus are consistent with real-world photography, though the slightly stylized appearance could suggest artificial generation or post-processing of an AI model.
+    To dive deeply into potential hidden flaws: analyzing for natural skin texture variation across facial regions; checking for uniform blurring or missing high-frequency details such as fine lines in hair and clothing edges -- all indicators point to synthetic creation rather than genuine data captured by human eyes alone.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : omi.jpg
+  Classifier verdict: REAL  (conf 90.7%)
+  Anomaly Hotspots  : Nose & Cheek region, Eyes & Facial midline
+  Frequency Domain  : Natural spectral roll-off (ratio=-0.24); consistent optical sensor noise
+================================================================
+
+  [Planning]
+    To fully understand the forensic implications, we must consider all possible artifacts and physical inconsistencies in detail. These include subtle color variations at edges or boundaries that may be missed by casual inspection but are detectable with advanced tools.
+
+  [Conclusion]
+    Based on a meticulous examination of visual structure, texture, and fine details across multiple biometric cues, there is no significant evidence to suggest artificial generation without strong confirmation from expert-level analysis. Therefore, it can confidently be judged as real.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+SUMMARY
+================================================================
+  Image              Classifier Conf     Gen Answer
+  ------------------ ---------- -------- ------------
+  160932.png         FAKE       94.7%    UNKNOWN
+  161022.jpg         REAL       95.3%    REAL
+  300013.jpg         REAL       95.4%    REAL
+  31000095.jpg       REAL       95.4%    UNKNOWN
+  31000171.jpg       REAL       94.8%    REAL
+  31000177.jpg       REAL       95.6%    UNKNOWN
+  31000187.jpg       REAL       95.2%    UNKNOWN
+  310151.png         FAKE       69.8%    UNKNOWN
+  310160.png         FAKE       93.1%    UNKNOWN
+  310189.jpg         REAL       94.4%    UNKNOWN
+  310203.jpg         REAL       93.9%    REAL
+  32000017.png       FAKE       89.2%    UNKNOWN
+  40000001.jpg       REAL       94.1%    FAKE
+  6.jpg              REAL       93.5%    UNKNOWN
+  9.jpg              REAL       95.7%    REAL
+  99.png             REAL       92.1%    REAL
+  mar.jpg            REAL       96.2%    UNKNOWN
+  omi.jpg            REAL       90.7%    REAL
+================================================================
+
+Log saved to: ./runs/intern_fused/logs\inference_dpo_best_20261011_193202.log
+Done.

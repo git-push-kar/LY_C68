@@ -750,7 +750,7 @@ class DeepfakeReasoningModel(nn.Module):
         repetition_penalty: float = 1.05,
         prompt_text: Optional[str] = None,
         return_telemetry: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, any]:
         """
         Inference with native visual token sequence and optional forensic telemetry conditioning.
         """

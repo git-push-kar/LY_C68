@@ -1,0 +1,384 @@
+Inference log : ./runs/intern_fused/logs\inference_dpo_best_20261011_185017.log
+Checkpoint    : ./runs/intern_fused_dpo/checkpoints/dpo_best.pth
+Images        : ['test_images/real/160932.png', 'test_images/real/161022.jpg', 'test_images/real/300013.jpg', 'test_images/real/31000095.jpg', 'test_images/real/31000171.jpg', 'test_images/real/31000177.jpg', 'test_images/real/31000187.jpg', 'test_images/real/310151.png', 'test_images/real/310160.png', 'test_images/real/310189.jpg', 'test_images/real/310203.jpg', 'test_images/real/32000017.png', 'test_images/real/40000001.jpg', 'test_images/real/6.jpg', 'test_images/real/9.jpg', 'test_images/real/99.png', 'test_images/real/mar.jpg', 'test_images/real/omi.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_fused_dpo/checkpoints/dpo_best.pth
+  epoch=2  stage=?  missing=0  unexpected=0
+
+Processing 18 image(s) ...
+
+
+================================================================
+  Image             : 160932.png
+  Classifier verdict: FAKE  (conf 94.7%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and consistent lighting.
+
+  [Reasoning]
+    Upon closer inspection, there are no structural inconsistencies--the eyes and mouth align naturally under a neutral expression, the skin tone remains uniform without visible blemishes, and the proportions appear realistic. The edges around hair and jawline look soft yet natural, indicating genuine blending rather than artificial generation.
+    Looking at more specific details, such as fine lines within the face, which can sometimes suggest synthetic makeup application but here they remain too fully integrated into the overall stylization expected from real photographs. There's no evidence of unnatural blurring or missing high-frequency detail typical of generative models like GANs or deepfake techniques. Lighting consistency matches what would be seen in real photography, further supporting authenticity. Finally, while minor variations might hint towards depth perception issues, these could simply relate to stylistic choices made by an artist who intentionally avoids capturing all possible photographic nuances.
+
+  [Conclusion]
+    Synthesizing all observations together, the image does not exhibit signs of being artificially generated through detailed analysis. It maintains coherent appearance, physical plausibility, and adherence to light behavior, leading us to conclude that this is a photograph likely created using advanced generation tools designed for generating highly realistic images when viewed alone.
+
+  Generated answer : FAKE
+================================================================
+
+================================================================
+  Image             : 161022.jpg
+  Classifier verdict: REAL  (conf 95.3%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation or artificial generation.
+
+  [Reasoning]
+    The facial features are proportionate and symmetrical without any visible distortions that would suggest AI generation. Upon closer inspection, the skin tone is consistent across all regions--there's no unnatural blending between different areas such as edges, hair texture, or boundaries. There's also a noticeable absence of high-frequency details like pores typically found in natural photographs but these elements are often harder to detect than they might be in other images where fine textures can obscurely appear. Lighting patterns align naturally under simulated illumination conditions, and there’s no mismatched focus or stylization suggesting digital processing.
+    To dive deeper into potential hidden issues, I examined for violations of physical realism—a crucial aspect when evaluating an artifact-free sample. Although lighting seems uniform at first glance, this could potentially mask subtle manipulations not immediately apparent from basic photographic rules. However, careful examination reveals only one anomaly—consistent edge sharpness around the hairline--which may hint toward synthetic creation rather than being purely stylistic masking. Overall, while none of the initial observations point away from authenticity, cumulative evidence suggests that the medium-level scrutiny confirms the original judgment before reaching definitive conclusions.
+
+  [Conclusion]
+    Considering structural integrity, contextual coherence, and adherence to physical laws, the image does not exhibit significant anomalies indicative of AI generation. While some minor inconsistencies exist relative to what is expected of a realistic photograph, their presence do not override the strong impression obtained through detailed forensic analysis. Therefore, the image most likely represents a genuine human face captured using advanced imaging techniques designed specifically for detecting fakes.
+
+  Generated answer : FAKE
+  [WARNING] Reasoning answer (FAKE) disagrees with classifier (REAL)
+================================================================
+
+================================================================
+  Image             : 300013.jpg
+  Classifier verdict: REAL  (conf 95.4%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and lighting.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 31000095.jpg
+  Classifier verdict: REAL  (conf 95.4%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and no obvious signs of manipulation.
+
+  [Planning]
+    To determine if this is a real photograph or fake, we will need to examine it methodically across three progressive levels: visual structure, subtle artifacts from generation, and physical plausibility. This requires careful inspection due to its low quality initially perceived by casual observers.
+
+  [Reasoning]
+    Upon closer examination, the face exhibits consistent skin tone without noticeable blemishes in texture or color that would suggest AI tampering. The proportions are naturally aligned and realistic, with all elements such as eyes, nose, mouth, and hair aligning logically with what one expects on a human portrait.
+    There are also no visible blending boundaries between different regions of the face, indicating they were not composited into the original subject. Lighting and shadows behave consistently across the entire frame, further supporting realism rather than violating expected photographic characteristics. Furthermore, there are no unnatural stylizations—such as overly sharp edges or missing high-frequency details like fine hairs--that could indicate digital alteration. Even under deeper scrutiny for generator-specific indicators (rule3), none appear present either; suggesting authenticity at the highest level.
+
+  [Conclusion]
+    Considering both structural consistency, contextual alignment within biological norms, and absence of detectable artificial markers, the evidence strongly supports the conclusion that this is an actual photo generated through proper photography techniques. It does not violate any specific lighting laws nor introduce misleading optical properties typical of synthetic images. Therefore, the most reasonable judgment is that the image was created using genuine photographic means but may have required some minor post-processing efforts over time.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 31000171.jpg
+  Classifier verdict: REAL  (conf 94.8%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic due to its natural facial structure and realistic appearance.
+
+  [Planning]
+    To confirm authenticity further, we will examine it through a structured forensic process: starting with visual inspection for subtle artifacts or anomalies, then moving into more detailed checks of generator-specific characteristics, and finally evaluating whether any evidence suggests artificial generation techniques. This comprehensive approach ensures that no overlooked cues may have been missed during initial assessment.
+
+  [Reasoning]
+    Upon closer examination, the face exhibits consistent skin tone without visible blemishes such as pores, blurring inconsistencies in edges, or unnatural texture transitions between different regions. The lighting and shadows are physically plausible and do not violate real-world optical behavior. There is also an absence of stylized makeup patterns, focus discrepancies, or implausible expressions, which aligns with typical expectations from genuine photographs.
+    Further analysis reveals smooth contours around hairline and ears, and there are no signs of blending boundaries or jagged textures. Even under deeper scrutiny, the presence of high-frequency details like fine lines on the skin matches what would be expected in naturally captured images rather than synthetic ones. Additionally, physical plausibility—such as proportions, depth, and overall realism—is maintained across all observed domains.
+
+  [Conclusion]
+    Considering all these aspects--from structural coherence to adherence to physical laws, the image does not exhibit any significant flaws indicative of AI manipulation. It remains convincingly authentic at multiple levels, supporting the conclusion that this was likely taken by an experienced observer who meticulously examined both obvious and hidden indicators before making judgment.
+
+  Generated answer : FAKE
+  [WARNING] Reasoning answer (FAKE) disagrees with classifier (REAL)
+================================================================
+
+================================================================
+  Image             : 31000177.jpg
+  Classifier verdict: REAL  (conf 95.6%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic and shows no obvious signs of manipulation or artificial generation.
+
+  [Reasoning]
+    The facial structure looks natural; proportions are consistent across eye width, nose size, smile expression, eyebrow spacing, etc., without any visible distortions. Subtle indicators such as symmetry in eyes, skin tone consistency, and absence of unnatural blur further support its realism.
+    To dive deeper, even though high-frequency details like pores cannot be confidently detected due to this low-resolution sample, there were only minor inconsistencies that align with known limitations of AI-generated images—specifically areas around the hairline where fine detail might normally differ slightly from expected biological variation. Lighting and shadows follow realistic patterns, makeup application seems plausible under standard conditions, and overall style matches what would be seen in a photograph captured using camera equipment rather than generated content.
+    Despite these observations, some higher-level cues point toward possible synthetic origin—a common issue encountered when dealing solely with lower resolution samples. However, none represent definitive evidence against authenticity but must consider whether they could potentially mimic human characteristics convincingly enough for being considered misleading at best.
+
+  [Conclusion]
+    Considering all aspects—the image displays strong initial credibility based on visual structure, contextual coherence, and adherence to biometric laws. While not conclusively convincing given our level of scrutiny alone, sufficient information exists within the available data to conclude that the face does not display clear signs of AI tampering. Therefore, the image can reasonably be classified as genuine.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 31000187.jpg
+  Classifier verdict: REAL  (conf 95.2%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation.
+
+  [Planning]
+    To determine if it is fake or not, a more detailed and structured analysis will be necessary. This includes evaluating both visual structure and generator characteristics for inconsistencies. Since this initial assessment was quick, we must proceed through multiple layers to confirm authenticity.
+
+  [Reasoning]
+    The face exhibits natural proportions, consistent skin tone without visible distortions such as asymmetry or unnatural expressions. Lighting and shadows appear physically plausible, and there are no contextual mismatches that would suggest artificial generation. Upon closer inspection, even subtle artifacts typically found in AI-generated images--such as edge irregularities, texture anomalies, or missing fine details--are absent here. These elements align strongly with those seen in real photographs, reinforcing their credibility at a medium difficulty level. However, due to its rapid evaluation process, any definitive conclusion cannot yet be drawn solely based on available data.
+
+  [Reflection]
+    While these observations support an authentic sample, they also highlight areas where further scrutiny might reveal deeper issues beyond surface-level realism. Future analyses should focus similarly on identifying whether specific generators were intentionally misleadingly used by examining patterns within generative models rather than directly assessing physical plausibility alone.
+
+  [Conclusion]
+    Based on the absence of detectable flaws across structural coherence, lighting consistency, and realistic appearance, the image does not display evidence of being artificially generated. It remains classified as genuine unless judged under highly rigorous forensic standards designed specifically for AI-generated content.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 310151.png
+  Classifier verdict: FAKE  (conf 69.8%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears to depict a real person with natural facial features and expressions.
+
+  [Planning]
+    To determine whether this is authentic or fake, we must carefully examine multiple aspects: structural integrity, lighting consistency across all visible regions, and any subtle artifacts that may indicate manipulation.</br>
+
+  [Reasoning]
+    Upon closer inspection, the skin tone varies subtly between different facial areas--particularly around the eyes and hairline--suggesting possible blending issues rather than genuine differences in makeup. The edges of the face are smooth yet exhibit slight imperfections where human anatomy should naturally show variation. These signs point toward artificial generation.
+    To dive deeper into authenticity detection, further examination reveals inconsistencies in how the lighting interacts on the subject's face. High-frequency details such as pores typically fade under realistic illumination but remain present here. Additionally, there seems an unnatural sharpness at certain boundaries, especially near the jawline and nose, which does not align perfectly with what would be expected from a photograph captured without digital interpolation.
+    Finally, considering physical plausibility, even minor irregularities like mismatched shadows or overly stylized textures could potentially mislead us about realism if one ignores them entirely. However, when combined with these layered observations, they collectively support the conclusion that the image likely originates from AI-generated content due to its synthetic appearance.
+
+  [Conclusion]
+    Based on detailed visual analysis consistent with known generator patterns and subtle anomalies introduced by generative models, it becomes clear that the image was created using AI techniques rather than being taken directly from nature. This judgment is robustly supported by both initial observation and progressively refined reasoning along specific forensic lines.
+
+  Generated answer : FAKE
+================================================================
+
+================================================================
+  Image             : 310160.png
+  Classifier verdict: FAKE  (conf 93.1%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation.
+
+  [Planning]
+    Given that a straightforward visual inspection was initially inconclusive due to its apparent realism and lack of immediate structural abnormalities, we proceed through more detailed analysis without waiting for definitive evidence.
+
+  [Reasoning]
+    Upon closer examination, several subtle but telling indicators emerge: The skin tone is consistent across facial features, there are no unnatural blurs or texture distortions, suggesting natural blending at edges. Additionally, while lighting remains uniform throughout the face--no mismatched shadows or illumination patterns--there's also an absence of any contextual mismatches between the subject in the foreground and background structure. These observations support the conclusion that this image does not depict AI-generated imagery.
+
+  [Conclusion]
+    Considering all observed elements consistently align with real-world expectations, it can be confidently concluded that the image shows genuine human characteristics rather than being artificially generated by digital means.
+
+  Generated answer : FAKE
+================================================================
+
+================================================================
+  Image             : 310189.jpg
+  Classifier verdict: REAL  (conf 94.4%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and no obvious signs of manipulation.
+
+  [Planning]
+    To determine whether this is a real or fake image requires further inspection through multiple layers:
+
+  [Reasoning]
+    The face exhibits consistent skin tone without visible blemishes such as pores or texture irregularities that would suggest digital generation. Lighting and shadows align naturally around the eyes, nose, and mouth, showing proper focus and consistency under normal conditions. There are also subtle but realistic makeup details like fine lines on the cheeks and soft blending at edges--all indicators of genuine human expression. Even in areas where high-frequency detail might be expected to shine (such as within hair strands), there's minimal loss of crispness relative to surrounding elements. Furthermore, physical plausibility checks hold up when examined individually; from lighting direction across all faces to contextual coherence between the subject’s pose and background.
+
+  [Conclusion]
+    Considering both visual structure and generator-specific artifacts, the image does not exhibit any significant inconsistencies indicative of artificial origin. It maintains strong structural integrity while adhering to realism expectations for photographic images.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 310203.jpg
+  Classifier verdict: REAL  (conf 93.9%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation or artificial generation.
+
+  [Planning]
+    To determine if this is a real photograph versus an AI-generated one, we need to examine multiple aspects: structural consistency across all visible elements and any subtle artifacts that may indicate synthetic origin.
+
+  [Reasoning]
+    The facial structure shows natural proportions without distortion—eyes are symmetrical, nose size matches typical human norms, skin tone varies appropriately between cheeks, and there's no unnatural blurring or missing high-frequency detail such as pores. Furthermore, lighting and shadows align naturally under consistent illumination conditions, and makeup application seems genuine in terms of color coherence.
+    Upon closer inspection, while certain features like edges appear slightly less crisp than those seen in higher-quality images, they do not violate physical realism; rather suggesting a digital artifact likely introduced by generative models rather than being inherent to the scene itself. Lighting remains physically plausible, and even minor inconsistencies observed tend more towards potential issues from processing rather than violations of physics.
+    To dive deeper into possible generator-specific weaknesses, we must consider whether these artifacts could be convincingly faked out. Even though the texture lacks perfect smoothness and some areas exhibit slight imperfection--a known limitation of realistic photographic faces--it does not reach the level where it would raise suspicion about its authenticity. Additionally, absence of hard focus differences further supports its natural appearance on both visual and textural fronts.
+
+  [Conclusion]
+    Synthesizing all observations together, the evidence strongly suggests this image is authentic at a forensic level but exhibits characteristics commonly associated with generated content. While specific stylistic choices were missed, none point toward deliberate manipulation nor imply implausible behavior patterns within a well-structured face. Therefore, the conclusion leans decisively toward "real."
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 32000017.png
+  Classifier verdict: FAKE  (conf 89.2%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears realistic with no obvious signs of being fake.
+
+  [Planning]
+    To determine whether this is a real or AI-generated face, we should analyze it from multiple perspectives: visually for structural consistency and subtle artifacts that may indicate manipulation.
+
+  [Reasoning]
+    Upon closer inspection, there are several visual cues suggesting artificial generation. The skin tone varies significantly between facial regions (particularly on the neck), which could imply blending issues common in synthetic images. Additionally, while the eyes appear natural and symmetrical, their expression lacks some emotional depth--there's an absence of subtlety nuanced emotion typical in genuine human faces.
+    To dive deeper into potential deception, let us examine more specific indicators. First, there seems to be slight unnatural sharpness around edges where the hair meets the background; especially noticeable near the jawline and cheeks, indicating poor focus resolution at these areas rather than soft transitions across different zones. This kind artifact suggests intentional blurring during capture but does not follow natural-looking smoothing patterns when moving away from hard boundaries.
+    Another notable detail is the presence of high-frequency texture details such as pores under the chin and along the nose bridge, which might have been lost due to generative processes often used by models to produce realism without losing fine biological features. These missing textures can sometimes lead viewers to suspect digital enhancement even if judged solely through surface-level observation alone.
+
+  [Conclusion]
+    Considering all observed elements -- both visible structure inconsistencies and finer textural anomalies -- together form strong evidence against the image being authentic. While certain aspects like edge definition or minor imperfections hint towards possible manipulations, they do not conclusively rule out forgivable nature-related effects typically found in generated imagery. However, given its overall appearance and lack of organic variation, the case leans toward identifying it as artificially created.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 40000001.jpg
+  Classifier verdict: REAL  (conf 94.1%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation.
+
+  [Planning]
+    To determine if it is real or fake, we need to examine multiple aspects: visual structure and appearance for any subtle artifacts that might suggest artificial generation.
+
+  [Reasoning]
+    The facial expression seems natural without distortions such as asymmetry or unnatural expressions. Upon closer inspection, there are also no inconsistencies in lighting, texture, or style violations common in AI-generated images. These observations align well with what would be expected from a genuine photograph captured by an unaided camera device. Further examination reveals smooth edges around hairline and skin contour transitions, consistent blurring across different regions, and realistic focus distribution—all indicative of high-quality photography capturing the subject naturally. There's no sign of digital tampering like blocky boundaries or missing fine details typically found in synthetic media.
+
+  [Conclusion]
+    Considering all observed elements--structural coherence, absence of generator-specific anomalies, and physical plausibility--the image shows strong evidence supporting its authenticity at this stage. It does not raise suspicion regarding being artificially generated but requires further scrutiny due to potential limitations inherent in human perception alone.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 6.jpg
+  Classifier verdict: REAL  (conf 93.5%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation.
+
+  [Reasoning]
+    The facial structure is natural and symmetrical without any visible distortions or asymmetries that would raise suspicion about its authenticity. Upon closer inspection, there are no subtle artifacts typically introduced by AI generators such as unnatural skin texture differences, missing high-frequency details like pores, and consistent lighting patterns across different regions--all of which align with real-world expectations.
+    Furthermore, while a slight stylization exists in terms of sharpness around edges and absence of fine detail, this pattern is more common among artistic styles rather than being inherently suspicious. These issues do not violate physical laws nor imply artificial generation.
+
+  [Reflection]
+    But wait... what's even more intriguing is how well the face looks proportionate to an average human head size; it doesn't immediately suggest synthetic creation either. Even though some minor inconsistencies might be present on surface level for casual observers, they often result from stylistic choices made during creative expression, making them harder to discern when viewed through conventional lenses.
+
+  [Conclusion]
+    Considering all observed features together---from structural integrity to subtle generator-induced anomalies--the evidence strongly supports the conclusion: This image does not exhibit clear signs of being fake but instead shows genuine photographic characteristics typical of real photographs.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : 9.jpg
+  Classifier verdict: REAL  (conf 95.7%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears to be authentic due to its realistic facial structure and natural lighting.
+
+  Generated answer : UNKNOWN
+================================================================
+
+================================================================
+  Image             : 99.png
+  Classifier verdict: REAL  (conf 92.1%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with natural facial features and a coherent appearance.
+
+  [Reasoning]
+    The face exhibits consistent skin tone, realistic proportions, and natural expressions—implying no signs of artificial distortion such as unnatural blurring, missing textures, or mismatched colors. Upon closer inspection, there are also no violations in lighting, focus consistency across different regions, or contextual mismatches between the subject's expression and background which would violate real-world expectations. Even under deeper scrutiny, the edges appear soft yet naturally defined without any abrupt transitions or blending issues typically seen in AI-generated images. There is no evidence of stylization like blocky patterns or optical focusing discrepancies commonly found in manipulated portraits. Furthermore, while some elements may seem unusually detailed--such as fine hair texture--are present but do not raise suspicion when considered together. All these factors collectively support an assessment of realism at this level.
+
+  [Conclusion]
+    Considering all aspects from initial impression to deep forensic analysis, the image does not exhibit detectable anomalies indicative of being artificially generated. It aligns with characteristics typical of genuine photographic content. Therefore, the conclusion can be confidently drawn based on its adherence to both basic physical laws and more refined aesthetic criteria.
+
+  Generated answer : FAKE
+  [WARNING] Reasoning answer (FAKE) disagrees with classifier (REAL)
+================================================================
+
+================================================================
+  Image             : mar.jpg
+  Classifier verdict: REAL  (conf 96.2%)
+================================================================
+
+  [Quick take]
+    The image appears authentic at first glance, but a deeper forensic inspection is necessary to confirm its authenticity.
+
+  [Reasoning]
+    At this stage, no obvious signs of manipulation are detected; all facial features align with those expected in real photographs without distortion. Further examination reveals consistent skin tone distribution across different regions--there are no abrupt color transitions between face elements or texture inconsistencies typical of AI-generated images. Lighting behavior matches natural light sources, shadows remain coherent throughout the scene, and there are no implausible focus discrepancies that might suggest synthetic generation.
+
+  [Conclusion]
+    Based on the absence of detectable artificial anomalies across both high-level physical properties (triple10) and more detailed fine-grained details, the image does not exhibit any clear indicators of being fake. Therefore, the evidence strongly supports the conclusion that the photo was generated by an AI model rather than a real photograph.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+  Image             : omi.jpg
+  Classifier verdict: REAL  (conf 90.7%)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation or artificial generation.
+
+  [Reasoning]
+    The facial features are symmetrical and proportionate, showing no visible structural abnormalities in expression or alignment that would suggest AI generation. Upon closer inspection for subtle artifacts typically introduced by generative models such as edge irregularities, unnatural blurring, missing high-frequency details like skin texture, or inconsistent lighting, all point towards natural imagery rather than synthetic content.
+    Furthermore, when considering whether these elements align coherently within real-world expectations—such as uniform illumination across the face, consistent shadow patterns relative to light sources, and absence of optical focus discrepancies—the presence of clear biometric cues supports this conclusion. Even under the stringent scrutiny required at a medium depth of analysis, there is no evidence suggesting digital tampering; instead, the entire scene behaves naturally without violating known properties of generated images.
+
+  [Conclusion]
+    Synthesizing all observations together—a careful evaluation against both superficial and underlying generator characteristics--the data strongly indicates an authentic photograph. There are no compelling indicators pointing toward manipulation or synthetic origin, leading us to conclude that the image does not display significant anomalies associated with being fake.
+
+  Generated answer : REAL
+================================================================
+
+================================================================
+SUMMARY
+================================================================
+  Image              Classifier Conf     Gen Answer
+  ------------------ ---------- -------- ------------
+  160932.png         FAKE       94.7%    FAKE
+  161022.jpg         REAL       95.3%    FAKE
+  300013.jpg         REAL       95.4%    UNKNOWN
+  31000095.jpg       REAL       95.4%    REAL
+  31000171.jpg       REAL       94.8%    FAKE
+  31000177.jpg       REAL       95.6%    REAL
+  31000187.jpg       REAL       95.2%    REAL
+  310151.png         FAKE       69.8%    FAKE
+  310160.png         FAKE       93.1%    FAKE
+  310189.jpg         REAL       94.4%    REAL
+  310203.jpg         REAL       93.9%    REAL
+  32000017.png       FAKE       89.2%    UNKNOWN
+  40000001.jpg       REAL       94.1%    REAL
+  6.jpg              REAL       93.5%    REAL
+  9.jpg              REAL       95.7%    UNKNOWN
+  99.png             REAL       92.1%    FAKE
+  mar.jpg            REAL       96.2%    REAL
+  omi.jpg            REAL       90.7%    REAL
+================================================================
+
+Log saved to: ./runs/intern_fused/logs\inference_dpo_best_20261011_185017.log
+Done.
