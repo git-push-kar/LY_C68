@@ -92,31 +92,78 @@ def regions_from_topk(topk_indices, grid_size: int = TELEMETRY_GRID) -> str:
     return ", ".join(active[:2]) if active else "Uniform facial distribution"
 
 
-def describe_frequency(freq: torch.Tensor) -> str:
-    """Verdict-neutral HF/LF log-magnitude energy ratio description.
+_FREQ_MASKS = {}
 
-    NOTE: must stay neutral (a bare measurement). Branching the wording on the
-    verdict would bake the conclusion into the "evidence" and teach sycophancy.
-    """
+
+def _get_radial_masks(H: int, W: int, device: torch.device):
+    key = (H, W, str(device))
+    if key not in _FREQ_MASKS:
+        cy, cx = H // 2, W // 2
+        y, x = torch.meshgrid(torch.arange(H, device=device),
+                              torch.arange(W, device=device), indexing="ij")
+        r = torch.sqrt((y - cy).float() ** 2 + (x - cx).float() ** 2)
+        _FREQ_MASKS[key] = (r > (H * 0.35), r < (H * 0.15))
+    return _FREQ_MASKS[key]
+
+
+def batch_describe_frequency(freq: torch.Tensor) -> List[str]:
+    """Batch-vectorized HF/LF log-magnitude energy ratio description (zero per-sample CUDA syncs)."""
     ff = freq.detach().float()
-    if ff.dim() == 4:
-        ff = ff[0]
     H, W = ff.shape[-2], ff.shape[-1]
-    cy, cx = H // 2, W // 2
-    y, x = torch.meshgrid(torch.arange(H, device=ff.device),
-                          torch.arange(W, device=ff.device), indexing="ij")
-    r = torch.sqrt((y - cy).float() ** 2 + (x - cx).float() ** 2)
-    high_mask = r > (H * 0.35)
-    low_mask = r < (H * 0.15)
-    if ff.dim() == 3:
-        hf_energy = ff[:, high_mask].mean().item()
-        lf_energy = ff[:, low_mask].mean().item()
+    high_mask, low_mask = _get_radial_masks(H, W, ff.device)
+
+    if ff.dim() == 4:
+        hf_energy = ff[:, :, high_mask].mean(dim=(1, 2))
+        lf_energy = ff[:, :, low_mask].mean(dim=(1, 2))
+    elif ff.dim() == 3:
+        hf_energy = ff[:, high_mask].mean(dim=1)
+        lf_energy = ff[:, low_mask].mean(dim=1)
     else:
-        hf_energy = ff[high_mask].mean().item()
-        lf_energy = ff[low_mask].mean().item()
-    ratio = hf_energy / (lf_energy + 1e-6)
-    return (f"HF/LF log-magnitude energy ratio={ratio:.2f} "
-            f"(lower ratio = smoother image with less high-frequency detail)")
+        hf_energy = ff[high_mask].mean().unsqueeze(0)
+        lf_energy = ff[low_mask].mean().unsqueeze(0)
+
+    ratios = (hf_energy / (lf_energy + 1e-6)).cpu().tolist()
+    return [
+        f"HF/LF log-magnitude energy ratio={r:.2f} (lower ratio = smoother image with less high-frequency detail)"
+        for r in ratios
+    ]
+
+
+def batch_regions_from_topk(attn_weights: torch.Tensor, grid_size: int = TELEMETRY_GRID) -> List[str]:
+    """Batch-vectorized mapping of top-attention patch indices to region names (single GPU transfer)."""
+    w = attn_weights.detach().float()
+    if w.dim() == 1:
+        w = w.unsqueeze(0)
+    k = min(8, w.size(1))
+    topk_indices = torch.topk(w, k=k, dim=1).indices.cpu().numpy()
+
+    results = []
+    for row_indices in topk_indices:
+        region_hits = {name: 0 for name in REGION_NAMES}
+        for idx in row_indices:
+            row = int(idx) // grid_size
+            col = int(idx) % grid_size
+            if col < 5 or col >= (grid_size - 5):
+                region_hits["Peripheral / Ear & Hair blending seams"] += 1
+            elif row < 8:
+                region_hits["Forehead / Upper hairline"] += 1
+            elif row < 14:
+                region_hits["Eyes & Facial midline"] += 1
+            elif row < 20:
+                region_hits["Nose & Cheek region"] += 1
+            elif row < 26:
+                region_hits["Mouth & Lower jaw"] += 1
+            else:
+                region_hits["Chin & Neck boundary"] += 1
+        active = [n for n, c in sorted(region_hits.items(), key=lambda x: x[1], reverse=True) if c > 0]
+        results.append(", ".join(active[:2]) if active else "Uniform facial distribution")
+    return results
+
+
+def describe_frequency(freq: torch.Tensor) -> str:
+    """Verdict-neutral HF/LF log-magnitude energy ratio description (single-tensor fallback)."""
+    res = batch_describe_frequency(freq.unsqueeze(0) if freq.dim() == 3 else freq)
+    return res[0] if res else "Natural spectral distribution"
 
 
 def build_grounding_prompt(verdict: str, conf_str: str,
@@ -177,12 +224,14 @@ class AttentionPool(nn.Module):
         dtype = self.mha.in_proj_weight.dtype
         pt = patch_tokens.to(dtype)
         q = self.query.expand(B, -1, -1).to(dtype)  # (B, 1, D)
-        # Query attends over patch key/values
-        attn_out, attn_weights = self.mha(query=q, key=pt, value=pt, need_weights=True)
-        normed = self.norm(attn_out.squeeze(1))  # (B, D)
         if return_weights:
+            attn_out, attn_weights = self.mha(query=q, key=pt, value=pt, need_weights=True)
+            normed = self.norm(attn_out.squeeze(1))  # (B, D)
             return normed, attn_weights.squeeze(1)  # (B, N)
-        return normed
+        else:
+            attn_out, _ = self.mha(query=q, key=pt, value=pt, need_weights=False)
+            normed = self.norm(attn_out.squeeze(1))  # (B, D)
+            return normed
 
 
 # ── Frequency Branch (v2: FFT / spectral fusion) ──────────────────────────────
@@ -721,30 +770,44 @@ class DeepfakeReasoningModel(nn.Module):
                           device) -> Optional[tuple]:
         """Build per-sample telemetry embed blocks for the joint LM path.
 
-        Returns (tele_embeds_padded, tele_mask, tele_len) or None when
-        grounding is disabled/unavailable. Telemetry uses TRUE labels.
+        Vectorized across the batch to eliminate per-sample CUDA synchronization stalls.
         """
         if not self.grounding or self._tokenizer is None:
             return None
         B = labels.size(0)
+
+        # Batch-extract frequency descriptions and attention regions (1 GPU transfer instead of B syncs)
+        if freq_features is not None:
+            spectral_descs = batch_describe_frequency(freq_features)
+        else:
+            spectral_descs = ["Natural spectral distribution"] * B
+
+        if attn_weights is not None:
+            regions_list = batch_regions_from_topk(attn_weights)
+        else:
+            regions_list = ["Uniform facial distribution"] * B
+
+        # Extract labels in a single batch transfer
+        labels_list = labels.detach().cpu().tolist()
+
+        # Batch flip calculation if flip probability is set
+        if self.grounding_flip_prob > 0.0:
+            flips = (torch.rand(B) < self.grounding_flip_prob).tolist()
+        else:
+            flips = [False] * B
+
         texts = []
         for i in range(B):
-            lab = int(labels[i].item())
+            lab = int(labels_list[i])
             verdict = "FAKE" if lab == 1 else "REAL"
-            if self.grounding_flip_prob > 0.0 and torch.rand(()).item() < self.grounding_flip_prob:
+            if flips[i]:
                 verdict = "REAL" if verdict == "FAKE" else "FAKE"
-            spectral = describe_frequency(freq_features[i]) if freq_features is not None else \
-                "Natural spectral distribution"
-            if attn_weights is not None:
-                w = attn_weights[i].detach().float()
-                k = min(8, w.numel())
-                topk = torch.topk(w, k=k).indices.cpu().tolist()
-                regions = regions_from_topk(topk)
-            else:
-                regions = "Uniform facial distribution"
+            spectral = spectral_descs[i] if i < len(spectral_descs) else "Natural spectral distribution"
+            regions = regions_list[i] if i < len(regions_list) else "Uniform facial distribution"
             texts.append(build_grounding_prompt(
                 verdict=verdict, conf_str="dataset label",
                 spectral_desc=spectral, regions_str=regions))
+
         enc = self._tokenizer(texts, padding=True, truncation=True,
                               max_length=160, return_tensors="pt")
         tele_ids = enc["input_ids"].to(device)
