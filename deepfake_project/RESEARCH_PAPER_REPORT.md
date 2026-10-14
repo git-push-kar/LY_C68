@@ -132,7 +132,7 @@ To avoid catastrophic forgetting while adapting both visual representations and 
    * **Rank ($r$):** 64
    * **Alpha ($\alpha$):** 128
    * **Dropout:** 0.05
-   * **Trainable Parameters:** $29,622,272$ parameters ($\sim 1.48\%$ of LLM weights).
+   * **Measured trainable parameters (final `intern_fused_ground` extraction, 2026-10-14):** $73{,}859{,}072$ across 392 tensors (bf16) — this is the authoritative count from `runs/intern_fused_ground/adapters/extraction_report.json`, superseding earlier estimates.
 
 2. **Vision LoRA Configuration:**
    * **Target Modules:** InternViT self-attention and feed-forward linear layers:
@@ -140,7 +140,9 @@ To avoid catastrophic forgetting while adapting both visual representations and 
    * **Rank ($r$):** 16
    * **Alpha ($\alpha$):** 32
    * **Dropout:** 0.05
-   * **Trainable Parameters:** $3,538,944$ parameters ($\sim 1.16\%$ of ViT weights).
+   * **Measured trainable parameters (final extraction):** $6{,}291{,}456$ across 192 tensors (bf16).
+
+> **Checkpoint-type note (verified 2026-10-14):** `runs/intern_fused_ground/checkpoints/best.pth` (epoch 3, 1,328 tensors, ~4.36 GB) is a **whole-model** `state_dict` — frozen fused backbone + 584 LoRA tensors + 59 custom-head tensors — **not** an adapter-only file. The deployable PEFT artifact is produced by `extract_adapters.py` (defaults: `--checkpoint ./runs/intern_fused_ground/checkpoints/best.pth --output_dir ./runs/intern_fused_ground/adapters --base_model ./models/internvl3_2b_lr_fused`): `llm_adapter/` (~147.8 MB) + `vision_adapter/` (~12.6 MB) + `custom_heads/custom_heads.safetensors` (~26.5 MB, 59 tensors / 13,257,034 params covering `cls_head`, `attn_pool`, `freq_branch`, `custom_projector`, `domain_router`). Adapters alone do **not** reproduce classifier scores; the custom heads must ship with them, on the same fused base the run trained from. During ground post-training `cls_head` (4 tensors) was frozen while LLM LoRA + vision LoRA + `attn_pool`/`freq_branch`/`custom_projector`/`domain_router` stayed trainable.
 
 ### 2.3 Frequency Branch: 2D FFT CNN
 Deepfake synthesis artifacts—such as upsampling grids from transposed convolutions, bilinear interpolation blur, or latent diffusion frequency cutoffs—are prominent in the 2D Fourier domain.
@@ -388,10 +390,13 @@ The model was evaluated across 52,266 held-out test samples comprising four dema
 | **Overall Benchmark**| **52,266** | **87.49%** | **0.8611** | **0.9479** | **0.46** | **89.94%** | **0.8948** |
 
 ### 7.2 Grounded Fine-Tuning Validation Dynamics
-During Stage 4 grounded training (`runs/intern_fused_ground`), the model achieved outstanding convergence on the balanced validation set ($N = 4,000$):
-* **Epoch 1:** TrLoss: 1.1582 | VaLoss: 0.3120 | VaAcc: 94.80% | VaAUC: 0.9912
-* **Epoch 2:** TrLoss: 0.8410 | VaLoss: 0.2850 | VaAcc: 95.45% | VaAUC: 0.9928
-* **Epoch 3:** TrLoss: 0.7307 | VaLoss: **0.2736** | VaAcc: **96.00%** | VaAUC: **0.9936**
+During Stage 4 grounded training (`runs/intern_fused_ground`, `runs/intern_fused_ground/logs/epochs.csv`), the model converged on the balanced validation set as follows (LM curriculum weight in parentheses; note epoch 2 appears twice — the run was restarted from `ep006.pth` and the later row is authoritative):
+
+* **Epoch 1:** TrLoss: 0.5905 (TrCls 0.3117, TrLM 0.9222, Cons 0.0424) | TrAcc 93.18% | VaLoss: 0.2934 | VaAcc: 95.05% | VaAUC: 0.992431 ($\lambda_{\text{lm}}=0.30$)
+* **Epoch 2:** TrLoss: 0.6436 (TrCls 0.2909, TrLM 0.7811, Cons 0.0246) | TrAcc 94.53% | VaLoss: 0.2759 | VaAcc: 95.80% | VaAUC: 0.993507 ($\lambda_{\text{lm}}=0.45$)
+* **Epoch 3 (best.pth):** TrLoss: 0.7307 (TrCls 0.2786, TrLM 0.7517, Cons 0.0200) | TrAcc 95.25% | VaLoss: **0.2736** | VaAcc: **96.00%** | VaAUC: **0.993647** ($\lambda_{\text{lm}}=0.60$)
+
+Total joint steps per epoch: 8,765 paired batches. Rising total loss across epochs is expected: the scheduled $\lambda_{\text{lm}}$ doubles (0.3 → 0.6), weighting the larger-magnitude LM term more heavily, while the monitored signals of quality — classification loss (0.312 → 0.279), consistency loss (0.042 → 0.020), validation accuracy and AUC — all improve monotonically.
 
 ---
 
@@ -505,6 +510,15 @@ python -u train.py \
     --epochs_joint 3 \
     --freeze_cls_head \
     --output_dir ./runs/intern_fused_ground
+```
+
+> `best.pth` here is whole-model (~4.36 GB). For PEFT redistribution run the updated extractor (also validates round-trip tensor equality):
+```bash
+python extract_adapters.py \
+    --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
+    --output_dir ./runs/intern_fused_ground/adapters \
+    --base_model ./models/internvl3_2b_lr_fused \
+    --skip_functional_check   # omit to also attach-test against the clean fused base
 ```
 
 ### 8.2 Telemetry-Grounded Inference Execution
