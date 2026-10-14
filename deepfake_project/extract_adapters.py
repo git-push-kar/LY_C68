@@ -1,22 +1,45 @@
 """
 extract_adapters.py
 ===================
-Extract standalone PEFT LoRA adapters (LLM + vision) from a full-model
-`.pth` checkpoint (e.g. runs/intern_v2_dpo/checkpoints/dpo_best.pth) so they
-can be attached to a clean InternVL3-2B base elsewhere via:
+Extract standalone PEFT LoRA adapters (LLM + vision) PLUS the full-finetune
+custom heads from a full-model `.pth` checkpoint so the run can be redeployed
+elsewhere.
+
+Final-model status (verified 2026-10-14):
+  runs/intern_fused_ground/checkpoints/best.pth is a WHOLE-MODEL checkpoint
+  (1328 tensors, ~4.36 GB: frozen fused backbone + 584 LoRA tensors
+  [392 LLM r=64 + 192 vision r=16] + 59 custom-head tensors), NOT an
+  adapter-only file. It was post-trained from
+  runs/intern_fused/checkpoints/ep006.pth with:
+    epochs_cls=0, epochs_joint=3, --freeze_cls_head (cls_head frozen),
+    grounding on, base ./models/internvl3_2b_lr_fused.
+  Optimizer groups at train time: LoRA=584 tensors, Custom=43 tensors
+  (attn_pool + freq_branch + custom_projector + domain_router; cls_head
+  excluded by the freeze).
+
+Because adapters alone do NOT reproduce the classifier/reasoning behaviour,
+this script now extracts BOTH:
+  <out>/llm_adapter/          — LLM LoRA (attach to base.language_model)
+  <out>/vision_adapter/       — Vision LoRA (attach to base.vision_model)
+  <out>/custom_heads/         — cls_head + attn_pool + freq_branch +
+                                custom_projector + domain_router
+                                (load onto a fresh DeepfakeReasoningModel
+                                via load_state_dict(strict=False))
+
+Adapter attach pattern (needs the SAME fused base the run trained from):
 
     from peft import PeftModel
-    base = AutoModel.from_pretrained("./models/InternVL3-2B", trust_remote_code=True, torch_dtype=torch.bfloat16)
+    base = AutoModel.from_pretrained("./models/internvl3_2b_lr_fused", trust_remote_code=True, torch_dtype=torch.bfloat16)
     llm  = PeftModel.from_pretrained(base.language_model, "<out>/llm_adapter")
     vit  = PeftModel.from_pretrained(base.vision_model,   "<out>/vision_adapter")
-
-Only LoRA tensors travel. Full-finetune modules (cls_head, freq_branch,
-attn_pool, custom_projector, domain_router) are NOT adapters and stay behind.
+    # then load <out>/custom_heads/custom_heads.safetensors into
+    # cls_head / attn_pool / freq_branch / custom_projector / domain_router
 
 Usage (from deepfake_project/):
     python extract_adapters.py \
-        --checkpoint ./runs/intern_v2_dpo/checkpoints/dpo_best.pth \
-        --output_dir ./runs/intern_v2_dpo/adapters
+        --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
+        --output_dir ./runs/intern_fused_ground/adapters \
+        --base_model ./models/internvl3_2b_lr_fused
 """
 
 import argparse
@@ -50,15 +73,20 @@ PARTS = {
     "vision_adapter": ("backbone.vision_model.", False),
 }
 
+# Full-finetune custom heads (NOT LoRA — must ship alongside the adapters
+# for the intern_fused_ground final model to reproduce its scores).
+CUSTOM_PREFIXES = ("cls_head.", "attn_pool.", "freq_branch.",
+                   "custom_projector.", "domain_router.")
+
 PEFT_INFIX = ".base_model.model."
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Extract standalone PEFT adapters from a full .pth checkpoint")
-    p.add_argument("--checkpoint", default="./runs/intern_v2_dpo/checkpoints/dpo_best.pth")
-    p.add_argument("--output_dir", default="./runs/intern_v2_dpo/adapters")
-    p.add_argument("--base_model", default="./models/InternVL3-2B",
-                   help="Recorded as base_model_name_or_path in adapter_config.json")
+    p = argparse.ArgumentParser(description="Extract standalone PEFT adapters + custom heads from a full .pth checkpoint")
+    p.add_argument("--checkpoint", default="./runs/intern_fused_ground/checkpoints/best.pth")
+    p.add_argument("--output_dir", default="./runs/intern_fused_ground/adapters")
+    p.add_argument("--base_model", default="./models/internvl3_2b_lr_fused",
+                   help="Recorded as base_model_name_or_path in adapter_config.json (must be the base the run trained from)")
     p.add_argument("--llm_r", type=int, default=LLM_DEFAULTS["r"])
     p.add_argument("--llm_alpha", type=int, default=LLM_DEFAULTS["lora_alpha"])
     p.add_argument("--llm_dropout", type=float, default=LLM_DEFAULTS["lora_dropout"])
@@ -67,6 +95,8 @@ def parse_args():
     p.add_argument("--vision_dropout", type=float, default=VISION_DEFAULTS["lora_dropout"])
     p.add_argument("--skip_functional_check", action="store_true",
                    help="Skip rebuilding the model to strict-load the extracted adapters")
+    p.add_argument("--no_custom_heads", action="store_true",
+                   help="Skip extracting the full-finetune custom heads (adapters only)")
     return p.parse_args()
 
 
@@ -197,6 +227,47 @@ def main():
             "target_modules": cfg.target_modules,
             "r": cfg.r, "lora_alpha": cfg.lora_alpha,
         }
+
+    # ── Custom heads (full-finetune, required for deployment) ──────────
+    # intern_fused_ground post-training updated attn_pool / freq_branch /
+    # custom_projector / domain_router (cls_head frozen but still needed at
+    # inference). Adapters alone do not reproduce classifier scores.
+    if not args.no_custom_heads:
+        custom = {k: v.contiguous().cpu() for k, v in sd.items()
+                  if k.startswith(CUSTOM_PREFIXES)}
+        if not custom:
+            print("  [custom_heads] WARNING: no custom-head keys found — skipped")
+        else:
+            n_params = sum(v.numel() for v in custom.values())
+            print(f"Extracting custom_heads ... tensors={len(custom)} params={n_params:,}")
+            out_dir = os.path.join(args.output_dir, "custom_heads")
+            os.makedirs(out_dir, exist_ok=True)
+            w_path = os.path.join(out_dir, "custom_heads.safetensors")
+            safetensors_save(custom, w_path)
+            rt = safetensors_load(w_path, device="cpu")
+            assert set(rt) == set(custom), "custom_heads: key mismatch after reload"
+            for k in custom:
+                assert torch.equal(rt[k], custom[k]), f"custom_heads: tensor mismatch: {k}"
+            print(f"  wrote {w_path} ({os.path.getsize(w_path) / 1e6:.1f} MB) + round-trip OK")
+            report["custom_heads"] = {
+                "tensors": len(custom),
+                "params": n_params,
+                "modules": sorted({k.split(".")[0] for k in custom}),
+                "file": "custom_heads/custom_heads.safetensors",
+                "note": ("Load onto a fresh DeepfakeReasoningModel (same arch_version/arch) "
+                         "via model.load_state_dict(..., strict=False) together with the "
+                         "two PEFT adapters. cls_head was frozen during intern_fused_ground "
+                         "post-training but is still required at inference."),
+            }
+    else:
+        print("  [custom_heads] skipped (--no_custom_heads)")
+
+    report["provenance"] = {
+        "training": "intern_fused_ground joint post-training from runs/intern_fused/checkpoints/ep006.pth",
+        "base_model": args.base_model,
+        "frozen": "cls_head (4 tensors); trainable: LLM LoRA r=64 + vision LoRA r=16 + attn_pool/freq_branch/custom_projector/domain_router",
+        "checkpoint_type": "whole-model state_dict (backbone + LoRA + custom heads), NOT adapter-only",
+    }
 
     if not args.skip_functional_check and report["adapters"]:
         print("Functional check: loading clean base + attaching via PeftModel.from_pretrained ...")
