@@ -166,3 +166,5 @@ $RECYCLE.BIN/
 .mcp.json
 **/.mcp.json
 test_gemini.py
+
+adapters/

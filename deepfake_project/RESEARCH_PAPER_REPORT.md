@@ -15,7 +15,7 @@ In this work, we present **DeepfakeReasoningModel v2**, an end-to-end explainabl
 3. A learned **Attention Pooling Mechanism** (`AttentionPool`) that dynamically weights localized spatial artifacts across $1,024$ image patch tokens.
 4. A **Bidirectional Self-Consistency Loss** ($\mathcal{L}_{\text{cons}}$) mathematically aligning the classifier's binary prediction distribution with the LLM's final answer token logits.
 5. A **Grounded Forensic Telemetry Conditioning Mechanism** that feeds quantitative spectral energy ratios and localized anatomical attention hotspots directly into the LLM prefix, eliminating sycophantic hallucinations.
-6. A multi-stage curriculum consisting of **Classifier Warm-up**, **Joint SFT with Scheduled LM Loss Weighting**, and **Direct Preference Optimization (DPO)**.
+6. A multi-stage curriculum consisting of **Classifier Warm-up**, **Joint SFT with Scheduled LM Loss Weighting**, **Direct Preference Optimization (DPO)**, and **Grounded Reasoning Fine-Tuning** — instantiated over **two parallel lineages** that share the ungrounded curriculum and differ only in their foundation weights (vanilla `InternVL3-2B` vs. LR-fused `internvl3_2b_lr_fused`), as detailed in §4.6.
 
 Empirical evaluation on the multi-generator **HydraFake** benchmark demonstrates state-of-the-art cross-model generalization ($\text{AUC} = 0.9995$), cross-forgery robustness ($\text{AUC} = 0.9418$), and an overall grounded validation accuracy of **96.00%** with a validation **AUC of 0.9936**.
 
@@ -257,7 +257,7 @@ $$\text{Labels} = [\underbrace{-100, \dots, -100}_{N_{\text{vis}} + N_{\text{tel
 
 ## 4. Training Methodology & Multi-Stage Curriculum
 
-The full training progression comprises four distinct optimization stages:
+The full training progression comprises four distinct optimization stages (Stages 1–2 are shared across both foundation lineages; Stages 3–4 are alternative post-stages — see §4.6):
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
@@ -326,6 +326,33 @@ To eliminate template repetition (mode collapse) where the model repeats identic
 
 ### 4.5 Stage 4: Grounded Reasoning Fine-Tuning
 Using `--weights_from ep006.pth --freeze_cls_head --epochs_cls 0 --epochs_joint 3`, the classification head is frozen to lock in its peak discriminative accuracy ($>99\%$ AUC). The language model is fine-tuned to accept the synthesized telemetry prefix and generate faithful, forensic explanations without drifting from the classifier's verdict.
+
+### 4.6 Parallel Training Lineages and the Grounded Vanilla-Base Continuation
+
+Stages 3 and 4 are **alternative post-stages, not sequential**. Two lineages were run in practice; they share identical architecture, data, loss, optimizer, and Stages 1–2, and differ **only in their foundation weights**:
+
+| | **Lineage A — LR-Fused** | **Lineage B — Vanilla** |
+| :--- | :--- | :--- |
+| Foundation | `internvl3_2b_lr_fused` (Stage 0 merged) | `InternVL3-2B` (off-the-shelf) |
+| Stage 1 — Classifier warm-up | 3 epochs | 3 epochs |
+| Stage 2 — Joint (ungrounded) | 3 epochs → `runs/intern_fused/ep006.pth` | 3 epochs → `runs/intern_v2/ep006.pth` |
+| **Common reach** | **epoch 6** | **epoch 6** |
+| Post-stage α — DPO (2 ep) | `runs/intern_fused_dpo` (trained, not deployed) | `runs/intern_v2_dpo` |
+| Post-stage β — Grounded (3 ep) | `runs/intern_fused_ground` (**deployed, verdict-with-evidence**) | `runs/intern_v2_ground` (**planned**, §4.6.1) |
+
+Both lineages therefore **converge up to the end of the ungrounded joint stage (epoch 6)** and diverge thereafter: Lineage A proceeds to grounded telemetry fine-tuning, Lineage B to DPO.
+
+#### 4.6.1 Grounded continuation on the vanilla foundation (`runs/intern_v2_ground`)
+To obtain a verdict-with-evidence model directly on the vanilla foundation, Lineage B is continued from epoch 6 with the **identical Stage 4 recipe** applied to Lineage A:
+
+* **Init:** `runs/intern_v2/checkpoints/ep006.pth` (model weights only; fresh optimizer/scheduler).
+* **Config:** `config_intern_v2_ground.yaml`; launcher `run_intern_v2_ground.bat`.
+* **Recipe:** `epochs_cls=0`, `epochs_joint=3`, `--freeze_cls_head`, `grounding=True` (default; no `--no_grounding`), `ground_flip_prob=0.0`.
+* **Freeze:** `cls_head` (4 tensors); trainable = LLM LoRA + vision LoRA + `attn_pool`/`freq_branch`/`custom_projector`/`domain_router`.
+* **Output:** `./runs/intern_v2_ground`.
+* **Expected cost:** ~26–34 h (~8.5–14 h per grounded epoch on a single RTX A5000; the equivalent `intern_fused_ground` 3-epoch run took ~31 h), because grounding forces `_need_weights=True`, disabling the fused SDPA fast-path and adding per-batch telemetry tokenization.
+
+Because both lineages share Stages 1–2, `intern_v2_ground` is expected to track `intern_fused_ground` closely, with any residual gap attributable to the foundation's pre-adapted logical-reasoning ability (present in `internvl3_2b_lr_fused`, absent in vanilla `InternVL3-2B`).
 
 ---
 
@@ -474,8 +501,11 @@ Total joint steps per epoch: 8,765 paired batches. Rising total loss across epoc
     Physical, textural, and spectral properties consistently support an authentic capture.
 
   Generated answer  : REAL
-================================================================
+===============================================================
 ```
+
+### 7.4 Planned Validation: Grounded Vanilla-Base Continuation (`runs/intern_v2_ground`)
+`runs/intern_v2_ground` (Lineage B, §4.6.1) is **prepared but not yet trained**. It resumes the vanilla lineage from `runs/intern_v2/checkpoints/ep006.pth` under the identical Stage 4 recipe (`epochs_cls=0`, `epochs_joint=3`, `--freeze_cls_head`, grounding ON). Expected behaviour mirrors §7.2 — monotonic improvement of classifier loss, consistency loss, validation accuracy, and AUC across the 3 grounded epochs — at ~26–34 h compute. Once complete, evaluate with the same 52,266-sample protocol (§7.1) to compare directly against the deployed `intern_fused_ground`.
 
 ---
 
@@ -502,7 +532,7 @@ python -u train_dpo.py \
     --dpo_epochs 2 \
     --output_dir ./runs/intern_fused_dpo
 
-# Stage 4: Grounded Telemetry Fine-Tuning
+# Stage 4: Grounded Telemetry Fine-Tuning (Lineage A, LR-fused base)
 python -u train.py \
     --config config.yaml \
     --weights_from ./runs/intern_fused/checkpoints/ep006.pth \
@@ -510,6 +540,41 @@ python -u train.py \
     --epochs_joint 3 \
     --freeze_cls_head \
     --output_dir ./runs/intern_fused_ground
+```
+
+Parallel **Lineage B (vanilla foundation `InternVL3-2B`)** — same recipe, different base:
+```bash
+# Stage 1 & 2 (Lineage B): Classifier Warm-up + Joint SFT on the vanilla base
+python -u train.py \
+    --config config.yaml \
+    --model_path ./models/InternVL3-2B \
+    --tokenizer_path ./models/InternVL3-2B \
+    --batch_size 4 \
+    --grad_accum 8 \
+    --epochs_cls 3 \
+    --epochs_joint 3 \
+    --output_dir ./runs/intern_v2
+
+# Stage 3 (Lineage B): Preference Optimization (DPO) on the vanilla base
+python -u train_dpo.py \
+    --config config.yaml \
+    --model_path ./models/InternVL3-2B \
+    --checkpoint ./runs/intern_v2/checkpoints/best.pth \
+    --dpo_epochs 2 \
+    --output_dir ./runs/intern_v2_dpo
+
+# Stage 4 (Lineage B): RESUME grounded verdict-with-evidence from epoch 6 (vanilla base)
+#   init = runs/intern_v2/checkpoints/ep006.pth; grounding ON by default; cls_head frozen.
+#   Equivalent one-liner: run_intern_v2_ground.bat
+python -u train.py \
+    --config config_intern_v2_ground.yaml \
+    --model_path ./models/InternVL3-2B \
+    --tokenizer_path ./models/InternVL3-2B \
+    --weights_from ./runs/intern_v2/checkpoints/ep006.pth \
+    --output_dir ./runs/intern_v2_ground \
+    --epochs_cls 0 \
+    --epochs_joint 3 \
+    --freeze_cls_head
 ```
 
 > `best.pth` here is whole-model (~4.36 GB). For PEFT redistribution run the updated extractor (also validates round-trip tensor equality):

@@ -1,0 +1,69 @@
+# config_intern_v2_ground.yaml
+# ============================================================================
+# Dedicated config: Stage 4 "Grounded Reasoning Fine-Tuning" on the FRESH
+# VANILLA foundation (models/InternVL3-2B) - NOT the LR-fused base.
+#
+# This continues the vanilla-base lineage at epoch 6:
+#   base = ./models/InternVL3-2B
+#     -> runs/intern_v2  (S1 cls 3 ep + S2 joint 3 ep)  -> ep006.pth
+#     -> runs/intern_v2_ground  (THIS RUN: grounded joint 3 ep, cls_head frozen)
+#
+# It mirrors the fused-base Stage 4 recipe (runs/intern_fused_ground):
+#   epochs_cls=0, epochs_joint=3, --freeze_cls_head, grounding ENABLED.
+# Grounding is ON by default (train.py: model.grounding = not args.no_grounding);
+# do NOT pass --no_grounding. Keep --ground_flip_prob 0.0 for a clean first run.
+#
+# Launch (see run_intern_v2_ground.bat):
+#   python -u train.py --config config_intern_v2_ground.yaml
+# CLI arguments ALWAYS override these values.
+# ============================================================================
+
+dataset_root: "./datasets/hydrafake"
+json_root: "./datasets/hydrafake/jsons"
+
+model_path: "./models/InternVL3-2B"
+tokenizer_path: "./models/InternVL3-2B"
+output_dir: "./runs/intern_v2_ground"
+arch_version: "v2"
+
+# ── Init: continue from epoch 6 of the vanilla-base run ──────────────────────
+# train.py loads this as model weights only (fresh optimizer / scheduler),
+# exactly as intern_fused_ground loaded runs/intern_fused/checkpoints/ep006.pth.
+weights_from: "./runs/intern_v2/checkpoints/ep006.pth"
+
+# ── Architecture Hyperparameters ─────────────────────────────────────────────
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+
+vision_lora_rank: 16
+vision_lora_alpha: 32
+vision_lora_dropout: 0.05
+
+# ── Training & Optimization ──────────────────────────────────────────────────
+batch_size: 4
+grad_accum: 8
+epochs_cls: 0          # cls head already trained; freeze it and skip warm-up
+epochs_joint: 3        # grounded joint epochs (same as intern_fused_ground)
+lr: 5.0e-05
+weight_decay: 0.01
+warmup_ratio: 0.05
+patience: 5
+num_workers: 8
+attn_implementation: "sdpa"
+use_gradient_checkpointing: true
+
+# Lock the classifier while the LLM learns to consume the telemetry prefix
+freeze_cls_head: true
+freeze_projector: false
+
+# ── Loss Weights & Curriculum ────────────────────────────────────────────────
+# Linear ramp across joint epochs: 0.3 -> 0.6 (identical to intern_fused_ground)
+lm_loss_weight_start: 0.3
+lm_loss_weight_end: 0.6
+consistency_loss_weight: 0.05
+
+# ── Sequence & Image Dimensions ──────────────────────────────────────────────
+image_size: 448
+lm_seq_len: 512
+max_new_tokens: 512
