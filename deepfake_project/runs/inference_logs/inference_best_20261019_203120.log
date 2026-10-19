@@ -1,0 +1,46 @@
+Inference log : C:\Users\Admin\Desktop\LY_C68\deepfake_project\runs\inference_logs\inference_best_20261019_203120.log
+Checkpoint    : ./runs/intern_v2_ground/checkpoints/best.pth
+Images        : ['test_images/real/160932.png', 'test_images/real/161022.jpg', 'test_images/real/300013.jpg', 'test_images/real/31000095.jpg', 'test_images/real/31000171.jpg', 'test_images/real/31000177.jpg', 'test_images/real/31000187.jpg', 'test_images/real/310151.png', 'test_images/real/310160.png', 'test_images/real/310189.jpg', 'test_images/real/310203.jpg', 'test_images/real/32000017.png', 'test_images/real/40000001.jpg', 'test_images/real/6.jpg', 'test_images/real/9.jpg', 'test_images/real/99.png', 'test_images/real/mar.jpg', 'test_images/real/omi.jpg']
+Device        : cuda
+GPU           : NVIDIA RTX A5000
+
+Loading model ...
+Loading checkpoint: ./runs/intern_v2_ground/checkpoints/best.pth
+  epoch=3  stage=?  missing=0  unexpected=0
+
+Processing 18 image(s) ...
+
+
+================================================================
+  Image             : 160932.png
+  Classifier verdict: FAKE  (conf 95.1%)
+  Anomaly Hotspots  : Eyes & Facial midline, Peripheral / Ear & Hair blending seams
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.22 (lower ratio = smoother image with less high-frequency detail)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears realistic and does not raise immediate suspicion regarding its authenticity.
+
+  [Reasoning]
+    Upon closer inspection, several subtle artifacts become apparent. The edges around the hairline and jawline are unnaturally sharp, lacking the soft transitions typically seen in real photographs. Additionally, the skin texture is overly smooth, missing the natural fine details such as pores or minor imperfections that would be expected in a high-resolution image of a human face. There is also a slight inconsistency in sharpness between the face and the background, suggesting a blending boundary issue. While the lighting and shadows appear physically plausible and there are no obvious contextual mismatches, the overall image exhibits a stylized realism that deviates from true photographic characteristics.
+
+  [Conclusion]
+    Considering these subtle but consistent anomalies--particularly the artificial sharpness, lack of high-frequency detail, and unnatural blending--it is reasonable to conclude that the image is likely AI-generated rather than a genuine photograph.
+================================================================
+
+================================================================
+  Image             : 161022.jpg
+  Classifier verdict: REAL  (conf 94.8%)
+  Anomaly Hotspots  : Peripheral / Ear & Hair blending seams, Eyes & Facial midline
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.23 (lower ratio = smoother image with less high-frequency detail)
+================================================================
+
+  [Quick take]
+    At first glance, the image appears authentic with no obvious signs of manipulation or artificial generation.
+
+  [Reasoning]
+    Upon closer inspection, the facial structure is natural and symmetrical, with consistent skin tone and realistic proportions. There are no visible distortions in expression or mismatched features that would suggest face-swapping or synthetic generation. The edges and textures of the face appear smooth and continuous, without jagged lines or unnatural blurring. Fine details such as skin texture and hair strands are preserved, indicating high fidelity. Lighting and shadows follow natural patterns, and there are no inconsistencies in focus or stylization that would violate physical realism.
+
+  [Conclusion]
+    Considering all visual, textural, and contextual elements, the image shows no significant signs of being fake. It aligns with the characteristics of a real photograph, though its medium difficulty classification reflects the need for careful inspection to confirm authenticity.
+================================================================
