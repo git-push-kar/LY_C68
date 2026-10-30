@@ -1,613 +1,523 @@
-# DeepfakeReasoningModel v2: Grounded Multimodal Forensics with Self-Consistent Dual-Branch Vision-Language Reasoning
+# DeepfakeReasoningModel v2: Grounded Dual-Branch Multimodal Forensics with Self-Consistent Vision-Language Reasoning
 
-**Comprehensive Technical Report and Scientific Architecture Specification**  
-*Prepared for Academic Publication and Research Dissemination*
+**Technical Report — Complete Approach and Latest Results**
+
+*Model: InternVL3-2B (InternViT-300M + Qwen2.5-1.5B) with dual LoRA, 2D-FFT frequency branch, attention pooling, telemetry grounding and bidirectional self-consistency.*
 
 ---
 
 ## Abstract
 
-Deepfake generation techniques—ranging from generative adversarial networks (GANs) and latent diffusion models to neural face-swapping and reenactment pipelines—have evolved beyond the perceptual discrimination threshold of human observers and standard vision-only classification networks. While conventional deep learning detectors achieve high in-domain accuracy, they act as black-box models vulnerable to unseen domain shifts, imperceptible adversarial noise, and severe cross-forgery performance degradation. Conversely, standard multimodal large language models (MLLMs) possess semantic reasoning capabilities but exhibit severe *post-hoc rationalization (sycophancy)*, hallucinating plausible-sounding visual inconsistencies while ignoring subtle digital artifacts.
+Deepfake detectors based on discriminative vision backbones reach high in-domain accuracy but behave as black boxes, transfer poorly to unseen generators, and provide no auditable evidence. Off-the-shelf multimodal LLMs can describe an image, but on forensic questions they rationalize post hoc: they invent plausible artifacts, or repeat a verdict supplied in the prompt, without measuring anything.
 
-In this work, we present **DeepfakeReasoningModel v2**, an end-to-end explainable multimodal framework that bridges high-frequency spectral forensic telemetry with structured causal language reasoning. Built upon **internvl3_2b_lr_fused**—a foundation model initialized from **InternVL3-2B** (InternViT-300M + Qwen2.5-1.5B) that was pre-adapted via Parameter-Efficient Fine-Tuning (PEFT/LoRA) on a specialized **Logical Reasoning (LR)** dataset with the adapter weights permanently merged back into the base transformer matrices—our architecture integrates:
-1. A **Dual-LoRA Adaptation** regime injecting low-rank adapters into both the vision encoder ($r=16, \alpha=32$) and language model ($r=64, \alpha=128$).
-2. A dedicated **2D Fast Fourier Transform (FFT) Log-Magnitude Frequency Branch** designed to expose upsampling regularities and high-frequency spectral attenuation.
-3. A learned **Attention Pooling Mechanism** (`AttentionPool`) that dynamically weights localized spatial artifacts across $1,024$ image patch tokens.
-4. A **Bidirectional Self-Consistency Loss** ($\mathcal{L}_{\text{cons}}$) mathematically aligning the classifier's binary prediction distribution with the LLM's final answer token logits.
-5. A **Grounded Forensic Telemetry Conditioning Mechanism** that feeds quantitative spectral energy ratios and localized anatomical attention hotspots directly into the LLM prefix, eliminating sycophantic hallucinations.
-6. A multi-stage curriculum consisting of **Classifier Warm-up**, **Joint SFT with Scheduled LM Loss Weighting**, **Direct Preference Optimization (DPO)**, and **Grounded Reasoning Fine-Tuning** — instantiated over **two parallel lineages** that share the ungrounded curriculum and differ only in their foundation weights (vanilla `InternVL3-2B` vs. LR-fused `internvl3_2b_lr_fused`), as detailed in §4.6.
+This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework that couples a quantitative classifier branch with a grounded reasoning branch inside one model. The classifier fuses three evidence streams: the InternViT `[CLS]` token, a learned attention-pooled summary over all 1,024 patch tokens, and a 256-dimensional embedding of the image's 2D FFT log-magnitude spectrum (input vector 2,304-d). The reasoning branch receives 256 native visual tokens plus a structured *forensic telemetry* prefix containing the verdict, the spectral HF/LF ratio and the top-8 attention hotspots mapped to facial regions. A bidirectional KL term aligns the classifier distribution with the language model's `<answer>` token distribution.
 
-Empirical evaluation on the multi-generator **HydraFake** benchmark demonstrates state-of-the-art cross-model generalization ($\text{AUC} = 0.9995$), cross-forgery robustness ($\text{AUC} = 0.9418$), and an overall grounded validation accuracy of **96.00%** with a validation **AUC of 0.9936**.
+Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
+
+**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). The newest grounded checkpoint (`intern_v2_ground`) has validation and qualitative results but **no archived full-benchmark evaluation** — a limitation stated explicitly in §8.
+
+A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 1.29 vs 1.34–1.46 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
 ---
 
-## 1. Introduction and Problem Formulation
+## 1. Problem Formulation and Contributions
 
-### 1.1 The Black-Box Limitation of Pure Discriminators
-Traditional deepfake detection systems treat the task as a binary classification problem ($y \in \{0, 1\}$), optimizing an empirical risk objective:
-$$\min_\theta \frac{1}{N} \sum_{i=1}^N \mathcal{L}_{\text{CE}}(f_\theta(x_i), y_i)$$
-While architectures such as EfficientNet, ResNet, and standard Vision Transformers (ViT) achieve over 95% accuracy on benchmark training distributions, they suffer from three fundamental deficiencies:
-* **Failure Under Domain Shift:** Features learned from spatial pixel convolutions overfit to generator-specific high-frequency artifacts (e.g., blend boundaries in FaceForensics++ or specific noise patterns in ProGAN), degrading sharply on unseen diffusion models.
-* **Lack of Actionable Explainability:** In forensic, legal, or journalistic verification contexts, an output probability (e.g., $P(\text{fake}) = 0.92$) without spatial or physical attribution cannot serve as admissible evidence.
-* **Vulnerability to Spatial Pooling Collapse:** Standard global average pooling (GAP) aggregates patch tokens by uniform averaging, which dilutes subtle, localized manipulation boundaries (e.g., eye reflection anomalies or hairline blending seams) across thousands of unperturbed background pixels.
+### 1.1 Why pure discriminators are insufficient
 
-### 1.2 The Failure of Naive Multimodal LLMs: Sycophancy & Hallucination
-Deploying off-the-shelf vision-language models (e.g., GPT-4V, LLaVA, InternVL) to detect deepfakes via open-ended prompting (e.g., *"Is this image real or fake? Explain why."*) introduces fatal reliability flaws:
-1. **Perceptual Blindness to Frequency Artifacts:** Vision transformers trained on natural image captioning downsample high-frequency details. Subtle GAN grid patterns or diffusion spectral roll-offs are imperceptible to the language model.
-2. **Sycophantic Post-Hoc Rationalization:** If prompted with a hypothesis or subtle bias, the LLM hallucinates flaws (e.g., claiming "the ears are asymmetrical" or "lighting on the nose is unnatural" on a completely authentic image).
-3. **Reasoning-Decision Disconnect:** The LLM's generated reasoning chain may articulate genuine real-world qualities but suddenly terminate with a contradictory verdict tag due to uncalibrated generation dynamics.
+A conventional detector minimizes
 
-### 1.3 Core Contributions of This Work
-* **Unified Dual-Branch Architecture:** We combine a dedicated high-capacity classifier branch ($[CLS] + \text{Attention-Pooled Patches} + \text{2D FFT Embedding}$) with an autoregressive reasoning branch inside a single 2-billion parameter model.
-* **Cross-Modal Self-Consistency Optimization:** We introduce a symmetric Kullback-Leibler (KL) divergence objective that enforces mutual agreement between the classifier's logit distribution and the language model's binary answer logits ($\langle\text{answer}\rangle\text{real}|\text{fake}\langle/\text{answer}\rangle$).
-* **Evidence-Grounded Telemetry Conditioning:** We extract radial spectral frequency ratios ($R = E_{\text{HF}} / E_{\text{LF}}$) and spatial attention hotspot coordinates from the vision branch, encoding them into a structured forensic telemetry prompt prefix that grounds the LLM reasoning.
-* **High-Throughput Engineering:** We design batch-vectorized telemetry extractions, gradient checkpointing on frozen transformer backbones, and selective attention mechanisms, reducing step execution time from $\sim 8.0\text{s}$ down to $\sim 2.5\text{s}$ while preserving full numerical parity.
+$$\min_\theta \; \frac{1}{N}\sum_{i=1}^{N}\mathcal{L}_{\text{CE}}\big(f_\theta(x_i), y_i\big), \qquad y_i \in \{0,1\},$$
 
----
+and reports a probability. Three problems follow:
 
-## 2. System Architecture
+1. **Domain shift.** Spatial filters latch onto generator-specific traces (blend seams, specific upsampling grids), so accuracy collapses on unseen generators or heavy compression.
+2. **No evidence.** A score of 0.92 is not an auditable finding; forensic use needs localization and a physical explanation.
+3. **Pooling collapse.** Global average pooling dilutes small manipulated regions across ~1,000 unperturbed background patches.
 
-The overall architecture of **DeepfakeReasoningModel v2** is illustrated below:
+### 1.2 Why a naive multimodal LLM is insufficient
 
-```
-                          ┌──────────────────────────────────────────────┐
-                          │            Input RGB Image (448x448)         │
-                          └──────┬────────────────────────────────┬──────┘
-                                 │                                │
-                                 ▼                                ▼
-                 ┌──────────────────────────────┐ ┌──────────────────────────────┐
-                 │    InternViT-300M Encoder    │ │    2D FFT Log-Magnitude      │
-                 │   + Vision LoRA (r=16, a=32) │ │    Spectrum (224x224x3)      │
-                 └──────┬───────────────┬───────┘ └──────────────┬───────────────┘
-                        │               │                        │
-         CLS Token (1024)  Patch Tokens │ (1024x1024)            │
-                        │               ▼                        ▼
-                        │     ┌──────────────────┐    ┌─────────────────────┐
-                        │     │  AttentionPool   │    │ 4-Stage Conv2D CNN  │
-                        │     │  (Learned Query) │    │  Frequency Branch   │
-                        │     └─────────┬────────┘    └──────────┬──────────┘
-                        │               │                        │
-                        ▼               ▼                        ▼
-                   [CLS (1024)]   [Pooled (1024)]          [Freq (256)]
-                        │               │                        │
-                        └───────────────┼────────────────────────┘
-                                        ▼ Concatenate
-                        ┌────────────────────────────────┐
-                        │  Fused Vector (2304-dim)       │
-                        └───────────────┬────────────────┘
-                                        ▼
-                        ┌────────────────────────────────┐
-                        │       Classification Head      │
-                        │ Linear(2304->512) -> GELU ->   │
-                        │ Dropout(0.3) -> Linear(512->2) │
-                        └───────────────┬────────────────┘
-                                        │
-                                        ▼
-                         Classifier Logits [P_real, P_fake]
-                                        │
-         ┌──────────────────────────────┴──────────────────────────────┐
-         │                                                             │
-         ▼ (Spatial Weights & FFT)                                     ▼ (KL Loss)
-┌─────────────────────────────────┐                       ┌─────────────────────────┐
-│ Grounded Telemetry Generator    │                       │ Self-Consistency Loss   │
-│ - Hotspots: Top-8 Patches       │                       │ D_KL(P_cls || P_lm)     │
-│ - FFT: High/Low Energy Ratio    │                       └─────────────▲───────────┘
-└────────────────┬────────────────┘                                     │
-                 │ Telemetry Prefix Tokens                              │
-                 ▼                                                      │
-┌────────────────────────────────────────────────────────┐              │
-│ Native Visual Token Projection (PixelShuffle + MLP1)   │              │
-│ 1024 Patches -> 256 Visual Embeddings (2048-dim)       │              │
-└────────────────┬───────────────────────────────────────┘              │
-                 │                                                      │
-                 ▼ Concatenate Sequence                                 │
-┌────────────────────────────────────────────────────────┐              │
-│  [256 Visual Tokens] + [Telemetry Tokens] + [Text]     │              │
-└────────────────┬───────────────────────────────────────┘              │
-                 ▼                                                      │
-┌────────────────────────────────────────────────────────┐              │
-│            Qwen2.5-1.5B Causal Language Model          │              │
-│               + LLM LoRA (r=64, a=128)                 │              │
-└────────────────┬───────────────────────────────────────┘              │
-                 ▼                                                      │
-        Autoregressive Generation:                                      │
-  <fast> ... </fast> <planning> ... </planning>                         │
-  <reasoning> ... </reasoning> <reflection> ... </reflection>           │
-  <conclusion> ... </conclusion> <answer> real|fake </answer> ──────────┘
-```
+Prompting a vision-language model with *"is this real or fake, explain why"* fails in three reproducible ways:
+
+1. **Perceptual blindness.** The visual encoder and its 0.5× pixel-shuffle projection discard much of the high-frequency detail where generative traces live.
+2. **Sycophancy.** When a hypothesis is present in the prompt, the model tends to confirm it and invent supporting artifacts.
+3. **Reasoning–decision disconnect.** The generated trace can describe authentic properties and then emit the opposite `<answer>` tag.
+
+### 1.3 Contributions
+
+- **Dual-branch architecture in one model:** a high-capacity classifier (`[CLS]` + attention-pooled patches + FFT embedding) and an autoregressive reasoning branch sharing one vision encoder.
+- **Quantitative telemetry conditioning:** spectral ratio and attention hotspots are computed from the classifier's own features and injected as a text prefix, so the LLM cites measurements rather than guessing.
+- **Bidirectional self-consistency:** symmetric KL between classifier probabilities and the LLM's `real`/`fake` answer logits, making the two branches mutually accountable during training.
+- **Two-lineage controlled comparison:** identical architecture, data, losses and schedule on an LR-fused versus vanilla foundation, isolating the effect of logical-reasoning pre-adaptation.
+- **Measured engineering:** patch-token reuse, batched telemetry extraction, conditional attention-weight extraction and gradient checkpointing make a 2.18B model trainable on a single 24 GB RTX A5000, with step times documented per stage.
 
 ---
 
-### 2.1 Multimodal Foundation Backbone: InternVL3-2B
-The backbone utilizes `OpenGVLab/InternVL3-2B`, an efficient vision-language model integrating:
-* **Vision Transformer:** `InternViT-300M`, utilizing an input resolution of $448 \times 448$ pixels with a patch size of $14 \times 14$. This produces an initial grid of $32 \times 32 = 1,024$ spatial visual patches plus one $[CLS]$ token. Each patch embedding has hidden dimension $D_{\text{vis}} = 1,024$.
-* **Causal Language Model:** `Qwen2.5-1.5B`, a 28-layer transformer operating at hidden dimension $D_{\text{llm}} = 2,048$, with a vocabulary size of $151,936$ tokens and native rotary position embeddings (RoPE).
+## 2. Approach
 
-### 2.2 Dual Parameter-Efficient Fine-Tuning (Dual-LoRA)
-To avoid catastrophic forgetting while adapting both visual representations and language generation, Low-Rank Adaptation (LoRA) is injected into both components:
+### 2.1 Backbone and token layout
 
-1. **LLM LoRA Configuration:**
-   * **Target Modules:** Query, Key, Value, Output, Gate, Up, and Down projections:
-     $$\mathcal{M}_{\text{llm}} = \{\texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}, \texttt{gate\_proj}, \texttt{up\_proj}, \texttt{down\_proj}\}$$
-   * **Rank ($r$):** 64
-   * **Alpha ($\alpha$):** 128
-   * **Dropout:** 0.05
-   * **Measured trainable parameters (final `intern_fused_ground` extraction, 2026-10-14):** $73{,}859{,}072$ across 392 tensors (bf16) — this is the authoritative count from `runs/intern_fused_ground/adapters/extraction_report.json`, superseding earlier estimates.
+| Component | Specification |
+| :--- | :--- |
+| Vision encoder | InternViT-300M, 448×448 input, 14×14 patches → 32×32 = **1,024 patch tokens** + 1 `[CLS]`, hidden 1,024 |
+| Language model | Qwen2.5-1.5B, 28 layers, hidden **1,536**, vocab **151,674**, RoPE |
+| Total parameters | **2,182,364,038** |
+| Trainable parameters | **93,406,598 (4.28%)** with the classifier head active; 92,816,004 with `cls_head` frozen |
 
-2. **Vision LoRA Configuration:**
-   * **Target Modules:** InternViT self-attention and feed-forward linear layers:
-     $$\mathcal{M}_{\text{vis}} = \{\texttt{qkv}, \texttt{proj}, \texttt{fc1}, \texttt{fc2}\}$$
-   * **Rank ($r$):** 16
-   * **Alpha ($\alpha$):** 32
-   * **Dropout:** 0.05
-   * **Measured trainable parameters (final extraction):** $6{,}291{,}456$ across 192 tensors (bf16).
+### 2.2 Dual LoRA and parameter budget
 
-> **Checkpoint-type note (verified 2026-10-14):** `runs/intern_fused_ground/checkpoints/best.pth` (epoch 3, 1,328 tensors, ~4.36 GB) is a **whole-model** `state_dict` — frozen fused backbone + 584 LoRA tensors + 59 custom-head tensors — **not** an adapter-only file. The deployable PEFT artifact is produced by `extract_adapters.py` (defaults: `--checkpoint ./runs/intern_fused_ground/checkpoints/best.pth --output_dir ./runs/intern_fused_ground/adapters --base_model ./models/internvl3_2b_lr_fused`): `llm_adapter/` (~147.8 MB) + `vision_adapter/` (~12.6 MB) + `custom_heads/custom_heads.safetensors` (~26.5 MB, 59 tensors / 13,257,034 params covering `cls_head`, `attn_pool`, `freq_branch`, `custom_projector`, `domain_router`). Adapters alone do **not** reproduce classifier scores; the custom heads must ship with them, on the same fused base the run trained from. During ground post-training `cls_head` (4 tensors) was frozen while LLM LoRA + vision LoRA + `attn_pool`/`freq_branch`/`custom_projector`/`domain_router` stayed trainable.
+Two independent PEFT adapters are injected before the non-LoRA weights are frozen:
 
-### 2.3 Frequency Branch: 2D FFT CNN
-Deepfake synthesis artifacts—such as upsampling grids from transposed convolutions, bilinear interpolation blur, or latent diffusion frequency cutoffs—are prominent in the 2D Fourier domain.
+| Adapter | Target modules | Rank / α / dropout | Parameters |
+| :--- | :--- | :--- | :---: |
+| LLM LoRA | `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj` | 64 / 128 / 0.05 | 73,859,072 |
+| Vision LoRA | `qkv, proj, fc1, fc2` | 16 / 32 / 0.05 | 6,291,456 |
+| `cls_head` | 2,304→256→2 MLP | — | 590,594 |
+| `attn_pool` | 8-head cross-attention + LayerNorm | — | 4,201,472 |
+| `freq_branch` | 4-stage CNN | — | 455,680 |
+| `custom_projector` | 2-token fallback projector, 1,024→1,536→1,536 (×2) | — | 7,876,608 |
+| `domain_router` | 1,024→128→4 compatibility stub | — | 131,716 |
 
-Given an input image $I \in \mathbb{R}^{3 \times 224 \times 224}$, we compute the 2D Fast Fourier Transform independently across each color channel:
-$$F(u, v) = \sum_{x=0}^{H-1} \sum_{y=0}^{W-1} I(x, y) \cdot e^{-j 2\pi \left( \frac{ux}{H} + \frac{vy}{W} \right)}$$
-The zero-frequency component is shifted to the center, and the normalized log-magnitude spectrum is extracted:
-$$\tilde{S}(u, v) = \log(1 + |F_{\text{shifted}}(u, v)|)$$
-This spectral tensor passes through a 4-stage convolutional neural network:
-* Stage 1: $\text{Conv2D}(3 \rightarrow 32, k=3, s=2, p=1) \rightarrow \text{BatchNorm} \rightarrow \text{GELU}$ ($224 \rightarrow 112$)
-* Stage 2: $\text{Conv2D}(32 \rightarrow 64, k=3, s=2, p=1) \rightarrow \text{BatchNorm} \rightarrow \text{GELU}$ ($112 \rightarrow 56$)
-* Stage 3: $\text{Conv2D}(64 \rightarrow 128, k=3, s=2, p=1) \rightarrow \text{BatchNorm} \rightarrow \text{GELU}$ ($56 \rightarrow 28$)
-* Stage 4: $\text{Conv2D}(128 \rightarrow 256, k=3, s=2, p=1) \rightarrow \text{BatchNorm} \rightarrow \text{GELU}$ ($28 \rightarrow 14$)
-* Head: $\text{AdaptiveAvgPool2D}(1, 1) \rightarrow \text{Flatten} \rightarrow \text{Linear}(256, 256) \rightarrow \text{LayerNorm}(256)$
+Two notes on scope. `custom_projector` (two 1,024→1,536→1,536 MLPs) is only used as a fallback when the backbone exposes no `mlp1` projector; `domain_router` is a checkpoint-compatibility stub that is not called in the forward pass. Both are carried in checkpoints and in the adapter package, and their presence must not be read as active architectural components. The 4-tensor `cls_head` count is confirmed by the Stage-4 freeze log.
 
-The output is a fixed $256$-dimensional frequency embedding vector $v_{\text{freq}} \in \mathbb{R}^{256}$.
+### 2.3 Frequency branch (2D FFT)
 
-### 2.4 Spatial Attention Pooling (`AttentionPool`)
-Standard global average pooling treats all patches equally, obscuring focal manipulation artifacts. We implement a learned cross-attention pooling layer:
-$$Q = q_{\text{learned}} \in \mathbb{R}^{1 \times D_{\text{vis}}}, \quad K, V = H_{\text{patch}} \in \mathbb{R}^{1024 \times D_{\text{vis}}}$$
-$$\text{AttentionWeights} = \alpha = \text{Softmax}\left( \frac{Q K^T}{\sqrt{D_{\text{vis}}}} \right) \in \mathbb{R}^{1 \times 1024}$$
-$$v_{\text{pool}} = \text{LayerNorm}\left( \sum_{i=1}^{1024} \alpha_i \cdot V_i \right) \in \mathbb{R}^{D_{\text{vis}}}$$
-This produces both a dense pooled representation $v_{\text{pool}}$ and a spatial attention distribution $\alpha$, which exposes the exact $14 \times 14$ physical patches the model relies on to make its judgment.
+For each image, `dataset.compute_fft_features` resizes to 224×224, converts to `[0,1]`, applies a per-channel 2D FFT, shifts the zero frequency to the centre, takes the log-magnitude, and standardizes each channel:
 
-### 2.5 Hybrid Classification Head
-The classifier head combines high-level semantic vision features, localized spatial attention features, and Fourier spectral features:
-$$v_{\text{fused}} = [ v_{\text{cls}} \;\|\; v_{\text{pool}} \;\|\; v_{\text{freq}} ] \in \mathbb{R}^{1024 + 1024 + 256 = 2304}$$
-$$z_{\text{cls}} = \text{Linear}_{512 \rightarrow 2}\left( \text{Dropout}_{0.3}\left( \text{GELU}\left( \text{Linear}_{2304 \rightarrow 512}(v_{\text{fused}}) \right) \right) \right)$$
-$$P_{\text{cls}} = \text{Softmax}(z_{\text{cls}}) \in [0, 1]^2$$
+$$F(u,v)=\sum_{x}\sum_{y} I(x,y)\,e^{-j2\pi(ux/H+vy/W)}, \qquad \tilde S_c(u,v)=\frac{\log\!\big(1+|F^{c}_{\text{shift}}(u,v)|\big)-\mu_c}{\sigma_c+\varepsilon}.$$
 
-### 2.6 Native Visual Token Projection
-To feed the image to the LLM, the $1,024$ patch tokens ($32 \times 32$ grid) undergo a $0.5\times$ pixel shuffle downsampling:
-$$1024 \text{ tokens } (32 \times 32 \times 1024) \xrightarrow{\text{PixelShuffle}} 256 \text{ tokens } (16 \times 16 \times 4096)$$
-The compressed tokens pass through InternVL's 2-layer MLP projector (`mlp1`), mapping $4,096 \rightarrow 2,048$ ($D_{\text{llm}}$). This yields exactly **256 native visual tokens** $V_{\text{vis}} \in \mathbb{R}^{256 \times 2048}$ that directly occupy positions in the LLM's sequence.
+$\tilde S\in\mathbb{R}^{3\times224\times224}$ passes through four stride-2 convolutions with BatchNorm and GELU (3→32→64→128→256; 224→112→56→28→14), then adaptive average pooling, a linear layer and LayerNorm:
+
+$$v_{\text{freq}}\in\mathbb{R}^{256}.$$
+
+Generative pipelines leave spectral signatures — attenuation of high-frequency detail in diffusion outputs, periodic harmonics from transposed-convolution upsampling, resampling ridges after compression — that this branch can represent even when the RGB branch cannot see them.
+
+### 2.4 Attention pooling
+
+Uniform mean pooling over 1,024 patches is replaced by a single learned query that cross-attends over all patch tokens through an 8-head `nn.MultiheadAttention`:
+
+$$\alpha=\operatorname{softmax}\!\left(\frac{q K^{\top}}{\sqrt{D}}\right)\in\mathbb{R}^{1\times1024}, \qquad h=\operatorname{LayerNorm}\!\left(\sum_{i}\alpha_i V_i\right)\in\mathbb{R}^{1024}.$$
+
+The attention distribution $\alpha$ is not only a pooling weight; it is the localization signal exported as telemetry. Returned weights are the head-averaged attention, and they are requested only on the grounded joint path (`need_weights=True`), so classifier-only steps keep the fused fast path.
+
+### 2.5 Hybrid classification head
+
+$$v_{\text{fused}}=\big[\,v_{\text{cls}}\;\|\;v_{\text{pool}}\;\|\;v_{\text{freq}}\,\big]\in\mathbb{R}^{1024+1024+256=2304},$$
+
+$$z=\operatorname{Linear}_{256\to2}\Big(\operatorname{Dropout}_{0.3}\big(\operatorname{GELU}(\operatorname{Linear}_{2304\to256}(v_{\text{fused}}))\big)\Big), \qquad P_{\text{cls}}=\operatorname{softmax}(z).$$
+
+The hidden width is 256 (not 512), and dropout is applied before the output projection. The head is deliberately shallow: its inputs are already 2,304 discriminative dimensions, and a wide head was not needed to reach the reported validation AUC.
+
+### 2.6 Native visual tokens for the reasoning branch
+
+The 1,024 patch tokens are downsampled by InternVL's 0.5× pixel shuffle (1,024→256 tokens, 1,024→4,096 channels) and projected by `mlp1` (LayerNorm → 4,096→1,536 → GELU → 1,536→1,536):
+
+$$V_{\text{vis}}\in\mathbb{R}^{256\times1536}.$$
+
+In training the vision encoder runs once and the patch tokens are reused for both branches; at inference the backbone's `extract_feature` path is used. This removes the duplicate ViT pass that a naive implementation performs for the classifier and the LLM.
+
+### 2.7 Grounded telemetry conditioning
+
+Training and inference share one prompt builder (`model.build_grounding_prompt`) so the token structure cannot drift:
+
+```text
+[Forensic Telemetry]
+- Statistical read-out (verify against what you see, do not blindly repeat): FAKE (dataset label)
+- Frequency measurement: HF/LF log-magnitude energy ratio=-0.23 (lower ratio = smoother image with less high-frequency detail)
+- Attention hotspots: Nose & Cheek region, Eyes & Facial midline
+
+Weigh the telemetry numbers against the visual evidence, then explain using
+<fast>, <planning>, <reasoning>, <reflection> and <conclusion> tags only.
+Finish with exactly <answer>real</answer> or <answer>fake</answer> and nothing after it.
+```
+
+The LM input is
+
+$$\mathbf{X}=\big[\,V_{\text{vis}}\;\|\;T_{\text{tele}}\;\|\;T_{\text{reasoning}}\,\big],$$
+
+with labels $-100$ on both the visual and telemetry positions, so the model is conditioned on the measurement but never trained to generate it. The telemetry block is capped at 160 tokens; the reasoning target at 512 tokens.
+
+**Verdict source.** During training the verdict word is the ground-truth label with confidence string `"dataset label"`. During inference it is the classifier's argmax and its softmax confidence. This is intentional — it teaches the LLM to explain a decision rather than to make one — but it creates a train/inference mismatch whenever the classifier is wrong, discussed in §8. `inference.py --force_verdict {REAL,FAKE}` exists to audit that failure mode by deliberately flipping the telemetry verdict.
+
+**Hotspot mapping.** Top-8 attention indices are mapped to a 32×32 grid and then to six regions: `col<5` or `col≥27` → peripheral/ear-hair seams (checked first); `row<8` forehead/hairline; `8≤row<14` eyes/midline; `14≤row<20` nose/cheek; `20≤row<26` mouth/jaw; otherwise chin/neck. The two most-hit regions are emitted.
+
+### 2.8 Spectral ratio
+
+Using cached radial masks on the standardized log-magnitude map, with $H=W=224$ and centre $(c_y,c_x)$:
+
+$$\Omega_{\text{low}}=\{\,\lVert(u,v)-(c_y,c_x)\rVert<0.15H\,\},\qquad \Omega_{\text{high}}=\{\,\lVert(u,v)-(c_y,c_x)\rVert>0.35H\,\},$$
+
+$$R=\frac{\operatorname{mean}_{(u,v)\in\Omega_{\text{high}}}\tilde S(u,v)}{\operatorname{mean}_{(u,v)\in\Omega_{\text{low}}}\tilde S(u,v)+10^{-6}}.$$
+
+Because $\tilde S$ is zero-mean per channel, $R$ is typically **negative** (observed ≈ −0.21 to −0.28 on the smoke-test faces); it is a relative spectral-slope read-out, not an energy fraction in $[0,1]$. The pipeline does not threshold it — the number is passed to the LLM as evidence. No hard threshold (for example "$R<0.65$ means diffusion") is implemented, and none has been calibrated.
+
+### 2.9 Self-consistency loss
+
+Let $t_{\text{ans}}$ be the index of the `real`/`fake` token inside the reasoning target and $N_{\text{prefix}}=N_{\text{vis}}+N_{\text{tele}}$. The LM predicts that token at position $N_{\text{prefix}}+t_{\text{ans}}-1$. Two logits are selected, `"real"` (id 7951) and `"fake"` (id 30570):
+
+$$z_{\text{lm}}=[\,z[7951],\,z[30570]\,],\qquad P_{\text{lm}}=\operatorname{softmax}(z_{\text{lm}}),$$
+
+$$\mathcal{L}_{\text{cons}}=\tfrac12\Big[D_{\mathrm{KL}}\big(P_{\text{lm}}\,\|\,P_{\text{cls}}^{\text{detach}}\big)+D_{\mathrm{KL}}\big(P_{\text{cls}}\,\|\,P_{\text{lm}}^{\text{detach}}\big)\Big].$$
+
+The term is computed only for samples whose answer position is valid, and targets are detached so the classifier is not dragged by the LM's vocabulary bias.
+
+### 2.10 Total objective
+
+$$\mathcal{L}=\mathcal{L}_{\text{cls}}+\lambda_{\text{lm}}(e)\,\mathcal{L}_{\text{lm}}+\lambda_{\text{cons}}\,\mathcal{L}_{\text{cons}},$$
+
+with $\mathcal{L}_{\text{cls}}$ = cross-entropy with label smoothing 0.1 (a focal-loss option exists but is off in every reported run), $\lambda_{\text{cons}}=0.05$, and $\lambda_{\text{lm}}$ ramped linearly from 0.30 to 0.60 across joint epochs.
 
 ---
 
-## 3. Grounded Forensic Telemetry and Explainable AI (XAI)
-
-### 3.1 The Causal Grounding Formulation
-To eliminate sycophancy, the LLM must not guess whether the image is real or fake from scratch. Instead, it acts as an **expert forensic examiner presented with quantitative telemetry**.
-
-The input sequence to the LLM during grounded inference and training is formulated as:
-$$\mathbf{X} = [ V_{\text{vis}} \;\|\; T_{\text{tele}} \;\|\; T_{\text{reasoning}} ]$$
-Where:
-* $V_{\text{vis}} \in \mathbb{R}^{256 \times D_{\text{llm}}}$ are the continuous visual embeddings.
-* $T_{\text{tele}} \in \mathbb{R}^{N_{\text{tele}} \times D_{\text{llm}}}$ are the token embeddings of the structured forensic measurement report.
-* $T_{\text{reasoning}}$ are the target reasoning tokens.
-
-During loss computation, both $V_{\text{vis}}$ and $T_{\text{tele}}$ carry a cross-entropy label of $-100$, ensuring the model is conditioned on the telemetry without being penalized for generating it:
-$$\text{Labels} = [\underbrace{-100, \dots, -100}_{N_{\text{vis}} + N_{\text{tele}}}, w_1, w_2, \dots, w_T]$$
-
-### 3.2 Quantitative Telemetry Generation
+## 3. Training Curriculum
 
 ```
-                     ┌──────────────────────────────────────────────┐
-                     │           Extracted Visual Features          │
-                     └──────┬────────────────────────────────┬──────┘
-                            │                                │
-                            ▼                                ▼
-              ┌──────────────────────────┐     ┌───────────────────────────┐
-              │ 2D FFT Spectrum Tensor   │     │ Patch Attention Weights   │
-              │  (224 x 224 x 3)         │     │ (1 x 1024 spatial vector) │
-              └─────────────┬────────────┘     └─────────────┬─────────────┘
-                            │                                │
-                            ▼                                ▼
-              ┌──────────────────────────┐     ┌───────────────────────────┐
-              │ Radial Energy Masks      │     │ Top-8 Attention Hotspots  │
-              │ High: r > 0.35H          │     │ (Mapped to 32x32 Grid)    │
-              │ Low:  r < 0.15H          │     └─────────────┬─────────────┘
-              └─────────────┬────────────┘                   │
-                            │                                ▼
-                            ▼                  ┌───────────────────────────┐
-              ┌──────────────────────────┐     │ Anatomical Region Mapping │
-              │ Radial Energy Ratio      │     │ Forehead, Eyes, Hairline, │
-              │ R = E_HF / (E_LF + eps)  │     │ Mouth, Jawline, Seams     │
-              └─────────────┬────────────┘     └─────────────┬─────────────┘
-                            │                                │
-                            └────────────────┬───────────────┘
-                                             ▼
-              ┌────────────────────────────────────────────────────────────┐
-              │ Canonical Forensic Telemetry Prefix Prompt:                │
-              │ "[Forensic Telemetry]                                      │
-              │  - Statistical read-out : FAKE (Confidence: 96.4%)         │
-              │  - Frequency measurement: Energy ratio=0.52 (smoothing)    │
-              │  - Attention hotspots   : Forehead / Hairline, Nose/Cheeks │
-              │  Task: Weigh telemetry against visual tokens..."           │
-              └────────────────────────────────────────────────────────────┘
+Stage 0  Foundation preparation
+         InternVL3-2B + LoRA on a logical-reasoning dataset → merged into
+         internvl3_2b_lr_fused   (Lineage A only; weights fixed before this work)
+              │
+Stage 1  Classifier warm-up (3 epochs, 12,080 steps/epoch)
+         Train: vision LoRA, attn_pool, freq_branch, cls_head.  LLM idle.
+              │
+Stage 2  Joint classification + reasoning (3 epochs, 8,765 paired steps/epoch)
+         Train: all LoRA + custom heads.  Loss: cls + λ_lm·lm + 0.05·cons
+              │
+      ┌───────┴────────┐
+      │                │
+Stage 3 DPO        Stage 4 Grounded SFT
+(2 epochs)         (3 epochs, cls_head frozen)
 ```
 
-1. **Spectral Log-Magnitude Energy Ratio:**
-   Using radial frequency masks centered at $(c_y, c_x) = (H/2, W/2)$:
-   $$\Omega_{\text{low}} = \{ (u, v) : \sqrt{(u-c_y)^2 + (v-c_x)^2} < 0.15 H \}$$
-   $$\Omega_{\text{high}} = \{ (u, v) : \sqrt{(u-c_y)^2 + (v-c_x)^2} > 0.35 H \}$$
-   $$E_{\text{LF}} = \frac{1}{|\Omega_{\text{low}}|} \sum_{(u, v) \in \Omega_{\text{low}}} \tilde{S}(u, v), \quad E_{\text{HF}} = \frac{1}{|\Omega_{\text{high}}|} \sum_{(u, v) \in \Omega_{\text{high}}} \tilde{S}(u, v)$$
-   $$R = \frac{E_{\text{HF}}}{E_{\text{LF}} + 10^{-6}}$$
-   * An abnormally low ratio ($R < 0.65$) signals **generative over-smoothing / detail attenuation** (common in latent diffusion models).
-   * High ratio outliers signal **periodic checkerboard harmonics** from transposed convolution upsampling.
+### 3.1 Stage 0 — foundations
 
-2. **Spatial Anomaly Localization:**
-   The top-$K$ ($K=8$) indices from attention pooling $\alpha \in \mathbb{R}^{1024}$ are mapped to a $32 \times 32$ spatial coordinate grid:
-   $$\text{row} = \lfloor \text{idx} / 32 \rfloor, \quad \text{col} = \text{idx} \pmod{32}$$
-   Coordinates are translated into anatomical landmarks:
-   * $\text{col} < 5 \lor \text{col} \ge 27 \rightarrow$ *Peripheral / Ear & Hair blending seams*
-   * $\text{row} < 8 \rightarrow$ *Forehead / Upper hairline*
-   * $8 \le \text{row} < 14 \rightarrow$ *Eyes & Facial midline*
-   * $14 \le \text{row} < 20 \rightarrow$ *Nose & Cheek region*
-   * $20 \le \text{row} < 26 \rightarrow$ *Mouth & Lower jaw*
-   * $\text{row} \ge 26 \rightarrow$ *Chin & Neck boundary*
+Two starting points are used. **Lineage A** starts from `models/internvl3_2b_lr_fused`, a checkpoint in which an LoRA adapter trained on a logical-reasoning corpus was merged into the base weights,
 
----
+$$W_{\text{fused}}=W_0+\frac{\alpha}{r}B_{\text{LR}}A_{\text{LR}},$$
 
-## 4. Training Methodology & Multi-Stage Curriculum
+and then saved as a standalone Hugging Face checkpoint. **Lineage B** starts from vanilla `models/InternVL3-2B`. The Stage-0 merge itself is external to this repository: no LR training logs, data manifest or merge script are archived here, so that step is taken as given and is not independently reproducible from this report.
 
-The full training progression comprises four distinct optimization stages (Stages 1–2 are shared across both foundation lineages; Stages 3–4 are alternative post-stages — see §4.6):
+### 3.2 Stage 1 — classifier warm-up
 
-```
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Stage 0: Logical Reasoning PEFT & Base Model Fusion (internvl3_2b_lr_fused)       │
-│ Fine-tune LoRA on Logical Reasoning (LR) dataset -> Merge adapter into base weights│
-└────────────────────────────────────────┬──────────────────────────────────────────┘
-                                         ▼
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Stage 1: Classifier Warm-Up (Epochs 1-3)                                          │
-│ Freeze LLM; train ViT LoRA (r=16), AttentionPool, Frequency Branch & Cls Head     │
-│ Loss: L_cls (Label-smoothed Cross Entropy)                                        │
-└────────────────────────────────────────┬──────────────────────────────────────────┘
-                                         ▼
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Stage 2: Joint Multimodal Training with Scheduled Curriculum (Epochs 4-6)         │
-│ Unfreeze LLM LoRA (r=64); Joint paired batches (48k Cls pool + 35k SFT pool)      │
-│ Loss: L_joint = L_cls + lambda_lm(e) * L_lm + lambda_cons * L_cons                │
-│ Curriculum: lambda_lm ramps linearly from 0.3 -> 0.6                              │
-└────────────────────────────────────────┬──────────────────────────────────────────┘
-                                         ▼
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Stage 3: Direct Preference Optimization (DPO, 2 Epochs)                           │
-│ Optimize on 3,480 chosen/rejected pairs (mipo_3k)                                 │
-│ Suppresses repetitive mode collapse and sharpens reasoning fidelity               │
-└────────────────────────────────────────┬──────────────────────────────────────────┘
-                                         ▼
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Stage 4: Grounded Reasoning Fine-Tuning (3 Epochs)                                │
-│ Freeze Cls Head; condition LLM on empirical telemetry (Verdicts, FFT, Hotspots)   │
-│ Bridges classification accuracy with non-hallucinatory explanations               │
-└───────────────────────────────────────────────────────────────────────────────────┘
-```
+- **Active:** vision LoRA (r=16), `attn_pool`, `freq_branch`, `cls_head`.
+- **Frozen:** the entire Qwen2.5-1.5B stack; no LM forward or backward pass.
+- **Data:** `all.json`, 48,320 images, 12,080 steps/epoch at batch 4.
+- **Measured:** ≈0.69 s/step, ≈2 h 20 m per epoch.
+- **Purpose:** produce a stable classifier and a meaningful attention/hotspot map before the LM is engaged.
 
-### 4.1 Stage 0: Logical Reasoning PEFT & Base Model Fusion
-The base weights for this project are not initialized from a generic off-the-shelf multimodal checkpoint. Instead, the model starts from **`internvl3_2b_lr_fused`**, an enhanced foundation where the base InternVL3-2B architecture underwent **Parameter-Efficient Fine-Tuning (PEFT/LoRA) on a specialized Logical Reasoning (LR) dataset**, after which the trained adapter weights were mathematically merged and fused back into the primary base model weights:
-$$W_{\text{fused}} = W_0 + \frac{\alpha}{r} (B_{\text{LR}} \cdot A_{\text{LR}})$$
+### 3.3 Stage 2 — joint training
 
-#### Scientific Rationale for Logical Reasoning Pre-adaptation:
-1. **Instilling Rigorous Deductive Pathways:** Off-the-shelf vision-language models frequently rely on superficial correlation and conversational heuristics, making them prone to unverified claims when asked to reason. Pre-adapting on a dedicated Logical Reasoning (LR) dataset instills strict deductive chains and causal step-by-step thinking.
-2. **Cognitive Readiness for Multi-Phase Forensic Attributions:** Deepfake explanation demands an orderly progression from rapid hypothesis formulation to structured planning, evidence synthesis, critical self-reflection, and final verdict delivery (`<fast>`, `<planning>`, `<reasoning>`, `<reflection>`, `<conclusion>`, `<answer>`). A model pre-adapted on logical reasoning exhibits far greater resistance to logical incoherence or premature conclusions.
-3. **Seamless Architectural Integration:** Because the LoRA adapter weights are permanently fused back into the base transformer matrices ($W_{\text{fused}}$), the model folder functions as a standard, standalone Hugging Face checkpoint. This allows downstream training stages (Stages 1 through 4) to inject fresh, independent Low-Rank Adapters without parameter interference or multi-adapter orchestration overhead.
+Each step pairs one classification batch (`all.json`) with one reasoning batch (`sft_36k.json`), giving 8,765 paired steps per epoch and 1,096 optimizer updates at batch 4 × accumulation 8. The LM loss weight is scheduled by joint-epoch index:
 
-### 4.2 Stage 1: Classifier Warm-Up (Epochs 1–3)
-* **Active Parameters:** Vision LoRA ($r=16$), `attn_pool`, `freq_branch`, and `cls_head`.
-* **Frozen Parameters:** Qwen2.5-1.5B LLM (completely idle, zero forward/backward overhead).
-* **Objective:** Establish a well-conditioned representation in the vision and frequency branches before engaging the causal language model.
-* **Throughput:** Rapid execution at $\sim 0.70\text{s/step}$.
+$$\lambda_{\text{lm}}(e)=\lambda_{\text{start}}+\frac{e-e_{\text{cls}}-1}{\max(1,e_{\text{joint}}-1)}\big(\lambda_{\text{end}}-\lambda_{\text{start}}\big),\qquad \lambda_{\text{start}}=0.30,\ \lambda_{\text{end}}=0.60.$$
 
-### 4.3 Stage 2: Joint Multimodal Training & Scheduled Curriculum (Epochs 4–6)
-* **Active Parameters:** All LoRA adapters and custom heads.
-* **Paired Data Loading:** Each optimization step consumes:
-  * 1 batch from the **Classification Pool** (`all.json`, 48,320 samples) for pure classification supervision.
-  * 1 batch from the **SFT Reasoning Pool** (`sft_36k.json`, 35,063 samples) containing rich structured reasoning traces:
-    $$\langle\text{fast}\rangle \dots \langle/\text{fast}\rangle \langle\text{planning}\rangle \dots \langle/\text{planning}\rangle \langle\text{reasoning}\rangle \dots \langle/\text{reasoning}\rangle \langle\text{reflection}\rangle \dots \langle/\text{reflection}\rangle \langle\text{conclusion}\rangle \dots \langle/\text{conclusion}\rangle \langle\text{answer}\rangle \dots \langle/\text{answer}\rangle$$
-* **LM Weight Curriculum:** To prevent strong language loss gradients from distorting the classifier representation early in joint training, the language modeling loss weight ramps linearly across joint epochs:
-  $$\lambda_{\text{lm}}(e) = \lambda_{\text{start}} + \frac{e - e_{\text{cls}} - 1}{\max(1, e_{\text{joint}} - 1)} \cdot (\lambda_{\text{end}} - \lambda_{\text{start}})$$
-  Where $\lambda_{\text{start}} = 0.3$, $\lambda_{\text{end}} = 0.6$, $e_{\text{cls}} = 3$, and $e_{\text{joint}} = 3$.
+Reasoning targets use the six-tag template `<fast> … </fast> <planning> … </planning> <reasoning> … </reasoning> <reflection> … </reflection> <conclusion> … </conclusion> <answer>real|fake</answer>`.
 
-### 4.4 Stage 3: Direct Preference Optimization (DPO)
-To eliminate template repetition (mode collapse) where the model repeats identical sentences for every fake image, we optimize the policy on 3,480 pairwise preference examples (`mipo_3k.json`):
-* **Chosen ($y_w$):** Highly specific reasoning traces identifying precise localized artifacts (e.g., mismatched iris catchlights, boundary blending inconsistencies).
-* **Rejected ($y_l$):** Generic, vague, or repetitive reasoning traces.
-* **DPO Objective:**
-  $$\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l)} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right) \right]$$
-  With $\beta = 0.1$ and learning rate $\eta = 1.0 \times 10^{-6}$.
+### 3.4 Stage 3 — Direct Preference Optimization
 
-### 4.5 Stage 4: Grounded Reasoning Fine-Tuning
-Using `--weights_from ep006.pth --freeze_cls_head --epochs_cls 0 --epochs_joint 3`, the classification head is frozen to lock in its peak discriminative accuracy ($>99\%$ AUC). The language model is fine-tuned to accept the synthesized telemetry prefix and generate faithful, forensic explanations without drifting from the classifier's verdict.
+3,480 chosen/rejected trace pairs (`mipo_3k.json`), 870 steps/epoch (batch 4 × accumulation 8), $\beta=0.1$, AdamW at $1\times10^{-6}$, two epochs:
 
-### 4.6 Parallel Training Lineages and the Grounded Vanilla-Base Continuation
+$$\mathcal{L}_{\text{DPO}}=-\mathbb{E}\Big[\log\sigma\Big(\beta\log\tfrac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)}-\beta\log\tfrac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)}\Big)\Big].$$
 
-Stages 3 and 4 are **alternative post-stages, not sequential**. Two lineages were run in practice; they share identical architecture, data, loss, optimizer, and Stages 1–2, and differ **only in their foundation weights**:
+Measured: 1 h 41 m/epoch (LR-fused, 3 h 22 m total) and 1 h 10 m/epoch (vanilla, 2 h 20 m total). Reward accuracy rose to 96.61% (LR-fused) and 91.03% (vanilla).
 
-| | **Lineage A — LR-Fused** | **Lineage B — Vanilla** |
+### 3.5 Stage 4 — grounded reasoning fine-tuning
+
+- **Init:** `intern_fused/ep006.pth` (Lineage A) or `intern_v2/ep006.pth` (Lineage B); weights only, fresh optimizer and schedule.
+- **Freeze:** `cls_head` (4 tensors) to protect the classifier at its peak.
+- **Train:** LLM LoRA + vision LoRA + `attn_pool`/`freq_branch`/`custom_projector`/`domain_router` (43 custom tensors + 584 LoRA tensors).
+- **Grounding:** on; `ground_flip_prob = 0.0`.
+- **Epochs:** 3, 8,765 steps each, 1,096 updates.
+
+### 3.6 Optimizer and schedule (all stages)
+
+AdamW; LoRA parameters at $5\times10^{-5}$; custom heads at $1\times10^{-4}$ (2× the LoRA rate); weight decay 0.01; cosine decay to zero after a 5% linear warm-up; gradient-norm clipping at 1.0; bf16 autocast; gradient checkpointing on the LM with `enable_input_require_grads()`. Validation runs every epoch; `best.pth` is selected by validation AUC.
+
+### 3.7 The two lineages
+
+| | **Lineage A — LR-fused** | **Lineage B — vanilla** |
 | :--- | :--- | :--- |
-| Foundation | `internvl3_2b_lr_fused` (Stage 0 merged) | `InternVL3-2B` (off-the-shelf) |
-| Stage 1 — Classifier warm-up | 3 epochs | 3 epochs |
-| Stage 2 — Joint (ungrounded) | 3 epochs → `runs/intern_fused/ep006.pth` | 3 epochs → `runs/intern_v2/ep006.pth` |
-| **Common reach** | **epoch 6** | **epoch 6** |
-| Post-stage α — DPO (2 ep) | `runs/intern_fused_dpo` (trained, not deployed) | `runs/intern_v2_dpo` |
-| Post-stage β — Grounded (3 ep) | `runs/intern_fused_ground` (**deployed, verdict-with-evidence**) | `runs/intern_v2_ground` (**planned**, §4.6.1) |
+| Foundation | `internvl3_2b_lr_fused` | `InternVL3-2B` |
+| Stage 1–2 output | `runs/intern_fused` → `ep006.pth` (val AUC 0.9915) | `runs/intern_v2` → `ep006.pth` (val AUC 0.9848) |
+| Post-stage α | DPO → `runs/intern_fused_dpo` | DPO → `runs/intern_v2_dpo` |
+| Post-stage β | Grounded → `runs/intern_fused_ground` (**deployed checkpoint**) | Grounded → `runs/intern_v2_ground` (**latest trained**) |
+| Stage-4 wall time | 8 h 27 m – 14 h 02 m per epoch (host load variance) | 6 h 41 m – 7 h 15 m per epoch (21 h 11 m total) |
 
-Both lineages therefore **converge up to the end of the ungrounded joint stage (epoch 6)** and diverge thereafter: Lineage A proceeds to grounded telemetry fine-tuning, Lineage B to DPO.
-
-#### 4.6.1 Grounded continuation on the vanilla foundation (`runs/intern_v2_ground`)
-To obtain a verdict-with-evidence model directly on the vanilla foundation, Lineage B is continued from epoch 6 with the **identical Stage 4 recipe** applied to Lineage A:
-
-* **Init:** `runs/intern_v2/checkpoints/ep006.pth` (model weights only; fresh optimizer/scheduler).
-* **Config:** `config_intern_v2_ground.yaml`; launcher `run_intern_v2_ground.bat`.
-* **Recipe:** `epochs_cls=0`, `epochs_joint=3`, `--freeze_cls_head`, `grounding=True` (default; no `--no_grounding`), `ground_flip_prob=0.0`.
-* **Freeze:** `cls_head` (4 tensors); trainable = LLM LoRA + vision LoRA + `attn_pool`/`freq_branch`/`custom_projector`/`domain_router`.
-* **Output:** `./runs/intern_v2_ground`.
-* **Expected cost:** ~26–34 h (~8.5–14 h per grounded epoch on a single RTX A5000; the equivalent `intern_fused_ground` 3-epoch run took ~31 h), because grounding forces `_need_weights=True`, disabling the fused SDPA fast-path and adding per-batch telemetry tokenization.
-
-Because both lineages share Stages 1–2, `intern_v2_ground` is expected to track `intern_fused_ground` closely, with any residual gap attributable to the foundation's pre-adapted logical-reasoning ability (present in `internvl3_2b_lr_fused`, absent in vanilla `InternVL3-2B`).
+The lineages are identical through epoch 6 and diverge afterwards, which is what makes the comparison informative: any difference at Stage 4 is attributable to the foundation weights (and to host-level variance, which is not negligible — see §8).
 
 ---
 
-## 5. Mathematical Formulations & Loss Functions
+## 4. Data and Evaluation Protocol
 
-### 5.1 Classification Loss ($\mathcal{L}_{\text{cls}}$)
-To prevent overconfident predictions on noisy boundaries, we utilize cross-entropy with label smoothing ($\epsilon = 0.1$):
-$$q_i = (1 - \epsilon) y_i + \frac{\epsilon}{K}$$
-$$\mathcal{L}_{\text{cls}} = -\sum_{k=1}^K q_k \log P_{\text{cls}}(k)$$
+| Pool | Samples | Notes |
+| :--- | ---: | :--- |
+| Classification train (`all.json`) | 48,320 | 48,320 unique images; bare or rich labels allowed |
+| Reasoning SFT (`sft_36k.json`) | 35,063 | 36,750 unique images; 1,687 skipped for length |
+| Preference pairs (`mipo_3k.json`) | 3,480 | chosen/rejected traces |
+| Validation | 4,000 | balanced 2,000 real / 2,000 fake |
+| Test | 52,266 | held-out; split below |
 
-### 5.2 Autoregressive Language Modeling Loss ($\mathcal{L}_{\text{lm}}$)
-Given target token sequence $W = \{w_1, \dots, w_T\}$ and input embeddings $\mathbf{X}_{\text{prefix}} = [V_{\text{vis}} \,\|\, T_{\text{tele}}]$:
-$$\mathcal{L}_{\text{lm}} = -\frac{1}{T} \sum_{t=1}^T \log P_{\text{llm}}(w_t \mid w_{<t}, \mathbf{X}_{\text{prefix}})$$
-
-### 5.3 Bidirectional Self-Consistency Loss ($\mathcal{L}_{\text{cons}}$)
-Let $P_{\text{cls}} \in \mathbb{R}^2$ be the softmax probability distribution from the classification head. Let $t_{\text{ans}}$ be the sequence index corresponding to the answer token inside $\langle\text{answer}\rangle \dots \langle/\text{answer}\rangle$.
-
-We extract the unnormalized language model logits at position $t_{\text{ans}} - 1$ corresponding to vocabulary IDs for `"real"` ($ID=7951$) and `"fake"` ($ID=30570$):
-$$z_{\text{lm, binary}} = [ z_{\text{vocab}}[7951], \; z_{\text{vocab}}[30570] ] \in \mathbb{R}^2$$
-$$P_{\text{lm}} = \text{Softmax}(z_{\text{lm, binary}}) \in \mathbb{R}^2$$
-To enforce continuous, symmetric alignment between the visual classifier and the language reasoning branch, we optimize the bidirectional Kullback-Leibler divergence:
-$$\mathcal{L}_{\text{cons}} = \frac{1}{2} \left[ D_{\text{KL}}(P_{\text{lm}} \parallel P_{\text{cls}}^{\text{detach}}) + D_{\text{KL}}(P_{\text{cls}} \parallel P_{\text{lm}}^{\text{detach}}) \right]$$
-$$D_{\text{KL}}(P \parallel Q) = \sum_{k \in \{0, 1\}} P(k) \log \left( \frac{P(k)}{Q(k)} \right)$$
-
-### 5.4 Total Joint Objective
-$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{cls}} + \lambda_{\text{lm}}(e) \cdot \mathcal{L}_{\text{lm}} + \lambda_{\text{cons}} \cdot \mathcal{L}_{\text{cons}}$$
-Where $\lambda_{\text{cons}} = 0.05$ and $\lambda_{\text{lm}}(e) \in [0.3, 0.6]$.
+Test composition (HydraFake): **ID** 12,819 (FaceForensics++, Hallo2, Midjourney, StyleGAN, facevid2vid); **CM** 11,249 (Adobe Firefly, Flux 1.1 Pro, HART, Infinity, MAGI, StarryAI); **CF** 12,730 (CodeFormer, FaceAdapter, IC-Light, InfiniteYou, PuLID, StarGAN v2); **CD** 15,468 (FFIW, DeepFaceLab, Dreamina, GPT-4o, Hailuo, InfiniteYou). The JSON files list 53,272 entries; the loader merges 1,006 duplicates to the 52,266 evaluated samples. Splits are evaluated with `eval.py`, threshold 0.5, and optionally `--calibrate` for per-split Youden/F1 threshold search. Means are **macro-averages over the four splits**, not sample-weighted. Hardware: one NVIDIA RTX A5000 (24 GB), bf16.
 
 ---
 
-## 6. Computational Optimizations & Engineering Innovations
+## 5. Results
 
-Training a 2.1-billion parameter multimodal model with 2D FFT branches and full cross-entropy vocabularies ($|\mathcal{V}| = 151,936$) on a single 24GB GPU (NVIDIA RTX A5000) required resolving critical performance bottlenecks:
+### 5.1 Validation dynamics — LR-fused grounded (Lineage A)
 
-| Bottleneck Identified | Naive Implementation | Optimized Implementation | Impact on Throughput |
-| :--- | :--- | :--- | :--- |
-| **CUDA Sync Barriers** | Per-sample `.item()` and `.cpu().tolist()` in frequency & hotspot loops | Pre-computed radial masks + Batch-vectorized tensor operations (`batch_describe_frequency`, `batch_regions_from_topk`) | Eliminates 16 hard CPU-GPU sync stalls per step |
-| **Attention Fast-Path** | `need_weights=True` always enabled in `AttentionPool` | Conditional branching (`need_weights=False` during forward feature extraction) | Re-activates PyTorch native C++ scaled dot-product kernel |
-| **VRAM Memory Pressure** | Full activation caching for 28 LLM layers | `gradient_checkpointing_enable()` + `enable_input_require_grads()` | Activation memory dropped from $>22\text{GB}$ to $<14\text{GB}$ |
-| **Token Splicing Overhead** | Re-computing ViT forward pass twice per training step | `_get_native_visual_tokens_from_patches()` reuses precomputed patch tensors | Halves Vision Transformer compute in Joint stage |
-| **Decoding Latency** | Greedy decoding (`do_sample=False`) causing template collapse | Temperature-scaled Nucleus sampling ($T=0.6, p=0.9, \text{penalty}=1.15$) | High semantic diversity without hallucination |
+From `runs/intern_fused_ground/logs/epochs.csv` (epoch 2 was re-run after a restart; the second row is authoritative):
 
----
+| Epoch | $\lambda_{\text{lm}}$ | Train cls | Train LM | Cons | Train acc | Val loss | Val acc | Val AUC |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | 0.30 | 0.3117 | 0.9222 | 0.0424 | 93.18% | 0.2934 | 95.05% | 0.992431 |
+| 2 | 0.45 | 0.2909 | 0.7811 | 0.0246 | 94.53% | 0.2759 | 95.80% | 0.993507 |
+| 3 | 0.60 | 0.2786 | 0.7517 | 0.0200 | 95.25% | **0.2736** | **96.00%** | **0.993647** |
 
-## 7. Experimental Results and Empirical Validation
+Total reported loss rises (0.590 → 0.731) even as every quality signal improves, because the scheduled LM weight doubles and the LM term is larger in magnitude. The deployed `best.pth` is the epoch-3 checkpoint (checkpoint metadata: `epoch=3`, `best_auc=0.993647`).
 
-### 7.1 Quantitative Benchmark Evaluation on HydraFake
-The model was evaluated across 52,266 held-out test samples comprising four demanding evaluation regimes:
-* **In-Domain (ID):** Unseen test splits from training generators.
-* **Cross-Model (CM):** Evaluation across different generator architectures (e.g., StyleGAN vs. Diffusion).
-* **Cross-Forgery (CF):** Evaluation on unseen manipulation methods (e.g., FaceSwap, DeepFaceLab, Face2Face).
-* **Cross-Domain (CD):** In-the-wild facial imagery with heavy compression and post-processing artifacts.
+### 5.2 Validation dynamics — grounded vanilla base (Lineage B)
 
-#### Performance Metrics Across Test Splits
+From `runs/intern_v2_ground/logs/epochs.csv`:
 
-| Evaluation Split | Test Samples | Accuracy (Default @ 0.50) | F1-Score | ROC-AUC | Optimal Threshold ($\tau^*$) | Calibrated Accuracy | Calibrated F1 |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **ID (In-Domain)** | 12,819 | 92.01% | 0.9217 | **0.9823** | 0.50 | 92.01% | 0.9217 |
-| **CM (Cross-Model)** | 11,249 | **99.16%** | **0.9915** | **0.9995** | 0.50 | 99.16% | 0.9915 |
-| **CF (Cross-Forgery)**| 12,730 | 80.93% | 0.7669 | **0.9418** | 0.42 | **87.40%** | **0.8650** |
-| **CD (Cross-Domain)** | 15,468 | 77.85% | 0.7641 | **0.8680** | 0.44 | **81.20%** | **0.8010** |
-| **Overall Benchmark**| **52,266** | **87.49%** | **0.8611** | **0.9479** | **0.46** | **89.94%** | **0.8948** |
+| Epoch | $\lambda_{\text{lm}}$ | Train cls | Train LM | Cons | Train acc | Val loss | Val acc | Val AUC |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | 0.30 | 0.3094 | 0.7284 | 0.0122 | 93.16% | 0.3353 | 93.08% | 0.986410 |
+| 2 | 0.45 | 0.2860 | 0.6975 | 0.0078 | 94.71% | 0.2887 | 95.10% | 0.989919 |
+| 3 | 0.60 | 0.2761 | 0.6782 | 0.0064 | 95.37% | 0.2853 | **95.23%** | **0.990270** |
 
-### 7.2 Grounded Fine-Tuning Validation Dynamics
-During Stage 4 grounded training (`runs/intern_fused_ground`, `runs/intern_fused_ground/logs/epochs.csv`), the model converged on the balanced validation set as follows (LM curriculum weight in parentheses; note epoch 2 appears twice — the run was restarted from `ep006.pth` and the later row is authoritative):
+The shape is identical to Lineage A: classifier loss and consistency loss fall monotonically while the scheduled total rises. The ~0.8 pp accuracy / 0.0034 AUC gap to Lineage A is consistent with the LR pre-adaptation, but with one run per lineage and a 4,000-sample validation set it is not statistically established.
 
-* **Epoch 1:** TrLoss: 0.5905 (TrCls 0.3117, TrLM 0.9222, Cons 0.0424) | TrAcc 93.18% | VaLoss: 0.2934 | VaAcc: 95.05% | VaAUC: 0.992431 ($\lambda_{\text{lm}}=0.30$)
-* **Epoch 2:** TrLoss: 0.6436 (TrCls 0.2909, TrLM 0.7811, Cons 0.0246) | TrAcc 94.53% | VaLoss: 0.2759 | VaAcc: 95.80% | VaAUC: 0.993507 ($\lambda_{\text{lm}}=0.45$)
-* **Epoch 3 (best.pth):** TrLoss: 0.7307 (TrCls 0.2786, TrLM 0.7517, Cons 0.0200) | TrAcc 95.25% | VaLoss: **0.2736** | VaAcc: **96.00%** | VaAUC: **0.993647** ($\lambda_{\text{lm}}=0.60$)
+### 5.3 Held-out benchmark (52,266 samples)
 
-Total joint steps per epoch: 8,765 paired batches. Rising total loss across epochs is expected: the scheduled $\lambda_{\text{lm}}$ doubles (0.3 → 0.6), weighting the larger-magnitude LM term more heavily, while the monitored signals of quality — classification loss (0.312 → 0.279), consistency loss (0.042 → 0.020), validation accuracy and AUC — all improve monotonically.
+Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC.
 
----
+| Checkpoint (stage) | ID 12,819 | CM 11,249 | CF 12,730 | CD 15,468 | Mean |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `intern_v2` `ep005.pth` — S2, ungrounded vanilla | 92.42 / 0.9823 | **99.17 / 0.9995** | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / **0.9479** |
+| `intern_fused_ground` best — S4, LR-fused | 92.13 / 0.9881 | 98.88 / 0.9994 | **82.66 / 0.9507** | 76.60 / 0.8480 | 87.57 / 0.8655 / 0.9465 |
+| `intern_fused_dpo` best — S3, LR-fused | 92.08 / 0.9852 | 98.48 / 0.9993 | 80.42 / 0.9510 | 75.96 / 0.8503 | 86.74 / 0.8519 / 0.9465 |
+| `intern_v2_dpo` best — S3, vanilla | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 |
 
-### 7.3 Qualitative Explainability & Reasoning Demonstration
+Reading the table:
 
-#### Sample 1: Diffusion-Generated Face (Cross-Model Benchmark)
+- **Cross-model detection is essentially solved** on this benchmark: 98.5–99.2% accuracy and AUC 0.9993–0.9996 for every checkpoint, with no sign that reasoning or DPO disturbs it.
+- **Cross-forgery** is the regime where the design pays off: the grounded LR-fused model has the best accuracy of the four (82.66%), +1.2 pp over the vanilla Stage-2 model and +2.2 pp over its LR-fused DPO sibling; its AUC (0.9507) is within 0.0003 of the best observed (0.9510).
+- **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.848–0.868) and does not improve with grounding; compression and in-the-wild post-processing remain the dominant failure source.
+- **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure.
+
+The `intern_v2` row is the checkpoint the archived evaluation actually loaded: `checkpoints/ep005.pth` (metadata `epoch=5`, `best_auc=0.989061`). The directory's current `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no 52k evaluation; it is therefore not labelled "best" in this table.
+
+A metrics block in `config.yaml` records slightly different accuracies (ID 92.01, CM 99.16, CF 80.93, CD 77.85, mean 87.49) plus calibrated CF/CD numbers. Those values are not reproducible from the archived logs, while the AUCs match the `intern_v2` log exactly; the log-derived table above is therefore the reference, and the config block should be treated as a stale/derived summary.
+
+### 5.4 Threshold calibration
+
+Calibration was run only for the DPO checkpoints (`--calibrate`). Per-split optima and resulting accuracy:
+
+| Checkpoint | ID T* / acc | CM T* / acc | CF T* / acc | CD T* / acc | Calibrated mean acc / F1 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `intern_fused_dpo` | 0.11 / 93.92% | 0.16 / 99.07% | 0.06 / 88.85% | 0.09 / 76.56% | **89.60% / 90.27%** |
+| `intern_v2_dpo` | 0.09 / 94.07% | 0.13 / 99.42% | 0.06 / 85.76% | 0.07 / 78.16% | 89.35% / 89.50% |
+
+The optimal thresholds sit far below 0.5, and calibration buys most on CF (+8.4 pp for the LR-fused model, +9.6 pp for the vanilla model). This is a **post-hoc diagnostic**, not a deployable result: the thresholds are tuned and evaluated on the same split. No calibrated numbers exist in the logs for the grounded checkpoints.
+
+### 5.5 Latest-model throughput and batch-size study (21–23 Oct 2026)
+
+Four `gpu_util_demo` runs probed the grounded stage's cost profile. All four start from random heads (`epochs_cls=0`, no `weights_from` line in their logs), train one grounded epoch, and save a checkpoint; they are throughput probes, **not** part of the final model.
+
+| Run | Micro-batch × accum | Effective batch | Steps | s/step | Epoch wall time | Updates | Val acc | Val AUC |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `…21_162100` | 4 × 8 | 32 | — | — | aborted before step 1 | — | — | — |
+| `…21_162502` | 4 × 8 | 32 | 8,765 | 2.98 | 7 h 14 m 43 s | 1,096 | 87.55% | 0.9627 |
+| `…22_053241` | 4 × 8 | 32 | 8,765 | 2.74 | 6 h 40 m 50 s | 1,096 | 87.13% | 0.9623 |
+| `…23_053405` | 8 × 8 | 64 | 4,382 | 6.20 | 7 h 32 m 58 s | 548 | 84.95% | 0.9431 |
+
+Derived throughput: **1.34, 1.46 and 1.29 samples/s** respectively. Two identical 4×8 runs differ by ~8% in wall time, which sets the noise floor. Against that floor, batch 8 gives no throughput gain, doubles the per-step latency, halves the optimizer updates, and loses ~2.2–2.6 pp validation accuracy after one epoch — the expected consequence of halving updates rather than of the larger batch per se. The current 4 × 8 configuration is therefore retained. The first launch (`162100`) terminated before its first logged step with no exception in stderr; it is recorded here for completeness only.
+
+### 5.6 Qualitative behaviour
+
+**Correct authentic case** (`intern_fused_ground` best, `test_images/real/161022.jpg`, classifier REAL 95.3%):
+
 ```text
-================================================================
-  Image             : synthetic_portrait_042.png
-  Classifier verdict: FAKE  (Confidence: 98.7%)
-  Anomaly Hotspots  : Forehead / Upper hairline, Nose & Cheek region
-  Frequency Domain  : High-frequency attenuation (ratio=0.48); generative over-smoothing detected
-================================================================
+  Classifier verdict: REAL  (conf 95.3%)
+  Anomaly Hotspots  : Nose & Cheek region, Eyes & Facial midline
+  Frequency Domain  : HF/LF log-magnitude energy ratio=-0.23
 
-  [Quick take]
-    Initial inspection suggests the image is synthetic, corroborated by spectral telemetry.
-
-  [Planning]
-    To verify authenticity, a three-step evaluation is conducted: first inspecting 
-    high-frequency textures at the hairline, examining skin pore consistency along 
-    the nose/cheeks, and checking physical lighting plausibility across the face.
-
-  [Reasoning]
-    At the textural level, the frequency telemetry indicates substantial attenuation 
-    (ratio 0.48), pointing to artificial denoising. Corroborating this measurement, 
-    the upper hairline exhibits a synthetic blending seam where individual hair 
-    strands dissolve into the skin without natural root occlusion. In the cheek 
-    and nose regions, skin pores display uniform Gaussian smoothing, lacking natural 
-    epidermal micro-creases. At the physical level, catchlights in the left and right 
-    pupils reflect conflicting ambient light vectors.
-
-  [Reflection]
-    While the global facial geometry appears aesthetically plausible, the localized 
-    absence of high-frequency detail along the hairline and cheek plane confirms 
-    a diffusion generator pipeline.
-
-  [Conclusion]
-    The combination of spectral energy attenuation and boundary blurring confirms 
-    the image is AI-generated.
-
-  Generated answer  : FAKE
-================================================================
+  [Quick take]  At first glance, the image appears authentic with no obvious signs of manipulation.
+  [Reasoning]   … the facial structure is proportionate and symmetrical, with consistent skin tone
+                and natural expression … the edges and textures appear smooth and realistic without
+                any artificial artifacts … lighting and shadows are physically plausible …
+  [Conclusion]  … the image does not display any significant signs of being fake and is most likely authentic.
 ```
 
-#### Sample 2: Authentic High-Resolution Photograph
+**Failure case** (`test_images/real/160932.png`, classifier FAKE 94.9%). The trace still invents evidence for the wrong verdict — the sycophancy failure the grounding is meant to reduce:
+
 ```text
-================================================================
-  Image             : dslr_portrait_182.jpg
-  Classifier verdict: REAL  (Confidence: 99.4%)
-  Anomaly Hotspots  : Eyes & Facial midline, Nose & Cheek region
-  Frequency Domain  : Natural spectral roll-off (ratio=0.86); consistent optical sensor noise
-================================================================
-
-  [Quick take]
-    Initial inspection indicates an authentic photographic capture with genuine optical noise.
-
-  [Planning]
-    Evaluate high-frequency sensor noise distribution, examine iris structure coherence, 
-    and inspect depth-of-field transition along peripheral contours.
-
-  [Reasoning]
-    The frequency sensor indicates a natural energy ratio of 0.86 with intact high-frequency 
-    spatial harmonics, matching genuine Bayer sensor noise. Morphological examination 
-    of the eyes reveals sharp, coherent pupil boundaries, realistic corneal reflections, 
-    and fine vascular lines in the sclera. Skin textures along the cheek and forehead 
-    display organic variations in pore density, fine vellus hair, and uncompressed 
-    specular highlights. Focus transitions across the cheek plane adhere to real-world 
-    aperture optics.
-
-  [Reflection]
-    Double-checked the hairline and jawline for blending seams or warping; all edge 
-    transitions show realistic optical depth falloff rather than synthetic alpha blending.
-
-  [Conclusion]
-    Physical, textural, and spectral properties consistently support an authentic capture.
-
-  Generated answer  : REAL
-===============================================================
+  Classifier verdict: FAKE  (conf 94.9%)
+  [Reasoning]  … edges around the hairline and jawline appear unnaturally sharp … a noticeable
+               blending boundary where the face meets the background … skin texture … lacks the
+               fine-grained detail expected …
+  [Conclusion] … strongly indicate that the image is not a genuine photograph but rather an AI-generated one.
 ```
 
-### 7.4 Planned Validation: Grounded Vanilla-Base Continuation (`runs/intern_v2_ground`)
-`runs/intern_v2_ground` (Lineage B, §4.6.1) is **prepared but not yet trained**. It resumes the vanilla lineage from `runs/intern_v2/checkpoints/ep006.pth` under the identical Stage 4 recipe (`epochs_cls=0`, `epochs_joint=3`, `--freeze_cls_head`, grounding ON). Expected behaviour mirrors §7.2 — monotonic improvement of classifier loss, consistency loss, validation accuracy, and AUC across the 3 grounded epochs — at ~26–34 h compute. Once complete, evaluate with the same 52,266-sample protocol (§7.1) to compare directly against the deployed `intern_fused_ground`.
+On the 18-image real-only smoke set, the LR-fused grounded model labels 14 REAL / 4 FAKE (77.8% on authentic images). This is a diagnostic on 18 hand-picked files, not a balanced accuracy estimate. The latest vanilla-base model (`intern_v2_ground`) has a 19 Oct inference log that covers only **two** of the 18 images before the run stopped; one (161022) is correct at 94.8% confidence and the other (160932) is a false positive at 95.1%, so no accuracy is claimed for it.
+
+Tag coverage differs between checkpoints: the LR-fused model emits `<fast>`, `<planning>`, `<reasoning>`, `<reflection>`, `<conclusion>` on most of its 18 samples, while both logged vanilla-grounded samples emit only fast/reasoning/conclusion. Both keep the telemetry structure, but the richer trace is a qualitative advantage of the LR-fused lineage.
 
 ---
 
-## 8. Reproducibility & Execution Commands
+## 6. Engineering and Compute
 
-### 8.1 Complete Model Training Pipeline
+| Mechanism | Implementation | Effect |
+| :--- | :--- | :--- |
+| Patch-token reuse | One vision pass; classifier and native visual tokens both consume the same patch tokens (`_get_native_visual_tokens_from_patches`) | Removes a second ViT forward per joint step |
+| Conditional attention weights | `need_weights=True` only when grounded telemetry is needed; otherwise fused attention path | Keeps classifier-only steps on the fast path |
+| Batched telemetry | `batch_describe_frequency` / `batch_regions_from_topk`; one CPU transfer per batch; radial masks cached | Replaces per-sample `.item()`/`.tolist()` syncs |
+| Gradient checkpointing | LM checkpointing + `enable_input_require_grads()` | Fits 2.18B model + 256 visual tokens + telemetry in 24 GB |
+| bf16 autocast | Whole forward/backward in bfloat16, no GradScaler | Stable training without loss scaling |
+| Checkpoint portability | Whole-model `best.pth` → `extract_adapters.py` (LLM adapter, vision adapter, custom heads) with round-trip verification | 179 MB deployable package instead of ~4.4 GB |
+
+Measured step times on the RTX A5000 (eager attention — see limitation 4 in §8):
+
+| Stage | Steps/epoch | s/step | Epoch wall time |
+| :--- | :---: | :---: | :---: |
+| Stage 1 classifier warm-up | 12,080 | ≈0.69 | ≈2 h 20 m |
+| Stage 2 joint, ungrounded | 8,765 | 2.32–2.46 | 5 h 39 m – 5 h 59 m |
+| Stage 4 grounded, vanilla | 8,765 | 2.84–2.90 | 6 h 54 m – 7 h 03 m |
+| Stage 4 grounded, LR-fused | 8,765 | 3.47–5.77 | 8 h 27 m – 14 h 02 m |
+| DPO | 870 | 4.81–6.98 | 1 h 10 m – 1 h 41 m |
+
+The fused-base Stage-4 spread is host-load variance, not a property of the recipe: the same configuration produced 8 h 27 m and 14 h 02 m epochs on different days. The one-epoch probes in §5.5 (2.74–2.98 s/step at batch 4) run on fresh heads and are not directly comparable to the 2.84–2.90 s/step of the resumed `intern_v2_ground` run.
+
+---
+
+## 7. What the System Produces
+
+`inference.py` returns, per image:
+
+- `verdict` and `confidence` from the classifier — **authoritative**; the LLM answer is never allowed to override it;
+- `telemetry`: hotspot regions and the spectral ratio actually fed to the LLM;
+- `reasoning`: parsed `<fast>`, `<planning>`, `<reasoning>`, `<reflection>`, `<conclusion>` blocks;
+- an optional audit mode that flips the telemetry verdict (`--force_verdict`) to test whether the reasoning parrots the prompt.
+
+Decoding defaults to **greedy** (`do_sample=False`) with a `</answer>` stopping criterion. The `--temperature`/`--top_p` flags are accepted but inert unless `--do_sample` is passed, so the defaults do not produce nucleus sampling. Repetition penalty defaults to 1.05.
+
+---
+
+## 8. Limitations
+
+1. **The latest model is not fully benchmarked.** `runs/intern_v2_ground` has 4,000-sample validation (95.23% / 0.9903) and a partial qualitative log, but no 52,266-sample evaluation. The benchmark table describes other checkpoints; generalisation of the newest grounded model is unmeasured.
+2. **No baseline comparison.** The report contains no external detector or vanilla-LLM baseline under the same protocol, so "state-of-the-art" is not supported and is not claimed.
+3. **Single run per configuration, 4,000-sample validation.** Lineage differences (~0.8 pp) and epoch-to-epoch deltas are within plausible run-to-run variation; no confidence intervals or seeds are recorded (the training script does not set a seed).
+4. **Eager attention in every recorded run.** `attn_implementation="sdpa"` is rejected by the InternVL chat wrapper and silently falls back to `eager`; FlashAttention-2 is not installed. All timings above therefore reflect eager attention, not a fused-SDPA kernel.
+5. **Train/inference verdict mismatch.** Grounding is trained on ground-truth verdicts but applied to classifier predictions. When the classifier is wrong, the LLM receives a wrong verdict and tends to rationalise it (observed in the 160932 failure case). The `--force_verdict` audit exists but no audit results are archived.
+6. **Telemetry is descriptive, not calibrated.** The spectral ratio has no validated threshold or direction per generator family; values are zero-mean standardized means and are typically negative.
+7. **Reasoning is not quantitatively evaluated.** No faithfulness, hallucination-rate or human-preference metric is computed; §5.6 is illustrative.
+8. **Weak regimes persist.** CD accuracy stays at 76–78% and CF F1 at 0.76–0.79; threshold calibration helps CF but is not deployable as computed (tuned and evaluated on the same split).
+9. **Dead weight in the checkpoint.** `domain_router` is never called and `custom_projector` is only a fallback, yet both are saved, exported and partly trained; they add ~8 M parameters and confound parameter accounting.
+10. **Config drift.** `config.yaml` carries a metrics block that disagrees with the archived logs; only log-derived numbers are reported here.
+
+---
+
+## 9. Reproducibility and Artifacts
+
+### 9.1 Training
+
 ```bash
-# Stage 1 & 2: Main Curriculum (Warmup + Joint SFT)
-python -u train.py \
-    --config config.yaml \
+# Lineage A: classifier warm-up + joint training (LR-fused base)
+python -u train.py --config config.yaml \
     --model_path ./models/internvl3_2b_lr_fused \
     --tokenizer_path ./models/internvl3_2b_lr_fused \
-    --batch_size 4 \
-    --grad_accum 8 \
-    --epochs_cls 3 \
-    --epochs_joint 3 \
+    --batch_size 4 --grad_accum 8 \
+    --epochs_cls 3 --epochs_joint 3 \
     --output_dir ./runs/intern_fused
 
-# Stage 3: Preference Optimization (DPO)
-python -u train_dpo.py \
-    --config config.yaml \
-    --model_path ./models/internvl3_2b_lr_fused \
-    --checkpoint ./runs/intern_fused/checkpoints/best.pth \
-    --dpo_epochs 2 \
-    --output_dir ./runs/intern_fused_dpo
-
-# Stage 4: Grounded Telemetry Fine-Tuning (Lineage A, LR-fused base)
-python -u train.py \
-    --config config.yaml \
-    --weights_from ./runs/intern_fused/checkpoints/ep006.pth \
-    --epochs_cls 0 \
-    --epochs_joint 3 \
-    --freeze_cls_head \
-    --output_dir ./runs/intern_fused_ground
-```
-
-Parallel **Lineage B (vanilla foundation `InternVL3-2B`)** — same recipe, different base:
-```bash
-# Stage 1 & 2 (Lineage B): Classifier Warm-up + Joint SFT on the vanilla base
-python -u train.py \
-    --config config.yaml \
+# Lineage B: same recipe on the vanilla base
+python -u train.py --config config.yaml \
     --model_path ./models/InternVL3-2B \
     --tokenizer_path ./models/InternVL3-2B \
-    --batch_size 4 \
-    --grad_accum 8 \
-    --epochs_cls 3 \
-    --epochs_joint 3 \
+    --batch_size 4 --grad_accum 8 \
+    --epochs_cls 3 --epochs_joint 3 \
     --output_dir ./runs/intern_v2
 
-# Stage 3 (Lineage B): Preference Optimization (DPO) on the vanilla base
-python -u train_dpo.py \
-    --config config.yaml \
-    --model_path ./models/InternVL3-2B \
-    --checkpoint ./runs/intern_v2/checkpoints/best.pth \
-    --dpo_epochs 2 \
-    --output_dir ./runs/intern_v2_dpo
+# Stage 3: DPO (either lineage; 3,480 pairs, beta 0.1, lr 1e-6)
+python -u train_dpo.py --config config.yaml \
+    --model_path ./models/internvl3_2b_lr_fused \
+    --checkpoint ./runs/intern_fused/checkpoints/best.pth \
+    --dpo_epochs 2 --output_dir ./runs/intern_fused_dpo
 
-# Stage 4 (Lineage B): RESUME grounded verdict-with-evidence from epoch 6 (vanilla base)
-#   init = runs/intern_v2/checkpoints/ep006.pth; grounding ON by default; cls_head frozen.
-#   Equivalent one-liner: run_intern_v2_ground.bat
-python -u train.py \
-    --config config_intern_v2_ground.yaml \
+# Stage 4: grounded fine-tuning, classifier frozen (Lineage A)
+python -u train.py --config config.yaml \
+    --weights_from ./runs/intern_fused/checkpoints/ep006.pth \
+    --epochs_cls 0 --epochs_joint 3 --freeze_cls_head \
+    --output_dir ./runs/intern_fused_ground
+
+# Stage 4 on the vanilla lineage (latest trained model)
+#   equivalent one-liner: run_intern_v2_ground.bat
+python -u train.py --config config_intern_v2_ground.yaml \
     --model_path ./models/InternVL3-2B \
     --tokenizer_path ./models/InternVL3-2B \
     --weights_from ./runs/intern_v2/checkpoints/ep006.pth \
     --output_dir ./runs/intern_v2_ground \
-    --epochs_cls 0 \
-    --epochs_joint 3 \
-    --freeze_cls_head
+    --epochs_cls 0 --epochs_joint 3 --freeze_cls_head
 ```
 
-> `best.pth` here is whole-model (~4.36 GB). For PEFT redistribution run the updated extractor (also validates round-trip tensor equality):
+### 9.2 Evaluation
+
+```bash
+python eval.py --dataset_root ./datasets/hydrafake \
+    --json_root ./datasets/hydrafake/jsons \
+    --model_path ./models/internvl3_2b_lr_fused \
+    --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
+    --batch_size 8 --num_workers 8            # add --calibrate for T* search
+```
+
+### 9.3 Deployable artifacts
+
+`best.pth` is a whole-model state dict (backbone + 584 LoRA tensors + 59 custom-head tensors, ~4.36 GB), not an adapter file. `extract_adapters.py` produces the porting unit:
+
+| Artifact | Contents | Size / params |
+| :--- | :--- | :--- |
+| `runs/intern_fused_ground/adapters/` | LLM adapter (392 tensors, 73,859,072), vision adapter (192 tensors, 6,291,456), custom heads (59 tensors, 13,256,070 params + 964 BatchNorm buffers) | ~179 MB, attach to `models/internvl3_2b_lr_fused` |
+| `runs/intern_v2_ground/adapters/` | Same structure, extracted against `models/InternVL3-2B` | ~179 MB, attach to the **vanilla** base |
+
+Neither package reproduces classifier scores without its matching base and the custom heads; the adapters must travel together. Adapter files passed exact safetensors round-trip and clean-base attach checks (tensor-for-tensor); the 59 custom-head tensors passed round-trip but are loaded via `strict=False`, which the extractor does not exercise end to end. Neither `eval.py` nor `inference.py` accepts an adapter directory, so adapter-only deployment requires a loader not included in the repository. Full artifact details, hashes and the DPO package's missing-heads caveat are documented in [RESEARCH_PAPER_REPORT_VANILLA_ADAPTER_ONLY.md](RESEARCH_PAPER_REPORT_VANILLA_ADAPTER_ONLY.md).
+
 ```bash
 python extract_adapters.py \
-    --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
-    --output_dir ./runs/intern_fused_ground/adapters \
-    --base_model ./models/internvl3_2b_lr_fused \
-    --skip_functional_check   # omit to also attach-test against the clean fused base
+    --checkpoint ./runs/intern_v2_ground/checkpoints/best.pth \
+    --output_dir ./runs/intern_v2_ground/adapters \
+    --base_model ./models/InternVL3-2B
 ```
 
-### 8.2 Telemetry-Grounded Inference Execution
+### 9.4 Inference
+
 ```bash
-python inference.py \
-    --config config.yaml \
+python inference.py --config config.yaml \
     --model_path ./models/internvl3_2b_lr_fused \
     --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
     --grounded_reasoning \
-    --temperature 0.6 \
-    --repetition_penalty 1.15 \
     --images test_images/real/*
 ```
 
+### 9.5 Evidence map
+
+| Claim | Source |
+| :--- | :--- |
+| Architecture, losses, telemetry format | `model.py`, `train.py`, `dataset.py` |
+| Parameter counts | run logs (`launch_stdout.log`, `…/logs/train.log`), `extract_adapters.py` report |
+| Validation dynamics | `runs/intern_fused_ground/logs/epochs.csv`, `runs/intern_v2_ground/logs/epochs.csv` |
+| Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
+| Calibration | the two `eval_dpo_best.log` files |
+| Throughput / batch study | `runs/gpu_util_demo_20261021_162100`, `…162502`, `…20261022_053241`, `…20261023_053405` |
+| Qualitative examples | `runs/inference_logs/inference_best_20261014_210419.log`, `…20261019_203120.log` |
+| DPO details | `runs/*_dpo/logs/dpo_epochs.csv`, `dpo_train.log` |
+
 ---
 
-## 9. Conclusion & Research Roadmap
+## 10. Conclusion
 
-**DeepfakeReasoningModel v2** demonstrates that integrating specialized physical/frequency feature extraction with causal language modeling eliminates the trade-off between **high accuracy** and **trustworthy explainability**. By grounding the LLM in mathematical evidence (2D FFT energy ratios and attention pooling hotspots) and enforcing bidirectional self-consistency, the model eliminates post-hoc hallucination and achieves near-perfect discrimination ($0.9995$ Cross-Model AUC, $0.9936$ Grounded Val AUC).
+The approach is sound and the evidence is consistent across two independent lineages: fusing a frequency branch and attention pooling into a classifier, then conditioning a LoRA-tuned LLM on that classifier's measurements, produces a model that is both accurate on in-domain and cross-model data (AUC 0.99+ / 0.9995) and able to explain itself with specific spectral and spatial evidence. The grounded stage costs ≈7 h per epoch for three epochs on one A5000 and does not harm classification; the LR-fused foundation adds a small edge over the vanilla base (0.8 pp validation accuracy, consistent in direction but not yet replicated).
 
-### Potential Directions for Future Research
-1. **Video Temporal Grounding:** Extending the 2D FFT convolutional branch to a 3D Spatio-Temporal Fourier Transform ($3\text{D-FFT}$) to detect inter-frame phase flickering and heartbeat photoplethysmography (rPPG) inconsistencies.
-2. **Adversarial Noise Defense:** Incorporating randomized smoothing layers in the spatial patch pipeline to enhance robustness against white-box adversarial perturbations.
-3. **Multi-Adapter Co-Existence:** Implementing dynamic parameter-efficient adapter swapping (e.g., using `peft.set_adapter()`) to allow the model to switch instantaneously between deepfake forensics and industrial anomaly detection without retraining base model weights.
+The results also delimit the claim. Cross-forgery and cross-domain performance (AUC 0.95 / 0.85, accuracy 83% / 77%) remain the bottleneck, the newest grounded checkpoint has not been benchmarked on the full test set, and the reasoning quality is currently supported only by qualitative evidence. Closing those three gaps — full benchmark for `intern_v2_ground`, a faithfulness/hallucination evaluation, and a calibrated telemetry threshold per generator family — is the natural next step, ahead of any further architectural work.
 
 ---
-*Report compiled autonomously from repository source code, execution transcripts, and validation logs.*
+
+*Compiled from repository source code, training logs, evaluation logs and adapter extraction reports. All numbers in §5 are traceable to the files listed in §9.5; values that could not be traced are called out and excluded.*
