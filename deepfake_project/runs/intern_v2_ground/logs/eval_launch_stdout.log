@@ -1,0 +1,119 @@
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+00:23:19 | Eval log : ./runs/intern_v2_ground/logs\eval_best.log
+00:23:19 | Device   : cuda
+00:23:19 | GPU      : NVIDIA RTX A5000
+Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+00:23:20 | Loading model ...
+Loading InternVL3-2B from ./models/InternVL3-2B (arch_version=v2, attn_implementation=sdpa) ...
+FlashAttention2 is not installed.
+  [Warning] AutoModel.from_pretrained failed with attn_implementation='sdpa': InternVLChatModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet. Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`. Retrying without explicit attn_implementation.
+  Injecting Vision LoRA (r=16, a=32) into: ['fc1', 'fc2', 'proj', 'qkv']
+  ==========================================================
+  DeepfakeReasoningModel v2 Parameter Breakdown:
+    Total params     : 2,182,364,038
+    Trainable params : 93,406,598 (4.28%)
+    Attention Impl   : eager
+    Grad Checkpoint  : False
+      - llm_lora          : 73,859,072 params
+      - vision_lora       :  6,291,456 params
+      - cls_head          :    590,594 params
+      - freq_branch       :    455,680 params
+      - attn_pool         :  4,201,472 params
+      - custom_projector  :  7,876,608 params
+      - domain_router     :    131,716 params
+  ==========================================================
+00:23:27 | Loading checkpoint: ./runs/intern_v2_ground/checkpoints/best.pth
+00:23:32 |   epoch=3  stage=cls_only  missing=0  unexpected=0
+00:23:32 | 
+Checkpoint: best.pth  (epoch 3, cls_only)
+00:23:32 | ==========================================================================
+00:23:32 | Split                         N    GT R/F   Pred R/F     Acc      F1     AUC
+00:23:32 | ==========================================================================
+[test] 12819 usable samples from 5 JSON file(s). Unique images: 12819  Missing(skipped): 0  Duplicates(merged): 1000  No-tagged-trace(skipped): 0  Too-long(skipped): 0  Reasoning fallbacks: 0
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+00:36:20 | ID  (In-Domain)           12819 5909/6910 6599/6220   0.9338  0.9354  0.9872
+[test] 11249 usable samples from 6 JSON file(s). Unique images: 11249  Missing(skipped): 0  Duplicates(merged): 0  No-tagged-trace(skipped): 0  Too-long(skipped): 0  Reasoning fallbacks: 0
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+00:47:23 | CM  (Cross-Model)         11249 5625/5624 5708/5541   0.9908  0.9908  0.9995
+[test] 12730 usable samples from 6 JSON file(s). Unique images: 12730  Missing(skipped): 0  Duplicates(merged): 6  No-tagged-trace(skipped): 0  Too-long(skipped): 0  Reasoning fallbacks: 0
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+00:59:44 | CF  (Cross-Forgery)       12730 6364/6366 9118/3612   0.7813  0.7210  0.9327
+[test] 15468 usable samples from 6 JSON file(s). Unique images: 15468  Missing(skipped): 0  Duplicates(merged): 0  No-tagged-trace(skipped): 0  Too-long(skipped): 0  Reasoning fallbacks: 0
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+C:\Users\Admin\Desktop\LY_C68\deepfake_project\venv\Lib\site-packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+01:14:39 | CD  (Cross-Domain)        15468 7735/7733 8741/6727   0.7777  0.7622  0.8626
+01:14:39 | ==========================================================================
+01:14:39 | MEAN                                                  0.8709  0.8524  0.9455
+01:14:39 | ==========================================================================
+01:14:39 | 
+--- Post-Hoc Threshold Calibration Analysis (Optimal T*) ---
+01:14:39 | Split                      Opt T*   Base Acc   Calib Acc   Base F1   Calib F1
+01:14:39 | -----------------------------------------------------------------------------
+01:14:39 | ID  (In-Domain)              0.14     0.9338      0.9500    0.9354     0.9531
+01:14:39 | CM  (Cross-Model)            0.22     0.9908      0.9934    0.9908     0.9934
+01:14:39 | CF  (Cross-Forgery)          0.06     0.7813      0.8627    0.7210     0.8496
+01:14:39 | CD  (Cross-Domain)           0.09     0.7777      0.7739    0.7622     0.7889
+01:14:39 | -----------------------------------------------------------------------------
+01:14:39 | CALIBRATED MEAN                       0.8709      0.8950    0.8524     0.8962
+01:14:39 | -----------------------------------------------------------------------------
+01:14:39 | Log saved: ./runs/intern_v2_ground/logs\eval_best.log

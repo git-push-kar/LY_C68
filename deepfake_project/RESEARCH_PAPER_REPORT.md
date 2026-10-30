@@ -14,7 +14,7 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
-**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). The newest grounded checkpoint (`intern_v2_ground`) has validation and qualitative results but **no archived full-benchmark evaluation** — a limitation stated explicitly in §8.
+**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–84%). The newest grounded vanilla-base model is now fully benchmarked: it has the **best in-domain accuracy (93.38%, AUC 0.9872)** but trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), giving **87.09% mean accuracy / AUC 0.9455**. Grounding is therefore not a free accuracy gain.
 
 A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 1.29 vs 1.34–1.46 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
@@ -287,11 +287,12 @@ The shape is identical to Lineage A: classifier loss and consistency loss fall m
 
 ### 5.3 Held-out benchmark (52,266 samples)
 
-Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC.
+Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC. The `intern_v2_ground` row is the newest measurement (31 Oct 2026, 00:23–01:14): checkpoint `best.pth` loaded as epoch 3 with missing=0 / unexpected=0, 52,266 samples at batch 8 in bf16, **51 min 20 s** wall time on the A5000.
 
 | Checkpoint (stage) | ID 12,819 | CM 11,249 | CF 12,730 | CD 15,468 | Mean |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | `intern_v2` `ep005.pth` — S2, ungrounded vanilla | 92.42 / 0.9823 | **99.17 / 0.9995** | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / **0.9479** |
+| `intern_v2_ground` best — S4, grounded vanilla | **93.38 / 0.9872** | 99.08 / 0.9995 | 78.13 / 0.9327 | 77.77 / 0.8626 | 87.09 / 0.8524 / 0.9455 |
 | `intern_fused_ground` best — S4, LR-fused | 92.13 / 0.9881 | 98.88 / 0.9994 | **82.66 / 0.9507** | 76.60 / 0.8480 | 87.57 / 0.8655 / 0.9465 |
 | `intern_fused_dpo` best — S3, LR-fused | 92.08 / 0.9852 | 98.48 / 0.9993 | 80.42 / 0.9510 | 75.96 / 0.8503 | 86.74 / 0.8519 / 0.9465 |
 | `intern_v2_dpo` best — S3, vanilla | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 |
@@ -299,8 +300,9 @@ Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the 
 Reading the table:
 
 - **Cross-model detection is essentially solved** on this benchmark: 98.5–99.2% accuracy and AUC 0.9993–0.9996 for every checkpoint, with no sign that reasoning or DPO disturbs it.
-- **Cross-forgery** is the regime where the design pays off: the grounded LR-fused model has the best accuracy of the four (82.66%), +1.2 pp over the vanilla Stage-2 model and +2.2 pp over its LR-fused DPO sibling; its AUC (0.9507) is within 0.0003 of the best observed (0.9510).
-- **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.848–0.868) and does not improve with grounding; compression and in-the-wild post-processing remain the dominant failure source.
+- **Cross-forgery** is the regime where the design pays off for the LR-fused lineage: the grounded LR-fused model has the best accuracy of the five (82.66%), +1.2 pp over the vanilla Stage-2 model and +2.2 pp over its LR-fused DPO sibling; its AUC (0.9507) is within 0.0003 of the best observed (0.9510). On the vanilla lineage, however, grounding moves the other way (81.51% → 78.13%).
+- **Grounding trades in-domain for cross-forgery on the vanilla base.** Relative to its Stage-2 predecessor, `intern_v2_ground` gains 0.96 pp on ID (93.38 vs 92.42) but loses 3.38 pp on CF (78.13 vs 81.51) and 0.71 pp on the macro mean (87.09 vs 87.80); mean AUC falls from 0.9479 to 0.9455. The same trade is not visible in validation, where the grounded model is 0.4 pp higher — the 4,000-sample balanced set does not represent the CF/CD distributions.
+- **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.848–0.868) and does not improve with grounding on either lineage; compression and in-the-wild post-processing remain the dominant failure source.
 - **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure.
 
 The `intern_v2` row is the checkpoint the archived evaluation actually loaded: `checkpoints/ep005.pth` (metadata `epoch=5`, `best_auc=0.989061`). The directory's current `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no 52k evaluation; it is therefore not labelled "best" in this table.
@@ -309,14 +311,15 @@ A metrics block in `config.yaml` records slightly different accuracies (ID 92.01
 
 ### 5.4 Threshold calibration
 
-Calibration was run only for the DPO checkpoints (`--calibrate`). Per-split optima and resulting accuracy:
+Calibration has been run for the grounded vanilla checkpoint and both DPO checkpoints (`--calibrate`). Per-split optima and resulting accuracy:
 
 | Checkpoint | ID T* / acc | CM T* / acc | CF T* / acc | CD T* / acc | Calibrated mean acc / F1 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
+| `intern_v2_ground` | 0.14 / 95.00% | 0.22 / 99.34% | 0.06 / 86.27% | 0.09 / 77.39% | 89.50% / 89.62% |
 | `intern_fused_dpo` | 0.11 / 93.92% | 0.16 / 99.07% | 0.06 / 88.85% | 0.09 / 76.56% | **89.60% / 90.27%** |
 | `intern_v2_dpo` | 0.09 / 94.07% | 0.13 / 99.42% | 0.06 / 85.76% | 0.07 / 78.16% | 89.35% / 89.50% |
 
-The optimal thresholds sit far below 0.5, and calibration buys most on CF (+8.4 pp for the LR-fused model, +9.6 pp for the vanilla model). This is a **post-hoc diagnostic**, not a deployable result: the thresholds are tuned and evaluated on the same split. No calibrated numbers exist in the logs for the grounded checkpoints.
+The optimal thresholds sit far below 0.5, and calibration buys most on CF (+8.4 pp for the LR-fused DPO model, +9.6 pp for the vanilla DPO model, +8.1 pp for the grounded vanilla model). This is a **post-hoc diagnostic**, not a deployable result: the thresholds are tuned and evaluated on the same split. The fused grounded checkpoint has no archived calibration run.
 
 ### 5.5 Latest-model throughput and batch-size study (21–23 Oct 2026)
 
@@ -357,7 +360,7 @@ Derived throughput: **1.34, 1.46 and 1.29 samples/s** respectively. Two identica
   [Conclusion] … strongly indicate that the image is not a genuine photograph but rather an AI-generated one.
 ```
 
-On the 18-image real-only smoke set, the LR-fused grounded model labels 14 REAL / 4 FAKE (77.8% on authentic images). This is a diagnostic on 18 hand-picked files, not a balanced accuracy estimate. The latest vanilla-base model (`intern_v2_ground`) has a 19 Oct inference log that covers only **two** of the 18 images before the run stopped; one (161022) is correct at 94.8% confidence and the other (160932) is a false positive at 95.1%, so no accuracy is claimed for it.
+On the 18-image real-only smoke set, the LR-fused grounded model labels 14 REAL / 4 FAKE (77.8% on authentic images). This is a diagnostic on 18 hand-picked files, not a balanced accuracy estimate. The latest vanilla-base model (`intern_v2_ground`) has a 19 Oct inference log that covers only **two** of the 18 images before the run stopped; one (161022) is correct at 94.8% confidence and the other (160932) is a false positive at 95.1%. No accuracy is claimed from that smoke run; the model's benchmark accuracy is reported in §5.3. That false positive is consistent with the benchmark's FAKE-leaning score bias: on cross-forgery the grounded model predicts 9,118 fakes against 6,364 ground-truth fakes, and calibration at T*≈0.06–0.14 recovers 8.1 pp there (§5.4).
 
 Tag coverage differs between checkpoints: the LR-fused model emits `<fast>`, `<planning>`, `<reasoning>`, `<reflection>`, `<conclusion>` on most of its 18 samples, while both logged vanilla-grounded samples emit only fast/reasoning/conclusion. Both keep the telemetry structure, but the richer trace is a qualitative advantage of the LR-fused lineage.
 
@@ -403,7 +406,7 @@ Decoding defaults to **greedy** (`do_sample=False`) with a `</answer>` stopping 
 
 ## 8. Limitations
 
-1. **The latest model is not fully benchmarked.** `runs/intern_v2_ground` has 4,000-sample validation (95.23% / 0.9903) and a partial qualitative log, but no 52,266-sample evaluation. The benchmark table describes other checkpoints; generalisation of the newest grounded model is unmeasured.
+1. **Grounding does not improve the aggregate benchmark.** The grounded vanilla model is fully benchmarked (87.09% / 0.9455), but the ungrounded Stage-2 checkpoint remains higher on mean accuracy (87.80%) and AUC (0.9479); the grounded model's +0.96 pp ID gain is offset by a −3.38 pp CF loss, and validation does not predict that trade. One evaluation per checkpoint, no confidence intervals.
 2. **No baseline comparison.** The report contains no external detector or vanilla-LLM baseline under the same protocol, so "state-of-the-art" is not supported and is not claimed.
 3. **Single run per configuration, 4,000-sample validation.** Lineage differences (~0.8 pp) and epoch-to-epoch deltas are within plausible run-to-run variation; no confidence intervals or seeds are recorded (the training script does not set a seed).
 4. **Eager attention in every recorded run.** `attn_implementation="sdpa"` is rejected by the InternVL chat wrapper and silently falls back to `eager`; FlashAttention-2 is not installed. All timings above therefore reflect eager attention, not a fused-SDPA kernel.
@@ -504,8 +507,8 @@ python inference.py --config config.yaml \
 | Architecture, losses, telemetry format | `model.py`, `train.py`, `dataset.py` |
 | Parameter counts | run logs (`launch_stdout.log`, `…/logs/train.log`), `extract_adapters.py` report |
 | Validation dynamics | `runs/intern_fused_ground/logs/epochs.csv`, `runs/intern_v2_ground/logs/epochs.csv` |
-| Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
-| Calibration | the two `eval_dpo_best.log` files |
+| Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_v2_ground/logs/eval_best.log`, `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
+| Calibration | `runs/intern_v2_ground/logs/eval_best.log` and the two `eval_dpo_best.log` files |
 | Throughput / batch study | `runs/gpu_util_demo_20261021_162100`, `…162502`, `…20261022_053241`, `…20261023_053405` |
 | Qualitative examples | `runs/inference_logs/inference_best_20261014_210419.log`, `…20261019_203120.log` |
 | DPO details | `runs/*_dpo/logs/dpo_epochs.csv`, `dpo_train.log` |
@@ -516,7 +519,7 @@ python inference.py --config config.yaml \
 
 The approach is sound and the evidence is consistent across two independent lineages: fusing a frequency branch and attention pooling into a classifier, then conditioning a LoRA-tuned LLM on that classifier's measurements, produces a model that is both accurate on in-domain and cross-model data (AUC 0.99+ / 0.9995) and able to explain itself with specific spectral and spatial evidence. The grounded stage costs ≈7 h per epoch for three epochs on one A5000 and does not harm classification; the LR-fused foundation adds a small edge over the vanilla base (0.8 pp validation accuracy, consistent in direction but not yet replicated).
 
-The results also delimit the claim. Cross-forgery and cross-domain performance (AUC 0.95 / 0.85, accuracy 83% / 77%) remain the bottleneck, the newest grounded checkpoint has not been benchmarked on the full test set, and the reasoning quality is currently supported only by qualitative evidence. Closing those three gaps — full benchmark for `intern_v2_ground`, a faithfulness/hallucination evaluation, and a calibrated telemetry threshold per generator family — is the natural next step, ahead of any further architectural work.
+The results also delimit the claim. Cross-forgery and cross-domain performance (AUC 0.95 / 0.86, accuracy 83% / 78%) remain the bottleneck, and the newest grounded model is fully benchmarked but **not better overall**: it buys 0.96 pp in-domain at the cost of 3.38 pp cross-forgery. Reasoning quality is still supported only by qualitative evidence. The next steps are therefore a faithfulness/hallucination evaluation, a telemetry calibration per generator family, and a targeted investigation of why grounding hurts cross-forgery, rather than more architecture.
 
 ---
 

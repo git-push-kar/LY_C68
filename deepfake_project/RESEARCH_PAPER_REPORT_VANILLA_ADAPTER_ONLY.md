@@ -16,9 +16,11 @@ The report specifies the artifact completely: adapter configurations, per-module
 | :--- | :--- | :--- |
 | Stage 1–2 (`intern_v2`, epoch 5) | 94.90% / AUC 0.9891 | **87.80% acc / 0.8659 F1 / 0.9479 AUC** |
 | DPO (`intern_v2_dpo`, epoch 2) | not logged | 85.36% acc / 0.8268 F1 / 0.9423 AUC |
-| Grounded (`intern_v2_ground`, epoch 3) | **95.23% / AUC 0.9903** | **not run** |
+| Grounded (`intern_v2_ground`, epoch 3) | **95.23% / AUC 0.9903** | 87.09% acc / 0.8524 F1 / 0.9455 AUC |
 
-Three qualifications are load-bearing and are not buried: the 52k benchmark belongs to **`intern_v2/checkpoints/ep005.pth`**, not the current `best.pth` (a later run overwrote it); the DPO adapter package contains **no custom heads**, so it cannot classify on its own; and the repo's `eval.py`/`inference.py` accept whole-model checkpoints only — there is no packaged adapter loader yet.
+All three 52k evaluations now exist, and they say something the validation set does not: **grounding is not an accuracy gain**. The grounded adapter model is the strongest in-domain classifier of the three (93.38% / 0.9872) but loses 3.38 pp on cross-forgery relative to the ungrounded Stage-2 adapters, so its macro mean (87.09% / 0.9455) sits below them (87.80% / 0.9479).
+
+Three qualifications are load-bearing and are not buried: the Stage-2 52k benchmark belongs to **`intern_v2/checkpoints/ep005.pth`**, not the current `best.pth` (a later run overwrote it); the DPO adapter package contains **no custom heads**, so it cannot classify on its own; and the repo's `eval.py`/`inference.py` accept whole-model checkpoints only — there is no packaged adapter loader yet.
 
 ---
 
@@ -299,6 +301,7 @@ The vanilla directory contains **two stage-2 runs**, and the distinction matters
 | 26 Sep 11:08 – 13:29 | DPO from `ep006.pth` | `intern_v2_dpo/dpo_best.pth` (epoch 2) | no validation logged |
 | 18–19 Oct | Grounded from `ep006.pth` | `intern_v2_ground/best.pth` (epoch 3) | 95.225% / 0.990270 |
 | 21 Oct 09:13 | Adapter extraction | `intern_v2_ground/adapters/` | — |
+| 31 Oct 00:23–01:14 | **52k evaluation of the grounded adapter model** (with `--calibrate`) | `intern_v2_ground/logs/eval_best.log` | `best.pth`, epoch 3, missing=0 / unexpected=0 |
 
 The evaluated epoch-5 checkpoint still exists as `ep005.pth` (metadata: `epoch=5`, `best_auc=0.9890605`), so the 52k metrics are reproducible against a named file. The current `best.pth` is Run B's epoch-4 checkpoint (metadata: `epoch=4`, `best_auc=0.99140275`) and has **no archived 52k evaluation**.
 
@@ -331,21 +334,38 @@ Grounded adapter-only model (`runs/intern_v2_ground/logs/epochs.csv`):
 
 ### 4.3 Held-out benchmark (52,266 samples)
 
-Only two vanilla adapter-only checkpoints have archived evaluations. Cells are **accuracy / AUC**; the mean is the macro-average over the four splits.
+All three vanilla adapter-only checkpoints now have archived evaluations. Cells are **accuracy / AUC**; the mean is the macro-average over the four splits.
 
 | Checkpoint | ID 12,819 | CM 11,249 | CF 12,730 | CD 15,468 | Mean acc / F1 / AUC |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `intern_v2` `ep005.pth` (Stage 2) | 92.42 / 0.9823 | 99.17 / 0.9995 | 81.51 / 0.9418 | 78.11 / 0.8680 | **87.80 / 0.8659 / 0.9479** |
+| `intern_v2` `ep005.pth` (Stage 2) | 92.42 / 0.9823 | **99.17 / 0.9995** | **81.51 / 0.9418** | **78.11 / 0.8680** | **87.80 / 0.8659 / 0.9479** |
+| `intern_v2_ground` `best.pth` (grounded) | **93.38 / 0.9872** | 99.08 / 0.9995 | 78.13 / 0.9327 | 77.77 / 0.8626 | 87.09 / 0.8524 / 0.9455 |
 | `intern_v2_dpo` `dpo_best.pth` (DPO) | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 |
+
+Split composition: ID 5,909 real / 6,910 fake, CM 5,625 / 5,624, CF 6,364 / 6,366, CD 7,735 / 7,733. The grounded run took **51 min 20 s** for all 52,266 samples (ID 12 m 48 s, CM 11 m 03 s, CF 12 m 21 s, CD 14 m 55 s) at batch 8 on the RTX A5000 in bf16.
 
 Observations specific to the adapter-only configuration:
 
-- The **ungrounded adapter model is the stronger classifier**: DPO costs 2.7 pp on ID and 5.3 pp on CF while gaining 0.0001 CM AUC. DPO targets trace quality, not detection, and this table shows the trade.
-- **Cross-model performance is unaffected** by adapter-only training (98.9–99.2% accuracy, AUC ≥ 0.9995), which suggests the vanilla backbone already carries enough generalisable evidence for unseen generators and the adapters mainly sharpen it.
-- **Cross-domain is the ceiling** (78.11% accuracy, AUC 0.8680) and is the metric most likely to benefit from a stronger base rather than more adapter capacity.
-- The grounded checkpoint's validation AUC (0.9903) is in the same range as the stage-2 checkpoints (0.9891–0.9914), but **no 52k result exists**, so no claim is made that grounding preserves benchmark performance.
+- **Grounding trades in-domain accuracy for cross-forgery accuracy.** The grounded adapters gain **+0.96 pp on ID** (93.38 vs 92.42, AUC +0.0049) and lose **−3.38 pp on CF** (78.13 vs 81.51, AUC −0.0091); CM is flat and CD is marginally lower. Net: −0.71 pp mean accuracy, −0.0034 mean AUC. The 4,000-sample balanced validation set, where grounding is *better* (95.23 vs 94.90), does not represent the CF distribution — a reminder that validation AUC alone is not a sufficient checkpoint criterion here.
+- A mechanism is plausible but **not proven** by this experiment: the classifier head is frozen during grounding (`--freeze_cls_head`), so only LoRA weights and the auxiliary heads move, and the KL term pulls the classifier toward the language model's answer distribution on ground-truth-verdict traces. Any resulting drift would be small and regime-dependent, which matches the ±1–3 pp pattern. Testing it requires an ablation with `--freeze_cls_head` disabled.
+- The **ungrounded adapter model is the best aggregate classifier**, though only by 0.71 pp over the grounded one and 2.44 pp over DPO. DPO costs 2.7 pp on ID and 5.3 pp on CF while gaining 0.0001 CM AUC; DPO targets trace quality, not detection, and this table shows the trade.
+- **Cross-model performance is unaffected** by either stage (98.9–99.2% accuracy, AUC ≥ 0.9995), which suggests the vanilla backbone already carries enough generalisable evidence for unseen generators and the adapters mainly sharpen it.
+- **Cross-domain is the ceiling** (77.77–78.11% accuracy, AUC 0.863–0.868) and is the metric most likely to benefit from a stronger base rather than more adapter capacity.
+- **Prediction bias is visible in the counts.** On CF the grounded model labels 9,118 of 12,730 samples fake against 6,364 ground-truth fakes, which is why its CF F1 (0.7210) is far below its accuracy (0.7813). Calibration in §4.4 corrects most of this.
 
-### 4.4 Threshold calibration (DPO checkpoint)
+### 4.4 Threshold calibration (grounded and DPO checkpoints)
+
+**Grounded adapter model** (`intern_v2_ground`, `--calibrate` in the 31 Oct run):
+
+| Split | Optimal T* | Base acc | Calibrated acc | Base F1 | Calibrated F1 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| ID | 0.14 | 93.38% | 95.00% | 0.9354 | 0.9531 |
+| CM | 0.22 | 99.08% | 99.34% | 0.9908 | 0.9934 |
+| CF | 0.06 | 78.13% | 86.27% | 0.7210 | 0.8496 |
+| CD | 0.09 | 77.77% | 77.39% | 0.7622 | 0.7889 |
+| **Mean** | — | **87.09%** | **89.50%** | **0.8524** | **0.8962** |
+
+**DPO adapter model:**
 
 | Split | Optimal T* | Base acc | Calibrated acc | Base F1 | Calibrated F1 |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -355,7 +375,9 @@ Observations specific to the adapter-only configuration:
 | CD | 0.07 | 76.62% | 78.16% | 0.7349 | 0.7977 |
 | **Mean** | — | **85.36%** | **89.35%** | **0.8268** | **0.8950** |
 
-Thresholds were tuned and evaluated on the same split, so this is a diagnostic, not a deployable calibration. It does show that the adapter model's scores are systematically shifted high, which matters if the package is deployed with a naive 0.5 threshold.
+Calibration buys the grounded model **+8.1 pp on CF** (and +1.6 pp on ID) for +2.41 pp mean accuracy, while CD slightly degrades (−0.38 pp). CD aside, one threshold below 0.5 is optimal in every regime, so the adapter models are systematically biased toward FAKE at 0.5 — the CF prediction counts in §4.3 are that bias in raw form.
+
+Thresholds were tuned and evaluated on the same split, so this is a diagnostic, not a deployable calibration. A usable deployment would need thresholds fitted on a held-out calibration split and reported on this one.
 
 ### 4.5 Qualitative behaviour (grounded adapter package)
 
@@ -370,12 +392,12 @@ Two images cannot support an accuracy estimate. They are included because they s
 
 For context only — this is a different foundation, not a controlled ablation:
 
-| Adapter-only model | Validation acc / AUC | 52k mean acc / AUC | Package |
-| :--- | :--- | :--- | :--- |
-| Vanilla grounded (`intern_v2_ground`) | 95.23% / 0.9903 | not run | 178.24 MiB |
-| LR-fused grounded (`intern_fused_ground`) | **96.00% / 0.9936** | 87.57% / 0.9465 | 178.24 MiB |
+| Adapter-only model | Validation acc / AUC | 52k mean acc / F1 / AUC | CF acc / AUC | Package |
+| :--- | :--- | :--- | :--- | :--- |
+| Vanilla grounded (`intern_v2_ground`) | 95.23% / 0.9903 | 87.09% / 0.8524 / 0.9455 | 78.13 / 0.9327 | 178.24 MiB |
+| LR-fused grounded (`intern_fused_ground`) | **96.00% / 0.9936** | **87.57% / 0.8655 / 0.9465** | **82.66 / 0.9507** | 178.24 MiB |
 
-The fused foundation is 0.77 pp / 0.0034 AUC better on validation, with one run each. Its 52k mean AUC (0.9465) is essentially level with the vanilla stage-2 model (0.9479), while its CF accuracy is 1.15 pp higher. The evidence is consistent with a small LR-fusion benefit but does not establish one.
+Both models are now benchmarked, so the comparison is direct even though it is not a controlled ablation. The fused foundation is **+0.77 pp validation accuracy / +0.0034 AUC**, **+0.48 pp mean benchmark accuracy**, **+0.0010 mean AUC**, and **+4.53 pp on cross-forgery accuracy** (AUC +0.0180). The CF gap is the largest and most consistent difference, and cross-forgery is exactly the regime where an LR-band prior should help most. The remaining differences are within single-run noise; with one run per lineage the effect is consistent in direction but not statistically established.
 
 ### 4.7 Evidence map
 
@@ -385,6 +407,7 @@ The fused foundation is 0.77 pp / 0.0034 AUC better on validation, with one run 
 | Stage-2 checkpoint identity | `runs/intern_v2/checkpoints/ep005.pth`, `ep006.pth`, `best.pth` (metadata) |
 | 52k benchmark (Stage 2) | `runs/intern_v2/logs/eval_best.log` |
 | 52k benchmark + calibration (DPO) | `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
+| 52k benchmark + calibration (grounded) | `runs/intern_v2_ground/logs/eval_best.log`, launch output `eval_launch_stdout.log` |
 | DPO training | `runs/intern_v2_dpo/logs/dpo_epochs.csv`, `dpo_train.log` |
 | Grounded validation | `runs/intern_v2_ground/logs/epochs.csv` |
 | Grounded inference | `runs/inference_logs/inference_best_20261019_203120.log` |
@@ -395,7 +418,7 @@ The fused foundation is 0.77 pp / 0.0034 AUC better on validation, with one run 
 
 ## 5. Limitations
 
-1. **The grounded adapter-only model has no 52k benchmark.** Its 95.23% / 0.9903 is validation-only; the benchmark table describes the stage-2 and DPO checkpoints.
+1. **Grounding does not improve the aggregate benchmark.** The grounded adapter model is the best in-domain classifier but 0.71 pp mean accuracy / 0.0034 mean AUC below the ungrounded Stage-2 adapters, and 3.38 pp below on cross-forgery. The cause is not isolated: no ablation separates the frozen classifier head, the KL consistency term and the reasoning corpus.
 2. **The benchmark is attributed to `ep005.pth`.** `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no evaluation. Any statement of the form "the vanilla best model scores 0.9479" is imprecise.
 3. **The DPO package is incomplete.** It ships LoRA adapters without the custom heads, so it cannot classify standalone. No adapter package exists for the stage-2 checkpoint either.
 4. **No adapter loader ships in the repo.** `eval.py` and `inference.py` load whole-model checkpoints; the attach pattern is documented and adapter tensors were verified, but end-to-end parity from adapters + heads is unverified.
@@ -459,9 +482,9 @@ python inference.py --config config.yaml \
 
 ## 7. Conclusion
 
-Adapter-only training on the vanilla foundation is a practical and well-understood configuration: 93.4 M trainable parameters (4.28%) produce a 178 MiB portable package on top of a frozen 2.18 B backbone, with validation AUC 0.9903 for the latest grounded model and a 52k benchmark mean AUC of 0.9479 for its stage-2 predecessor. The adapters demonstrably carry the task: the same frozen backbone with a small head set reaches 99%+ on cross-model data and 78% on cross-domain data.
+Adapter-only training on the vanilla foundation is a practical and well-understood configuration: 93.4 M trainable parameters (4.28%) produce a 178 MiB portable package on top of a frozen 2.18 B backbone. Measured on the full 52,266-sample benchmark, the three vanilla adapter models score **87.80% / 0.9479** (Stage 2), **87.09% / 0.9455** (grounded, calibrated 89.50% / 0.8962 F1) and **85.36% / 0.9423** (DPO, calibrated 89.35% / 0.8950 F1). The adapters demonstrably carry the task: the same frozen backbone with a small head set reaches 99%+ on cross-model data, 78–82% on cross-forgery and 78% on cross-domain data, and calibration recovers +8 pp of cross-forgery accuracy from the models' FAKE-leaning score bias.
 
-The evidence also sets hard boundaries. The grounded adapter model has not been benchmarked on the full test set; the DPO package is missing the heads required to classify; and the repository cannot yet execute an adapter-only evaluation end to end. Those are engineering and evaluation gaps, not architectural ones, and they are the shortest path to making this package production-usable.
+The evidence also sets hard boundaries. Grounding does not improve the aggregate benchmark on this foundation — it buys 0.96 pp in-domain and pays 3.38 pp cross-forgery — and no ablation isolates why. Two engineering gaps remain regardless of accuracy: the DPO package is missing the heads required to classify, and the repository cannot yet execute an adapter-only evaluation end to end. Those are the shortest path to making this package production-usable.
 
 ---
 
