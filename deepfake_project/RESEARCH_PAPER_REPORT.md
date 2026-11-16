@@ -14,7 +14,18 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
-**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). **The released detector is the grounded vanilla checkpoint** (93.38% in-domain, AUC 0.9872; 87.09% mean accuracy, AUC 0.9455), chosen for portability onto the unmodified upstream base; its adapter package passes verdict parity against the checkpoint (18/18, Δp_fake = 0). Measured on the same benchmark, the LR-fused comparison model is **stronger: 94.10% in-domain, 88.13% mean accuracy, and +4.4 pp on cross-forgery** — that gap is reported, not hidden. Within the vanilla lineage, grounding still trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), so grounding is not a free accuracy gain.
+**Verified results.** **The released detector is the grounded vanilla checkpoint** — three classifier
+epochs, three reasoning epochs and three telemetry epochs, then three grounded epochs — scoring
+**93.38% in-domain (AUC 0.9872), 87.09% mean accuracy (AUC 0.9455)** on the 52,266-sample HydraFake
+benchmark and **95.23% / AUC 0.9903** on the balanced validation set. It ships because its adapter
+package attaches to the unmodified upstream base and passes verdict parity against the checkpoint
+(18/18, $\Delta p_{\text{fake}} = 0$). The LR-fused lineage is reported as the **comparison**: it
+is stronger on the same benchmark — **94.10% in-domain, 88.13% mean accuracy, 96.00% validation,
++4.4 pp on cross-forgery** — and that gap is stated rather than hidden (§3.8 explains why the
+portable model was chosen anyway). Across all checkpoints the best mean AUC is **0.9479**
+(ungrounded vanilla Stage 2), best cross-model AUC **0.9995**, best cross-forgery AUC **0.9510**
+(fused DPO) and best cross-domain AUC **0.8680**; cross-forgery and cross-domain accuracy remain the
+weak regimes (76–83%). A preference-optimization stage was also trained end to end and **rejected**: it optimises only the trace LM, freezing the classifier and telemetry heads with no consistency term, and its preference pairs carry no telemetry at all — classifier/LLM disagreements on the 18-image smoke set rose from 0/18 to 1–4/18. Within the vanilla lineage, grounding still trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), so grounding is not a free accuracy gain.
 
 A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 10.32 vs 10.74–11.68 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
@@ -219,6 +230,48 @@ $$\mathcal{L}_{\text{DPO}}=-\mathbb{E}\Big[\log\sigma\Big(\beta\log\tfrac{\pi_\t
 
 Measured: 1 h 41 m/epoch (LR-fused, 3 h 22 m total) and 1 h 10 m/epoch (vanilla, 2 h 20 m total). Reward accuracy rose to 96.61% (LR-fused) and 91.03% (vanilla).
 
+Both DPO checkpoints were fully benchmarked. They are reported here as an **approach that was tried
+and not shipped**, with the numbers that decided it:
+
+| Checkpoint | ID | CM | CF | CD | Macro acc / F1 / AUC | Calibrated mean |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `intern_fused_dpo` (Lineage A) | 92.08 / 0.9852 | 98.48 / 0.9993 | 80.42 / 0.9510 | 75.96 / 0.8503 | 86.74 / 0.8519 / 0.9465 | 89.60 / 90.27 |
+| `intern_v2_dpo` (Lineage B) | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 | 89.35 / 89.50 |
+| *parent for comparison* — `intern_v2` Stage 2 | 92.42 / 0.9823 | 99.17 / 0.9995 | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / 0.9479 | — |
+
+On the vanilla lineage Stage 3 costs **2.69 pp in-domain, 5.34 pp cross-forgery and 1.49 pp
+cross-domain** (2.44 pp macro) against the Stage-2 checkpoint it starts from. The calibrated mean
+looks competitive only because calibrating four thresholds per split on the split itself recovers
+much of the loss (§5.4), and that is a diagnostic, not a deployable gain.
+
+**Why Stage 3 is not on the shipping path.** Two structural reasons, both visible in the code and
+the data rather than inferred from the scores:
+
+1. **The classifier and the LM are trained against each other and then never reconciled.** DPO
+   optimises a single term, $\mathcal{L}_{\text{DPO}}$, over the LM's trace (`train_dpo.py`:
+   `loss = dpo_loss`, no `cls` and no `cons` term), and freezes every non-LoRA parameter —
+   `cls_head`, `attn_pool`, `freq_branch`, `custom_projector` and `domain_router`. So the LM is
+   pushed toward preferred traces while the decision heads stay at their Stage-2 values, and the
+   self-consistency loss that exists precisely to hold the two together (§2.9) is absent from the
+   objective. Nothing penalises a preferred trace that contradicts the classifier.
+   The effect is measurable on the 18-image smoke set: the grounded model produces **0/18**
+   classifier/LLM disagreements, while four `intern_fused_dpo` runs on the same set produce
+   **4/18, 3/18, 1/18 and 4/18** (`runs/inference_logs/inference_dpo_best_*.log`). Small n, but
+   the direction is consistent across runs.
+2. **The preference data carries no telemetry.** `mipo_3k.json` records are
+   `{images, type, video_id, label, messages, rejected_response}` — chosen/rejected traces only.
+   There is no hotspot, spectral-ratio or any other telemetry target in them. Since the telemetry
+   heads are frozen during DPO anyway, Stage 3 contributes **zero** supervision to the grounding
+   channel that the shipped product reports (§2.7). A checkpoint that ends there would ship a
+   preference-tuned reasoner attached to a classifier and a telemetry stack that were never
+   trained together.
+
+That is why Stage 4 is initialised from **Stage 2** (`intern_v2/ep006.pth`), not from a DPO
+checkpoint: Stage 4 is the only stage that trains classifier-attention, telemetry and LM reasoning
+jointly with the consistency term active. The DPO experiments answer a research question (does
+preference tuning help the trace?) and are kept in §5.3 for that reason; they are not a candidate
+for release.
+
 ### 3.5 Stage 4 — grounded reasoning fine-tuning
 
 - **Init:** `intern_fused/ep006.pth` (Lineage A) or `intern_v2/ep006.pth` (Lineage B); weights only, fresh optimizer and schedule.
@@ -240,8 +293,56 @@ AdamW; LoRA parameters at $5\times10^{-5}$; custom heads at $1\times10^{-4}$ (2�
 | Post-stage α | DPO → `runs/intern_fused_dpo` | DPO → `runs/intern_v2_dpo` |
 | Post-stage β | Grounded → `runs/intern_fused_ground` (comparison) | Grounded → `runs/intern_v2_ground` (**deployed checkpoint**) |
 | Stage-4 wall time | 8 h 27 m – 14 h 02 m per epoch (host load variance) | 6 h 41 m – 7 h 15 m per epoch (21 h 11 m total) |
+| **Role in this report** | **Approach / comparison** — the lineage that motivated the design, not the released model | **Primary model** — the shipped detector, the one every number in §5.1, §5.3, §5.4 and §5.6 describes first |
 
 The lineages are identical through epoch 6 and diverge afterwards, which is what makes the comparison informative: any difference at Stage 4 is attributable to the foundation weights (and to host-level variance, which is not negligible — see §8).
+
+### 3.8 Why the released model is the vanilla lineage
+
+The deployment shift is a deliberate trade, and the report states both sides of it.
+
+**What the shipped model is.** `intern_v2_ground` is the Lineage B path, and it is trained in two
+three-epoch blocks:
+
+- **Stage 2 — three joint epochs** (§5.1), each one training the **classifier**, the **reasoning
+  branch** and the **telemetry heads** under one objective (§2.10): three epochs of classifier
+  training, three of reasoning, three with telemetry data.
+- **Stage 4 — three grounded epochs** (§3.5), initialised from Stage 2's `ep006.pth`. `cls_head` is
+  frozen here to protect it at its peak; the attention pooling, frequency branch, projector and
+  router that produce telemetry keep training alongside the LM.
+
+So the released checkpoint has seen the classifier trained for six epochs (three joint + three
+frozen-but-present) and the reasoning and telemetry channels for six, and it is the only lineage
+where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
+$|\Delta p_{\text{fake}}| = 0$).
+
+**Why not the LR-fused lineage, which scores higher.** Lineage A is **1.04 pp better on the macro
+mean (88.13 vs 87.09), 4.43 pp better on cross-forgery (82.56 vs 78.13) and 0.19 pp better on
+cross-model**, and only loses cross-domain (76.98 vs 78.13, +1.15 pp for vanilla). Three reasons
+decided against shipping it anyway:
+
+1. **Portability.** Lineage B's adapters attach to the unmodified upstream `models/InternVL3-2B`.
+   Lineage A needs `models/internvl3_2b_lr_fused`, and the Stage-0 merge that produced it is
+   **not reproducible from this repository** — no LR training logs, data manifest or merge script
+   are archived (§3.1). Shipping A means shipping a dependency on a checkpoint whose provenance
+   this work cannot reconstruct.
+2. **The gap is smaller than the headline.** On the 52k benchmark the split that drives the
+   difference is cross-forgery (LF-fusion helps most where compression/generator traces dominate);
+   on the validation set the two are 0.77 pp apart (95.23% vs 96.00%). Calibration at
+   $T^*\approx0.06$ moves the deployed model's CF accuracy 78.13 → 86.27 (+8.1 pp), larger than the
+   4.43 pp gap — but that is a threshold fitted and evaluated on the same split, so it is a
+   diagnostic, not a gain the shipped default ($T=0.5$) realises (§5.4). The deployed model also
+   scores slightly **better** on the independent FFIW face set (0.8944 vs 0.8845 doc AUC at the
+   shipped margin).
+3. **The foundation is not the interesting variable.** The report's contribution is the three-head
+   architecture, the grounding objective and the telemetry channel; those are identical in both
+   lineages. Pinning the release to the upstream base keeps the contribution separable from an
+   external pre-adaptation and makes the ablation interpretable: any difference between §5.1 and
+   §5.2 is the foundation, and nothing else.
+
+The honest one-line summary for a reader: *the fused lineage is the stronger model on the
+benchmark and is reported as such; the vanilla lineage is the one that ships, because it runs on
+the base anyone can download.*
 
 ---
 
@@ -333,7 +434,7 @@ Reading the table:
 - **Cross-forgery** is the regime where the design pays off for the LR-fused lineage: the grounded LR-fused model has the best accuracy of the five (82.56%), +1.05 pp over the vanilla Stage-2 model (81.51%) and +2.14 pp over its LR-fused DPO sibling (80.42%); its AUC (0.9482) is 0.0028 below the best observed (0.9510, LR-fused DPO). On the vanilla lineage, however, grounding moves the other way (81.51% → 78.13%).
 - **Grounding trades in-domain for cross-forgery on the vanilla base.** Relative to its Stage-2 predecessor, `intern_v2_ground` gains 0.96 pp on ID (93.38 vs 92.42) but loses 3.38 pp on CF (78.13 vs 81.51) and 0.71 pp on the macro mean (87.09 vs 87.80); mean AUC falls from 0.9479 to 0.9455. The same trade is not visible in validation, where the grounded model is 0.4 pp higher — the 4,000-sample balanced set does not represent the CF/CD distributions.
 - **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.850–0.868) and does not improve with grounding on either lineage; compression and in-the-wild post-processing remain the dominant failure source.
-- **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure.
+- **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure. Both DPO checkpoints are listed for completeness as a tried approach, not as candidates — §3.4 gives the classifier/LLM and telemetry reasons, plus the measured disagreement rate that goes with them.
 
 The `intern_v2` row is the checkpoint the archived evaluation actually loaded: `checkpoints/ep005.pth` (metadata `epoch=5`, `best_auc=0.989061`). The directory's current `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no 52k evaluation; it is therefore not labelled "best" in this table.
 
@@ -591,7 +692,7 @@ python inference.py --config config.yaml \
 | Validation dynamics | `runs/intern_fused_ground/logs/epochs.csv`, `runs/intern_v2_ground/logs/epochs.csv` |
 | Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_v2_ground/logs/eval_best.log`, `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
 | Calibration | `runs/intern_v2_ground/logs/eval_best.log` and the two `eval_dpo_best.log` files |
-| Throughput / batch study | `runs/gpu_util_demo_20261021_162100`, `…162502`, `…20261022_053241`, `…20261023_053405` |
+| Throughput / batch study | `runs/gpu_util_demo_20261021_162502`, `…20261022_053241`, `…20261023_053405` (the fourth launch, `…162100`, terminated before its first logged step and left no directory) |
 | Qualitative examples | `runs/inference_logs/inference_best_20261014_210419.log`, `…20261019_203120.log` |
 | DPO details | `runs/*_dpo/logs/dpo_epochs.csv`, `dpo_train.log` |
 
