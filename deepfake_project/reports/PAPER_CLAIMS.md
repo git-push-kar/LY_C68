@@ -33,8 +33,10 @@ wrong about the *shape* of the results, only about which weights produced them.
 Independently cross-checked: `eval_by_generator.py` (a separate harness that keeps per-sample
 scores) reproduces the CD row exactly — 7,935 / 7,533 predictions, 0.7698 acc, 0.8533 AUC.
 
-**Still stale elsewhere:** `RESEARCH_PAPER_REPORT.md` §5 carries the epoch-1 numbers and must be
-regenerated before submission (out of scope for this change).
+**Consistency across documents:** `RESEARCH_PAPER_REPORT.md` §5.3 and
+`RESEARCH_PAPER_REPORT_VANILLA_ADAPTER_ONLY.md` §4.6 now carry these same epoch-3 numbers, and
+`INTEGRATION_GUIDE.md` quotes only epoch-3-consistent values (VaAcc 96.00 %, VaAUC 0.993647). No
+document still reports the retired epoch-1 table.
 
 Per-split figures with 95 % intervals, extracted by `eval_metrics.py` from that log.
 Positive class = FAKE; TP/FP/FN/TN are reconstructed from the logged counts and verified against

@@ -14,7 +14,7 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
-**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–84%). The newest grounded vanilla-base model is now fully benchmarked: it has the **best in-domain accuracy (93.38%, AUC 0.9872)** but trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), giving **87.09% mean accuracy / AUC 0.9455**. Grounding is therefore not a free accuracy gain.
+**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). The newest grounded vanilla-base model is now fully benchmarked: it reaches **93.38% in-domain accuracy (AUC 0.9872)** — below the deployed LR-fused model's **94.10% / 0.9891** — but trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), giving **87.09% mean accuracy / AUC 0.9455**. Grounding is therefore not a free accuracy gain.
 
 A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 1.29 vs 1.34–1.46 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
@@ -287,22 +287,22 @@ The shape is identical to Lineage A: classifier loss and consistency loss fall m
 
 ### 5.3 Held-out benchmark (52,266 samples)
 
-Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC. The `intern_v2_ground` row is the newest measurement (31 Oct 2026, 00:23–01:14): checkpoint `best.pth` loaded as epoch 3 with missing=0 / unexpected=0, 52,266 samples at batch 8 in bf16, **51 min 20 s** wall time on the A5000.
+Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC. The `intern_fused_ground` row was re-measured on 2026-11-16 22:52–23:43 from the deployed epoch-3 checkpoint (`epoch=3`, `best_auc=0.993646875`, missing=0 / unexpected=0) over all 52,266 samples at batch 8 in bf16, **51 min** on the A5000. It replaces an earlier epoch-1 evaluation of the same directory (`runs/intern_fused_ground/logs/eval_best.log`, retained for audit), which reported ID 92.13 and CD 76.60; that checkpoint file has since been overwritten in place. The `intern_v2_ground` row remains the 31 Oct 2026 measurement (00:23–01:14, **51 min 20 s**); the DPO and `intern_v2` rows are unchanged.
 
 | Checkpoint (stage) | ID 12,819 | CM 11,249 | CF 12,730 | CD 15,468 | Mean |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | `intern_v2` `ep005.pth` — S2, ungrounded vanilla | 92.42 / 0.9823 | **99.17 / 0.9995** | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / **0.9479** |
-| `intern_v2_ground` best — S4, grounded vanilla | **93.38 / 0.9872** | 99.08 / 0.9995 | 78.13 / 0.9327 | 77.77 / 0.8626 | 87.09 / 0.8524 / 0.9455 |
-| `intern_fused_ground` best — S4, LR-fused | 92.13 / 0.9881 | 98.88 / 0.9994 | **82.66 / 0.9507** | 76.60 / 0.8480 | 87.57 / 0.8655 / 0.9465 |
+| `intern_v2_ground` best — S4, grounded vanilla | 93.38 / 0.9872 | 99.08 / 0.9995 | 78.13 / 0.9327 | 77.77 / 0.8626 | 87.09 / 0.8524 / 0.9455 |
+| `intern_fused_ground` best — S4, LR-fused | **94.10 / 0.9891** | 98.89 / 0.9993 | **82.56 / 0.9482** | 76.98 / 0.8533 | 88.13 / 0.8720 / 0.9475 |
 | `intern_fused_dpo` best — S3, LR-fused | 92.08 / 0.9852 | 98.48 / 0.9993 | 80.42 / 0.9510 | 75.96 / 0.8503 | 86.74 / 0.8519 / 0.9465 |
 | `intern_v2_dpo` best — S3, vanilla | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 |
 
 Reading the table:
 
 - **Cross-model detection is essentially solved** on this benchmark: 98.5–99.2% accuracy and AUC 0.9993–0.9996 for every checkpoint, with no sign that reasoning or DPO disturbs it.
-- **Cross-forgery** is the regime where the design pays off for the LR-fused lineage: the grounded LR-fused model has the best accuracy of the five (82.66%), +1.2 pp over the vanilla Stage-2 model and +2.2 pp over its LR-fused DPO sibling; its AUC (0.9507) is within 0.0003 of the best observed (0.9510). On the vanilla lineage, however, grounding moves the other way (81.51% → 78.13%).
+- **Cross-forgery** is the regime where the design pays off for the LR-fused lineage: the grounded LR-fused model has the best accuracy of the five (82.56%), +1.05 pp over the vanilla Stage-2 model (81.51%) and +2.14 pp over its LR-fused DPO sibling (80.42%); its AUC (0.9482) is 0.0028 below the best observed (0.9510, LR-fused DPO). On the vanilla lineage, however, grounding moves the other way (81.51% → 78.13%).
 - **Grounding trades in-domain for cross-forgery on the vanilla base.** Relative to its Stage-2 predecessor, `intern_v2_ground` gains 0.96 pp on ID (93.38 vs 92.42) but loses 3.38 pp on CF (78.13 vs 81.51) and 0.71 pp on the macro mean (87.09 vs 87.80); mean AUC falls from 0.9479 to 0.9455. The same trade is not visible in validation, where the grounded model is 0.4 pp higher — the 4,000-sample balanced set does not represent the CF/CD distributions.
-- **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.848–0.868) and does not improve with grounding on either lineage; compression and in-the-wild post-processing remain the dominant failure source.
+- **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.850–0.868) and does not improve with grounding on either lineage; compression and in-the-wild post-processing remain the dominant failure source.
 - **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure.
 
 The `intern_v2` row is the checkpoint the archived evaluation actually loaded: `checkpoints/ep005.pth` (metadata `epoch=5`, `best_auc=0.989061`). The directory's current `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no 52k evaluation; it is therefore not labelled "best" in this table.

@@ -18,7 +18,7 @@ The report specifies the artifact completely: adapter configurations, per-module
 | DPO (`intern_v2_dpo`, epoch 2) | not logged | 85.36% acc / 0.8268 F1 / 0.9423 AUC |
 | Grounded (`intern_v2_ground`, epoch 3) | **95.23% / AUC 0.9903** | 87.09% acc / 0.8524 F1 / 0.9455 AUC |
 
-All three 52k evaluations now exist, and they say something the validation set does not: **grounding is not an accuracy gain**. The grounded adapter model is the strongest in-domain classifier of the three (93.38% / 0.9872) but loses 3.38 pp on cross-forgery relative to the ungrounded Stage-2 adapters, so its macro mean (87.09% / 0.9455) sits below them (87.80% / 0.9479).
+All three 52k evaluations now exist, and they say something the validation set does not: **grounding is not an accuracy gain**. The grounded adapter model is the strongest in-domain classifier of these three (93.38% / 0.9872) but loses 3.38 pp on cross-forgery relative to the ungrounded Stage-2 adapters, so its macro mean (87.09% / 0.9455) sits below them (87.80% / 0.9479).
 
 Three qualifications are load-bearing and are not buried: the Stage-2 52k benchmark belongs to **`intern_v2/checkpoints/ep005.pth`**, not the current `best.pth` (a later run overwrote it); the DPO adapter package contains **no custom heads**, so it cannot classify on its own; and the repo's `eval.py`/`inference.py` accept whole-model checkpoints only — there is no packaged adapter loader yet.
 
@@ -395,9 +395,9 @@ For context only — this is a different foundation, not a controlled ablation:
 | Adapter-only model | Validation acc / AUC | 52k mean acc / F1 / AUC | CF acc / AUC | Package |
 | :--- | :--- | :--- | :--- | :--- |
 | Vanilla grounded (`intern_v2_ground`) | 95.23% / 0.9903 | 87.09% / 0.8524 / 0.9455 | 78.13 / 0.9327 | 178.24 MiB |
-| LR-fused grounded (`intern_fused_ground`) | **96.00% / 0.9936** | **87.57% / 0.8655 / 0.9465** | **82.66 / 0.9507** | 178.24 MiB |
+| LR-fused grounded (`intern_fused_ground`) | **96.00% / 0.9936** | **88.13% / 0.8720 / 0.9475** | **82.56 / 0.9482** | 178.24 MiB |
 
-Both models are now benchmarked, so the comparison is direct even though it is not a controlled ablation. The fused foundation is **+0.77 pp validation accuracy / +0.0034 AUC**, **+0.48 pp mean benchmark accuracy**, **+0.0010 mean AUC**, and **+4.53 pp on cross-forgery accuracy** (AUC +0.0180). The CF gap is the largest and most consistent difference, and cross-forgery is exactly the regime where an LR-band prior should help most. The remaining differences are within single-run noise; with one run per lineage the effect is consistent in direction but not statistically established.
+Both models are now benchmarked, so the comparison is direct even though it is not a controlled ablation. The fused foundation is **+0.77 pp validation accuracy / +0.0033 AUC**, **+1.04 pp mean benchmark accuracy** (F1 +0.0196), **+0.0020 mean AUC**, and **+4.43 pp on cross-forgery accuracy** (AUC +0.0155). The CF gap is the largest and most consistent difference, and cross-forgery is exactly the regime where an LR-band prior should help most. The remaining differences are within single-run noise; with one run per lineage the effect is consistent in direction but not statistically established.
 
 ### 4.7 Evidence map
 
@@ -418,7 +418,7 @@ Both models are now benchmarked, so the comparison is direct even though it is n
 
 ## 5. Limitations
 
-1. **Grounding does not improve the aggregate benchmark.** The grounded adapter model is the best in-domain classifier but 0.71 pp mean accuracy / 0.0034 mean AUC below the ungrounded Stage-2 adapters, and 3.38 pp below on cross-forgery. The cause is not isolated: no ablation separates the frozen classifier head, the KL consistency term and the reasoning corpus.
+1. **Grounding does not improve the aggregate benchmark.** The grounded adapter model is the best in-domain classifier *of this lineage* (the LR-fused model scores higher in-domain; see §4.6), but 0.71 pp mean accuracy / 0.0034 mean AUC below the ungrounded Stage-2 adapters, and 3.38 pp below on cross-forgery. The cause is not isolated: no ablation separates the frozen classifier head, the KL consistency term and the reasoning corpus.
 2. **The benchmark is attributed to `ep005.pth`.** `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no evaluation. Any statement of the form "the vanilla best model scores 0.9479" is imprecise.
 3. **The DPO package is incomplete.** It ships LoRA adapters without the custom heads, so it cannot classify standalone. No adapter package exists for the stage-2 checkpoint either.
 4. **No adapter loader ships in the repo.** `eval.py` and `inference.py` load whole-model checkpoints; the attach pattern is documented and adapter tensors were verified, but end-to-end parity from adapters + heads is unverified.
