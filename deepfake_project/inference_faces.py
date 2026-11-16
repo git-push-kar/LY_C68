@@ -84,8 +84,10 @@ def parse_args():
                    help="skip detection and evaluate the whole image (inference.py behaviour)")
     g.add_argument("--passthrough_min_face_frac", type=float, default=0.05,
                    help="a lone face must cover this fraction of the frame to keep the "
-                        "whole-image path; below it, the crop path is used. Measured on "
-                        "test_images: portraits ~0.088 (omi.jpg), faces in group or wide "
+                        "whole-image path; below it, the crop path is used. Floors from "
+                        "0.03 to 0.06 route all 33 local images identically "
+                        "(FACE_PIPELINE_CALIBRATION.md section 4): portraits ~0.073-0.088, "
+                        "faces in group or wide "
                         "scenes 0.021-0.029 (3-people.jpg, chick.jpg)")
     g.add_argument("--aggregate", default="max",
                    choices=["max", "mean", "any_fake", "per_face"],
@@ -103,8 +105,9 @@ def parse_args():
     g3.add_argument("--margin", type=float, default=0.30,
                     help="background ring added around each detected face")
     g3.add_argument("--face_threshold", type=float, default=0.50,
-                    help="p_fake decision boundary. 0.50 keeps per-face verdicts consistent "
-                         "with inference.py's argmax until the plan's margin sweep calibrates it")
+                    help="p_fake decision boundary. The FFIW sweep is flat across 0.42-0.55 "
+                         "(within one standard error), so 0.50 is kept for consistency with "
+                         "inference.py's argmax; see FACE_PIPELINE_CALIBRATION.md section 3")
     g3.add_argument("--save_crops", default=None, help="directory for per-face crops")
     g3.add_argument("--save_annotated", default=None, help="directory for box overlays")
 

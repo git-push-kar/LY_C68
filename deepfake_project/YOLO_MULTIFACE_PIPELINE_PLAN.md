@@ -178,6 +178,11 @@ at **0.021–0.029** (`3-people.jpg` 0.020–0.029, `chick.jpg` 0.021). 0.05 sep
 margin on both sides. The first guess of 0.10 wrongly refused that portrait, which is why the
 number is now tied to measurements.
 
+M5 widened that to a **measured basin**: floors from 0.03 to 0.06 route all 33 unique local
+images identically, with failures bracketing it (`chick.jpg` 0.021 and `om.jpg` 0.026 below;
+`4.jpg` 0.073, `6.jpg` 0.080, `omi.jpg` 0.088 above). FFIW cannot test this range at all — its
+faces sit at 0.27–0.54 — which is itself a finding. See `FACE_PIPELINE_CALIBRATION.md` §4.
+
 **Consequence to state, not hide:** passthrough verdicts and per-face verdicts are not directly
 comparable. One is whole-scene evidence (FFT over the frame, hotspots over the frame), the other
 is crop-local evidence. That is inherent in keeping today's behaviour for single-face images, and
@@ -333,6 +338,21 @@ Deliverable: a margin table in this file (or a short `FACE_PIPELINE_CALIBRATION.
 chosen margin, `face_threshold`, and the document-level AUC, written **after** measuring. Until
 then the defaults above are hypotheses, not results.
 
+**Measured (M5, 2026-11-16) — full tables in `FACE_PIPELINE_CALIBRATION.md`.** 400 FFIW frames,
+margin 0.00 / 0.15 / 0.30 / 0.45, document-level AUC 0.8782 / 0.8787 / **0.8845** / 0.8970:
+0.30 beats the tight baseline by +0.63 pt and ships; 0.45's extra gain is confounded (99 % of
+FFIW faces are already >2x upscaled at margin 0, and 97 % of 0.45 crops degrade to `stretch`),
+so it is reported, not adopted. `face_threshold` stays 0.50: the sweep is flat within one
+standard error across 0.42–0.55 and the Youden optimum moves with the margin (0.52 at 0.30,
+0.43 at 0.45). The plan's earlier hypothesis of 0.42 gained +0.25 pt document accuracy — inside
+the noise — and would have diverged from `inference.py`'s argmax for nothing.
+
+**Correction to §8.4:** FFIW as stored here is 256x256 and 92 % single-face, so it routes
+passthrough and **does not exercise the multi-face crop path**; it also ships without GT face
+boxes, so detector recall (IoU ≥ 0.5) is still unmeasured. The margin sweep is therefore scored
+per-face directly, bypassing routing, and the crop path's numbers should be read as
+"competitive with, not better than" the whole-image path (best crop doc AUC 0.897 vs 0.9037).
+
 ---
 
 ## 8. Evaluation plan
@@ -367,7 +387,7 @@ then the defaults above are hypotheses, not results.
 | M2 | Adapter loader | `adapter_loader.py`, strict key assertions | parity check §8.1 = 100 % |
 | M3 | Multi-face inference | `inference_faces.py` (detect → batch classify → per-face telemetry) | 4 images produce per-face verdicts |
 | M4 | Reasoning routing + aggregation | `--reason_faces`, `--aggregate`, JSON schema | aggregation unit tests green |
-| M5 | Calibration + eval set | margin/threshold table, FFIW subset numbers | document verdict stable at chosen margin |
+| M5 | Calibration + eval set | `FACE_PIPELINE_CALIBRATION.md`, `face_calibration.py`, FFIW 400-frame numbers — **done 2026-11-16** | margin 0.30 ships (+0.63 pt over tight baseline); `face_threshold` 0.50 and frac 0.05 confirmed, not changed |
 | M6 | Docs + launcher | `INTEGRATION_GUIDE.md` §11 multi-face section, `run_faces.bat` | guide code block runs verbatim |
 
 Each milestone is independently mergeable; M0–M2 unblock everything else and carry no risk to
