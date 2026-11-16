@@ -18,35 +18,51 @@ Measured 2026-11-16 on `feature/yolo-multiface` (commits `b6cc6c5`..`06d9c8c`), 
 
 ## 1. The single-image detector (Lineage A, `intern_fused_ground` best.pth)
 
-Source: `RESEARCH_PAPER_REPORT.md` §5.1-5.3, computed from archived `eval_*.log` over the full
-52,266-sample held-out set.
+Source: `runs/timing/epoch3/eval_best.log` — **the shipped epoch-3 weights**
+(`{'epoch': 3, 'stage': 'cls_only', 'best_auc': 0.993646875}`), re-run 2026-11-16 22:52-23:43 on
+the A5000 over the full 52,266-sample held-out set (`eval.py`, unchanged). 51 minutes wall clock.
 
-**Epoch provenance — read before quoting these numbers.** `eval_best.log` records
-`epoch=1 stage=cls_only`, and that checkpoint file has since been **replaced** by the epoch-3
-weights now on disk (`{'epoch': 3, 'best_auc': 0.993646875}`). The table below is therefore
-*epoch 1*, while everything shipped — adapters, parity tests, `inference_faces.py` — runs
-*epoch 3*. Re-scoring the current weights on CD gives **0.7698 acc / 0.8533 AUC** where the
-archived log has 0.7660 / 0.8480, i.e. the two checkpoints differ by ~0.4 pt on the hardest
-split. §1.1 below is measured on the epoch-3 weights that ship. Quoting §1 as "epoch 3" was
-wrong; either label it epoch 1 or re-run all four splits on the shipped checkpoint (~51 min).
+**These are the weights that ship.** Adapters, `verify_adapter_parity.py`, the parity tests and
+`inference_faces.py` all load this same checkpoint, so every number in this ledger now describes
+one model. An earlier table in this section was built from `runs/intern_fused_ground/logs/eval_best.log`,
+which records `epoch=1` — a checkpoint that has since been overwritten by epoch 3. That log is
+retained for audit only; **do not quote its numbers** (ID 0.9213, CD 0.7660). Moving to epoch 3
+changed ID by +2.0 pt accuracy and left CM/CF/CD within 0.4 pt, so the earlier table was not
+wrong about the *shape* of the results, only about which weights produced them.
 
-Per-split figures with 95 % intervals, extracted by `eval_metrics.py` from the archived log.
+Independently cross-checked: `eval_by_generator.py` (a separate harness that keeps per-sample
+scores) reproduces the CD row exactly — 7,935 / 7,533 predictions, 0.7698 acc, 0.8533 AUC.
+
+**Still stale elsewhere:** `RESEARCH_PAPER_REPORT.md` §5 carries the epoch-1 numbers and must be
+regenerated before submission (out of scope for this change).
+
+Per-split figures with 95 % intervals, extracted by `eval_metrics.py` from that log.
 Positive class = FAKE; TP/FP/FN/TN are reconstructed from the logged counts and verified against
 the logged F1, so precision/recall are derived rather than re-run.
 
 | Split | N | Accuracy [95 % CI] | F1 | Precision [CI] | Recall [CI] | AUC [CI] |
 | --- | --- | --- | --- | --- | --- | --- |
-| ID (in-domain) | 12,819 | 0.9213 [0.9165, 0.9258] | 0.9219 | 0.9904 [0.9876, 0.9925] | 0.8624 [0.8540, 0.8703] | 0.9881 [0.9863, 0.9899] |
-| CM (cross-model) | 11,249 | 0.9888 [0.9867, 0.9906] | 0.9887 | 0.9957 [0.9936, 0.9971] | 0.9819 [0.9780, 0.9850] | 0.9994 [0.9989, 0.9999] |
-| CF (cross-forgery) | 12,730 | 0.8266 [0.8200, 0.8331] | 0.7917 | 0.9917 [0.9885, 0.9940] | **0.6588 [0.6471, 0.6704]** | 0.9507 [0.9468, 0.9546] |
-| CD (cross-domain) | 15,468 | 0.7660 [0.7593, 0.7726] | 0.7598 | 0.7804 [0.7708, 0.7897] | 0.7403 [0.7304, 0.7500] | 0.8480 [0.8418, 0.8542] |
-| Macro mean | — | 0.8757 | 0.8655 | — | — | 0.9465 |
-| Validation (epoch 3) | 4,000 | 0.9600 | 0.9483 | — | — | 0.993647 |
+| ID (in-domain) | 12,819 | 0.9410 [0.9368, 0.9450] | 0.9428 | 0.9872 [0.9841, 0.9897] | 0.9023 [0.8951, 0.9091] | 0.9891 [0.9874, 0.9908] |
+| CM (cross-model) | 11,249 | 0.9889 [0.9868, 0.9907] | 0.9888 | 0.9962 [0.9942, 0.9975] | 0.9815 [0.9776, 0.9847] | 0.9993 [0.9988, 0.9998] |
+| CF (cross-forgery) | 12,730 | 0.8256 [0.8189, 0.8321] | 0.7897 | 0.9947 [0.9921, 0.9965] | **0.6547 [0.6430, 0.6663]** | 0.9482 [0.9442, 0.9522] |
+| CD (cross-domain) | 15,468 | 0.7698 [0.7631, 0.7764] | 0.7668 | 0.7770 [0.7674, 0.7862] | 0.7569 [0.7472, 0.7663] | 0.8533 [0.8473, 0.8593] |
+| Macro mean | — | 0.8813 | 0.8720 | — | — | 0.9475 |
+| Validation (same checkpoint) | 4,000 | 0.9600 [0.9535, 0.9656] | 0.9483 | — | — | 0.993647 [0.9912, 0.9961] |
 
-**The CF failure is a recall failure, not a precision failure.** Precision 0.9917 but recall
-0.6588: when the model says FAKE on a cross-forgery edit it is almost always right, and it misses
-a third of them. CD fails the other way (precision 0.7804, recall 0.7403). Those are different
-problems with different remedies, and the single accuracy number hides both.
+The validation row is the checkpoint's own `best_auc` (0.993647), i.e. the score that selected
+these weights; its interval is derivable from the counts (3,840 of 4,000 correct, 2,000/2,000
+classes) and is Hanley-McNeil like the rest of the AUC column.
+
+**The CF failure is a recall failure, not a precision failure.** Precision 0.9947 but recall
+0.6547: when the model says FAKE on a cross-forgery edit it is almost always right, and it misses
+a third of them. CD is the opposite shape (precision 0.7770, recall 0.7569) — there it is wrong
+both ways. Those are different problems with different remedies, and the single accuracy number
+hides both.
+
+**ID improved with the extra epochs (0.9213 → 0.9410) and CF/CD did not.** That is worth one
+sentence in the paper: more in-domain training tightened the operating point rather than
+improving transfer, which is the expected result if the remaining error is a domain shift and not
+an optimisation one.
 
 Acc/precision/recall intervals are Wilson 95 %; AUC intervals are Hanley-McNeil approximations
 (the log has no per-sample scores). Threshold-calibrated macro mean, grounded vanilla checkpoint:
@@ -153,8 +169,8 @@ Mean p_fake separates the two failure modes cleanly:
    six (0.8936) despite being the largest group — the in-domain-ish generator is not automatically
    the easy one, which is worth a sentence in the paper.
 
-**DO NOT CLAIM** a single cause for the CD gap, and do not quote 0.7660 alongside this table: that
-is the epoch-1 checkpoint. Use 0.7698 (epoch 3) here, or re-run §1 on the shipped weights.
+**DO NOT CLAIM** a single cause for the CD gap, and do not mix in 0.7660 from the retired epoch-1
+log: this table and §1's CD row are the same run on the shipped weights (0.7698).
 
 ## 5. Per-face classification and aggregation
 
@@ -268,7 +284,7 @@ python test_calibration.py             # 15  AUC, sweeps, floor routing
 python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips
 python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0
-python eval_metrics.py --log runs/intern_fused_ground/logs/eval_best.log
+python eval_metrics.py --log runs/timing/epoch3/eval_best.log     # §1 (shipped epoch-3 weights)
 python eval_by_generator.py --checkpoint runs/intern_fused_ground/checkpoints/best.pth \
     --split cd --out runs/timing/eval_by_generator_cd.json      # ~15 min, CD only
 python face_calibration.py --adapter_dir ./runs/intern_fused_ground/adapters \
