@@ -16,7 +16,7 @@ Training follows a four-stage curriculum (classifier warm-up → joint classific
 
 **Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). **The released detector is the grounded vanilla checkpoint** (93.38% in-domain, AUC 0.9872; 87.09% mean accuracy, AUC 0.9455), chosen for portability onto the unmodified upstream base; its adapter package passes verdict parity against the checkpoint (18/18, Δp_fake = 0). Measured on the same benchmark, the LR-fused comparison model is **stronger: 94.10% in-domain, 88.13% mean accuracy, and +4.4 pp on cross-forgery** — that gap is reported, not hidden. Within the vanilla lineage, grounding still trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), so grounding is not a free accuracy gain.
 
-A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 1.29 vs 1.34–1.46 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
+A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 10.32 vs 10.74–11.68 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
 ---
 
@@ -367,7 +367,11 @@ is a property of the recipe and batch shape, not of which adapters ship. All fou
 | `…22_053241` | 4 × 8 | 32 | 8,765 | 2.74 | 6 h 40 m 50 s | 1,096 | 87.13% | 0.9623 |
 | `…23_053405` | 8 × 8 | 64 | 4,382 | 6.20 | 7 h 32 m 58 s | 548 | 84.95% | 0.9431 |
 
-Derived throughput: **1.34, 1.46 and 1.29 samples/s** respectively. Two identical 4×8 runs differ by ~8% in wall time, which sets the noise floor. Against that floor, batch 8 gives no throughput gain, doubles the per-step latency, halves the optimizer updates, and loses ~2.2–2.6 pp validation accuracy after one epoch — the expected consequence of halving updates rather than of the larger batch per se. The current 4 × 8 configuration is therefore retained. The first launch (`162100`) terminated before its first logged step with no exception in stderr; it is recorded here for completeness only.
+Derived throughput (effective batch ÷ s per step): **10.74, 11.68 and 10.32 samples/s**
+respectively. An earlier draft of this paragraph reported 1.34 / 1.46 / 1.29 "samples/s" — that is the
+*micro*-batch divided by s per step, i.e. samples per step-second, and understates throughput by the
+8× accumulation factor; the comparison it supported is unchanged. Two identical 4×8 runs differ by
+~8% in wall time, which sets the noise floor. Against that floor, batch 8 gives no throughput gain, doubles the per-step latency, halves the optimizer updates, and loses ~2.2–2.6 pp validation accuracy after one epoch — the expected consequence of halving updates rather than of the larger batch per se. The current 4 × 8 configuration is therefore retained. The first launch (`162100`) terminated before its first logged step with no exception in stderr; it is recorded here for completeness only.
 
 ### 5.6 Qualitative behaviour
 

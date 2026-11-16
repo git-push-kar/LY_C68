@@ -163,7 +163,7 @@ CLI's p_fake exactly at margin 0.30, which is how the harness was checked). Cont
 What this establishes, and what it does not:
 
 - **Crop geometry is a first-order factor, not a rounding detail.** The same face spans
-  0.077-0.945 in p_fake across the sweep (spreads 0.81 / 0.86 / 0.87 on the three `3-people`
+  0.076-0.953 in p_fake across the sweep (spreads 0.81 / 0.86 / 0.87 on the three `3-people`
   faces). Any claim of the form "the model scores this face at X" is really "at X *given this
   crop*", and must say so.
 - **The direction supports more context for seam evidence.** On `3-people` the tight box (no
@@ -199,30 +199,30 @@ Document-level sweep, margin 0.30 (the shipped margin), vanilla adapters:
 
 | threshold | acc | F1 | TPR | TNR |
 | --- | --- | --- | --- | --- |
-| 0.42 | **0.8100** | 0.7946 | 0.735 | 0.885 |
-| 0.45 | 0.8075 | 0.7913 | 0.730 | 0.885 |
-| 0.50 | 0.8075 | 0.7902 | 0.725 | 0.890 |
-| 0.55 | 0.8025 | 0.7836 | 0.715 | 0.890 |
-| 0.60 | 0.8000 | 0.7802 | 0.710 | 0.890 |
+| 0.42 | 0.8150 | **0.8000** | 0.740 | 0.890 |
+| 0.45 | 0.8125 | 0.7956 | 0.730 | 0.895 |
+| **0.50** | **0.8150** | 0.7967 | 0.725 | **0.905** |
+| 0.55 | 0.8100 | 0.7901 | 0.715 | 0.905 |
+| 0.60 | 0.8075 | 0.7867 | 0.710 | 0.905 |
 
-The best document accuracy anywhere in 0.30-0.75 is **0.8200 at T = 0.34**; per-face, the best
-point is **T = 0.39**. At margin 0.45 the document optimum moves again. Overall document accuracy
-spans 0.7950-0.8200 across the whole 0.30-0.75 range.
+The best document accuracy in the sweep is **0.8200 at T = 0.39-0.40** (a two-step plateau); the
+per-face optimum is the same point, **T = 0.39** (face acc 0.8288). Document accuracy spans
+**0.7900-0.8200** over 0.30-0.75, i.e. 3.0 pt in total.
 
 ### Decision: keep `face_threshold = 0.50`
 
-The sweep is **flat within noise**. The full range across 0.30-0.75 is 2.5 pt on n = 400, where
-one standard error is ~1.5 pt; the four tested points sit inside 1 pt of each other, and the
-optimum jumps between 0.34, 0.39 (per-face) and 0.42 depending on aggregation — the signature of
-noise rather than a real operating point.
+The sweep is **flat within noise**. The full range across 0.30-0.75 is 3.0 pt on n = 400, where
+one standard error is ~1.5 pt; the five tabulated points sit inside 0.75 pt of each other, and the
+optimum (0.39-0.40) is only 0.5 pt above the shipped 0.50 while landing on a coarser TPR/TNR split
+(0.750/0.890 vs 0.725/0.905). Nothing here resolves an operating point.
 
 Two candidate changes were tested and rejected:
 
-- **0.42** (the value `config.yaml` quotes from the CF split): doc acc 0.8100 vs 0.8075 at
-  0.50 (+0.25 pt), F1 +0.44 pt, at the cost of TNR −0.5 pt. Real but well inside the error bar,
-  and it would put per-face verdicts out of step with `inference.py`'s argmax rule for no
-  measurable gain.
-- **0.55** and above: TNR stays 0.890 while TPR falls to 0.715 (0.55) and 0.710 (0.60).
+- **0.42** (the value `config.yaml` quotes from the CF split): doc accuracy is **identical** to
+  0.50 (0.8150 both), F1 is +0.33 pt (0.8000 vs 0.7967), and TNR is −1.5 pt (0.890 vs 0.905).
+  Inside the error bar, and it would put per-face verdicts out of step with `inference.py`'s
+  argmax rule for no measurable gain.
+- **0.55** and above: TNR stays at 0.905 while TPR falls to 0.715 (0.55) and 0.710 (0.60).
   For a review-escalating tool, missing fakes is the expensive error.
 
 0.50 is retained because it is also the class boundary the validated single-image path uses;
@@ -234,8 +234,8 @@ high-specificity point can pass `--face_threshold 0.55`.
 ## 4. `passthrough_min_face_frac`
 
 FFIW contributes **nothing** here: the floor-sweep on 400 frames is identical from 0.02 to
-0.20 (AUC 0.90855, acc 0.8225, 92 % passthrough) and only moves at 0.30 (AUC 0.9067, acc 0.820,
-88 % passthrough). Its faces simply do not live in the contested range.
+0.20 (AUC 0.90855, acc 0.8225, 91.75 % passthrough, 1 % no-face) and only moves at 0.30 (AUC
+0.9067, acc 0.820, 88 % passthrough). Its faces simply do not live in the contested range.
 
 The evidence is the 33 unique local images (deduplicated by content — `test_images/real/`
 repeats several top-level files byte-for-byte). Routing depends only on the detector and the
@@ -278,11 +278,14 @@ Measured with `face_timing.py` on the RTX A5000, bf16, defaults (greedy, grounde
 Detect and classify are **medians of 15 calls** after a discarded warmup; reasoning is **one
 generation per face** for this run. Every timed call is bracketed by `torch.cuda.synchronize()`.
 
+Detect and classify are medians of 15 calls from the `--skip_reason` pass; reason/total are from the
+one-generation-per-face pass. Both passes ran on the deployed adapters, minutes apart.
+
 | Image | Faces evaluated | Path | Detect | Classify | Reason / face | Total, `top1` | Total, `all` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `test_images/omi.jpg` (1644x1534) | 1 | passthrough | 22 ms | 167 ms | 15.7 s | **15.9 s** | 15.9 s |
-| 4-photo montage (1600x1600) | 4 | per_face | 23 ms | 516 ms | 16.0 - 20.9 s | **21.5 s** | 72.6 s |
-| FFIW `test_00000929/053.png` | 2 of 4 (2 below 96 px) | per_face | 15 ms | 268 ms | 19.7, 20.6 s | **20.9 s** | 40.7 s |
+| `test_images/omi.jpg` (1644x1534) | 1 | passthrough | 23 ms | 176 ms | 15.7 s | **15.9 s** | 15.9 s |
+| 4-photo montage (1600x1600) | 4 | per_face | 26 ms | 525 ms | 16.0 - 20.9 s | **21.5 s** | 72.6 s |
+| FFIW `test_00000929/053.png` | 2 of 4 (2 below 96 px) | per_face | 17 ms | 271 ms | 19.7, 20.6 s | **20.9 s** | 40.7 s |
 
 The 4-face image is a montage of four real photographs (tiled 2x2), because FFIW's only rated
 4-face frame has just two faces above the 96 px gate — it is measured separately in row 3, where
@@ -290,47 +293,48 @@ it shows exactly what the gate is doing: two faces judged, two reported `face_to
 
 **What the numbers say:**
 
-1. **Reasoning is ~99 % of wall time at every face count**: 15.7 s of generation vs 0.17 s of
-   classification for one face, and 16.0-20.9 s vs 0.52 s for four. Classification is not the
+1. **Reasoning is ~99 % of wall time at every face count**: 15.7 s of generation vs 0.18 s of
+   classification for one face, and 16.0-20.9 s vs 0.53 s for four. Classification is not the
    cost centre and batching it harder would optimise nothing.
-2. **`top1` saves 3.4x on a 4-face image**: 21.5 s instead of 72.6 s, i.e. 51 s per image for
+2. **`top1` saves 3.2-3.4x on a 4-face image**: 21.5 s instead of 72.6 s in §5, 23.1 s instead
+   of 74.2 s in the cap probe at the same 512 settings — ~51 s per image either way, spent
    reasoning about three faces that are not the highest-risk one. This is the whole justification
    for the default; `all` is a deliberate, expensive opt-in.
-3. **Per-call reasoning cost varies 16-21 s in this session** because generation length varies
+3. **Per-call reasoning cost varies 16-23 s in this session** because generation length varies
    and greedy decoding stops at `</answer>`. Do not read that as the model being faster than
    Lineage A: §5.2 explains why absolute seconds move between sessions by far more than this.
-4. **Classifier cost per face is ~0.12-0.13 s** (167 ms for 1, 516 ms for 4), and detection is
-   15-23 ms regardless of frame size (the detector letterboxes to `imgsz=640`).
+4. **Classifier cost per face is ~0.13 s** (176 ms for 1, 525 ms for 4), and detection is
+   17-26 ms regardless of frame size (the detector letterboxes to `imgsz=640`).
 5. **Screening without reasoning is 0.20 s (1 face) to 0.55 s (4 faces)** by the same medians.
    That is the mode for volumes; reserve reasoning for escalated cases.
 
 ### 5.1 Token cap: measured, and a negative result
 
 Generation is 99 % of the cost, so the obvious lever is the 512-token cap. Three caps were run
-back to back under identical conditions (one generation per face, `--max_new_tokens`). **This
-probe was run on Lineage A**; the deployed model has only been timed at the 512 default, so the
-seconds below are the fused model's and are quoted for the *conclusion*, not as vanilla latency:
+back to back under identical conditions (one generation per face, `--max_new_tokens`, **deployed
+vanilla adapters**, 2026-11-16 00:54-01:08, `runs/timing/vanilla_face_timing_t{512,256,192}.json`):
 
 | Cap | 1-face reason | 4-face, reason per face | 4-face total `top1` | 4-face total `all` | Answers (4-face) |
 | --- | --- | --- | --- | --- | --- |
-| **512** (default) | 14.9 s | 24.8 / 15.8 / 13.9 / 16.3 s | 25.3 s | 71.4 s | fake, real, real, real |
-| 256 | 15.4 s | 24.0 / 16.2 / 14.5 / 16.6 s | 24.5 s | 71.8 s | **unknown**, real, real, real |
-| 192 | 15.3 s | 18.0 / 16.2 / 14.3 / 16.5 s | 18.5 s | 65.5 s | **unknown**, real, real, real |
+| **512** (default) | 15.5 s | 22.6 / 16.0 / 19.3 / 15.8 s | 23.1 s | 74.2 s | fake, real, real, real |
+| 256 | 15.7 s | 21.2 / 16.2 / 19.4 / 15.9 s | 21.7 s | 73.2 s | fake, real, real, real |
+| 192 | 15.5 s | 17.7 / 15.8 / 18.0 / 15.8 s | 18.2 s | 67.8 s | **unknown, real, unknown, real** |
 
-**The cap is not what bounds generation.** Lowering 512 -> 256 saves nothing measurable (25.3 ->
-24.5 s) because greedy decoding already stops at `</answer>` well inside 512 tokens. Lowering to
-192 appears to save 27 % on `top1` (25.3 -> 18.5 s) but that is an artefact: the only face that
-changed was the slowest one, whose trace was **cut off before its answer tag**, so the audit
-signal became `unknown` instead of `fake`. `all` moves 71.4 -> 65.5 s (8 %) for the same reason.
-On a single face all three caps are identical (14.9 / 15.4 / 15.3 s).
+**The cap is not what bounds generation, and on this checkpoint truncation costs more than on
+Lineage A.** Lowering 512 -> 256 saves 6 % on `top1` (23.1 -> 21.7 s) with identical answers,
+because greedy decoding already stops at `</answer>` well inside 512 tokens. Lowering to 192
+appears to save 21 % (23.1 -> 18.2 s), but the two faces whose traces were **cut off before the
+answer tag** are faces 0 and 2 — and **face 0 is the only FAKE of the four** (classifier 0.92).
+The audit signal for the one face that mattered became `unknown`. `all` moves 74.2 -> 67.8 s
+(8.6 %) for the same reason. On a single face all three caps are indistinguishable (15.5 / 15.7 /
+15.5 s).
 
 So the honest conclusion is the opposite of the hypothesis this section started with: keep
 `max_new_tokens = 512`. A lower cap buys no speed on normal generations and silently discards the
 answer on the longest ones — the ones most likely to matter. If reasoning cost must come down,
 the lever is *how many faces get reasoned about* (`top1`, already the default), not how long each
-one may run. **Re-run this probe on the vanilla package before quoting any cap number as the
-deployed model's** — the conclusion is about decoding behaviour rather than weights, but it has
-not been measured there.
+one may run. This now reproduces the Lineage A result on the shipped package, and with a sharper
+failure: one unknown became two, one of them the positive.
 
 ### 5.2 Variance between sessions
 
@@ -340,8 +344,8 @@ difference on identical inputs, same GPU, same code. The deployed model's sessio
 vanilla is faster at reasoning. The likely cause of the spread is machine state (GPU
 clocks/contention from other work on the box); it was not instrumented, so it is not explained,
 only recorded. What stayed stable across lineages is the **ratio**: `all` / `top1` = 2.84 and
-2.82 for Lineage A, **3.38** for the deployed model at 4 faces. Quote the ratio and the range,
-not a single absolute figure.
+2.82 for Lineage A, **3.2-3.4** for the deployed model at 4 faces (3.38 in §5, 3.21 in the 512
+cap run). Quote the ratio and the range, not a single absolute figure.
 
 Measurement caveats: single machine, CUDA clocks not locked, and roughly one call in fifteen
 lands 3-4 s outside the median on classify (allocator growth), which is why medians are quoted
@@ -389,6 +393,13 @@ python face_timing.py --adapter_dir ./runs/intern_v2_ground/adapters \
     --skip_reason --repeats_fast 15 --out runs/timing/face_timing.json
 python face_timing.py --adapter_dir ./runs/intern_v2_ground/adapters \
     --repeats_reason 1 --out runs/timing/face_timing_reason.json
+
+# token-cap probe (section 5.1): one generation per face, three caps
+for T in 512 256 192; do
+    python face_timing.py --adapter_dir ./runs/intern_v2_ground/adapters \
+        --max_new_tokens $T --repeats_reason 1 \
+        --out runs/timing/vanilla_face_timing_t$T.json
+done
 
 # full-resolution context sweep (section 2.2) -- writes contact sheets to runs/samples/context/
 python runs/samples/context_sweep.py test_images/3-people.jpg test_images/multiple-faces.jpg

@@ -289,8 +289,9 @@ Lineage A figures are kept in parentheses for comparison.
 
 | Claim | Number | Status |
 | --- | --- | --- |
-| Detect | 15-23 ms across a 256² to 8500² input (vanilla); Lineage A measured 13.6-21.7 ms | **MEASURED** |
-| Classify | 167 ms (1 face), 516-525 ms (4 faces) — ~0.12-0.13 s/face (Lineage A: 151.4 / 518.9 ms) | **MEASURED** |
+| Detect | 17-26 ms across a 256² to 8500² input (vanilla); Lineage A measured 13.6-21.7 ms | **MEASURED** |
+| Classify | 176 ms (1 face), 525 ms (4 faces) — ~0.13 s/face (Lineage A: 151.4 / 518.9 ms) | **MEASURED** |
+| Token cap is not the lever (vanilla) | 512→256 saves 6 % `top1` with identical answers; 192 saves 21 % but truncates the trace on 2 of 4 faces **including the only FAKE**, yielding `unknown` | **MEASURED** |
 | Reason | **15.7-20.9 s per face** in this session (2 faces 19.7-20.6 s; 4 faces 16.0-20.9 s); ~98-99 % of total wall time | **MEASURED** |
 | 1-face end to end, `top1` | **15.9 s** (classify 0.17 s + one generation 15.7 s) | **MEASURED** |
 | 4-face end to end | `top1` **21.5 s** vs `all` **72.6 s** — ratio **3.38×** (Lineage A: 2.82-2.84×) | **MEASURED** |
