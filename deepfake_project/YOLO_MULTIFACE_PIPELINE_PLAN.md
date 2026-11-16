@@ -39,8 +39,9 @@ image (PIL, RGB)
       ├─ FaceDetector.detect()            YOLO face model, letterbox 640, conf ≥ 0.25, NMS 0.5
       │        └─ boxes [(x1,y1,x2,y2), score]  → filter min_face_px → area sort → top-K (8)
       │
-      ├─ 0 faces ──────────────► fallback: full image as a single crop, flag faces_detected=0
-      ├─ 1 face  ──────────────► single-crop path (must be byte-identical to current behaviour)
+      ├─ 0 faces ──────────────► fallback: full image, unchanged path, flag faces_detected=0
+      ├─ 1 face, fills frame ──► PASSTHROUGH: whole image, unchanged path (§5.1)
+      ├─ 1 face, small in frame► still goes to a context crop (probably a missed face)
       └─ ≥2 faces ─────────────► multi-crop path
                                        │
                                        ▼
@@ -146,6 +147,36 @@ building on the adapter path.
 
 ## 5. Per-face inference and document aggregation
 
+### 5.1 Routing contract (a single face keeps today's behaviour)
+
+The model, its weights and its preprocessing are **unchanged** — no retraining, no crop-specific
+conditioning, no new tokens, no architecture change. Detection is routing only: it decides *which
+image* the existing model sees. The model never knows whether it was handed a full photo or a
+crop, and it classifies and reasons about exactly one crop at a time.
+
+| Detected faces | What the model receives | Preprocessing |
+| --- | --- | --- |
+| exactly 1, box ≥ `passthrough_min_face_frac` of the frame | **the whole image, untouched** | `build_transform` + `compute_fft_features` on the full PIL image — the exact code path `inference.py` runs today |
+| exactly 1, but small in frame | that face's context crop | §3 crop rules |
+| ≥ 2 | one context crop per face, each classified and reasoned independently | §3 crop rules |
+| 0 | the whole image, flagged `faces_detected: 0` | unchanged path, no confidence claim |
+
+The single-face passthrough is the default and must byte-match today's output on portrait
+inputs; M3's gate is that `inference_faces.py` and `inference.py` produce identical verdicts and
+confidences on every single-face image in `test_images/`.
+
+**Why the area guard exists:** "exactly one detected face" is not the same as "single-face
+photo". On an 8495-px scene, a detector returning one box usually means it missed the others —
+passing that whole image through would issue a document-level REAL from a face occupying a few
+percent of the frame. The `passthrough_min_face_frac` floor (0.10 of frame area, ~30 % of frame
+width for a centred face) preserves passthrough for genuine portraits, which is what the model was
+validated on, and refuses it exactly where it would be wrong.
+
+**Consequence to state, not hide:** passthrough verdicts and per-face verdicts are not directly
+comparable. One is whole-scene evidence (FFT over the frame, hotspots over the frame), the other
+is crop-local evidence. That is inherent in keeping today's behaviour for single-face images, and
+is why §7 calibrates a separate `face_threshold`.
+
 **Classifier pass:** all face crops of one image in a single batch (cap 8), bf16 autocast, no
 grad. Cheap — no LLM involved.
 
@@ -181,7 +212,7 @@ calibration point in `config.yaml`), because margin-padded crops shift the distr
 | `face_detect.py` | **new** | `FaceDetector` (ultralytics wrapper) + pure helpers `expand_box`, `square_box`, `clamp_and_pad`, `crop_with_context`, `filter_faces` |
 | `adapter_loader.py` | **new** | §4 loading, assertions, single entry point for both CLIs |
 | `inference_faces.py` | **new** | CLI: detect → crop → per-face classify/reason → aggregate → log + JSON |
-| `inference.py` | **untouched** | Validated single-image behaviour must not move; it stays the reference |
+| `inference.py` | **untouched** | Validated single-image behaviour must not move; it stays the reference and is the passthrough target (§5.1) |
 | `config.yaml` | +`face_pipeline:` block | detector/crop/aggregation defaults |
 | `requirements.txt` | +`ultralytics` pin, +`opencv-python-headless` | detection |
 | `run_faces.bat` | **new** (optional) | Launcher in the style of `run_intern_v2_ground.bat` |
@@ -198,6 +229,8 @@ face_pipeline:
   max_detect_pixels: 4096        # downscale 8495-px inputs before detection
   min_face_px: 96                # shorter box side, original pixels
   max_faces: 8
+  passthrough_single_face: true    # 1 face filling the frame -> today's whole-image path
+  passthrough_min_face_frac: 0.10  # face box area / image area floor for passthrough
   margin: 0.30
   face_threshold: 0.42
   aggregate: "max"
@@ -279,8 +312,9 @@ then the defaults above are hypotheses, not results.
    reflection threshold, `min_face_px` rejection, `max_faces` truncation order, aggregation modes.
 3. **Multi-face detection sanity:** `test_images/3-people.jpg` (expect 3 faces),
    `test_images/multiple-faces.jpg`, plus a portrait with exactly 1 face (must take the
-   single-crop path and reproduce `inference.py` output), plus `test_images/chick.jpg`-style
-   non-face imagery (expect 0 faces → fallback flag, no crash).
+   **passthrough** path and reproduce `inference.py` output exactly), plus a wide scene holding
+   one small face (must be refused passthrough and routed to a crop, `path: "per_face"`), plus
+   `test_images/chick.jpg`-style non-face imagery (expect 0 faces → fallback flag, no crash).
 4. **Quantitative multi-face set:** `FFIW` is already mapped to the `cd` split in
    `dataset.py` and is a multi-face benchmark. Derive a small frame set (a few hundred frames,
    doc-level label = FAKE if any GT face is fake) and report document-level AUC/Acc plus
@@ -314,6 +348,7 @@ the validated single-image path.
 ```json
 {
   "image": "3-people.jpg",
+  "path": "per_face",
   "faces_detected": 3,
   "faces_evaluated": 3,
   "faces_skipped": [],
