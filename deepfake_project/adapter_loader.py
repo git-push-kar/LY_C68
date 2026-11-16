@@ -85,13 +85,38 @@ def _load_report(adapter_dir: str) -> Dict[str, Any]:
         return json.load(f)
 
 
+def _canonical_path(path: str) -> str:
+    """Absolute, symlink-resolved, case-normalised form of a path reference."""
+    expanded = os.path.expanduser(str(path))
+    return os.path.normcase(os.path.realpath(os.path.abspath(expanded)))
+
+
+def same_model_reference(a: str, b: str) -> bool:
+    """True when two base-model references denote the same model directory.
+
+    Compares *resolved* paths, so ``./models/base``, an absolute path to that
+    same directory, a trailing-slash variant and a differently-cased Windows
+    path all agree. When a reference does not exist on this machine (adapters
+    extracted on another box), it falls back to comparing the final path
+    component -- weaker, but still catches the vanilla-vs-fused mix-up that
+    actually changes verdicts. Two different directories that both exist are
+    never treated as equal.
+    """
+    ca, cb = _canonical_path(a), _canonical_path(b)
+    if ca == cb:
+        return True
+    if os.path.isdir(ca) and os.path.isdir(cb):
+        return False
+    return os.path.basename(ca) == os.path.basename(cb)
+
+
 def _check_base(adapter_dir: str, report: Dict[str, Any], base_model: str) -> None:
     """Adapters are only valid on the base they were trained on."""
     recorded = ((report.get("provenance") or {}).get("base_model")
                 or _config_base_model(adapter_dir))
     if not recorded:
         return
-    if os.path.normpath(recorded) != os.path.normpath(base_model):
+    if not same_model_reference(recorded, base_model):
         raise AdapterLoadError(
             f"adapter_dir={adapter_dir!r} was extracted from base_model={recorded!r}, "
             f"but you asked for base_model={base_model!r}. Attaching these adapters to a "

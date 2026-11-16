@@ -38,6 +38,7 @@ Usage:
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -293,6 +294,29 @@ def draw_boxes(image: Image.Image,
 
 # ── Detector (ultralytics, imported lazily) ──────────────────────────────────
 
+@contextmanager
+def _float32_default():
+    """Pin torch's default dtype to float32 inside the block, then restore it.
+
+    DeepfakeReasoningModel is built in bfloat16, and building it leaves the
+    process defaulting to bfloat16. ultralytics' fuse_conv_and_bn creates a zero
+    bias via ``torch.zeros(...)`` for bias-free Conv layers, which inherits that
+    default -- so fusion ends up multiplying a bf16 zero-bias by an fp32 weight
+    matrix and raises "expected m1 and m2 to have the same dtype". Detection has
+    no reason to inherit the classifier's dtype, so it pins its own.
+    """
+    import torch  # local import keeps the geometry layer usable without torch
+
+    prev = torch.get_default_dtype()
+    if prev == torch.float32:
+        yield
+        return
+    torch.set_default_dtype(torch.float32)
+    try:
+        yield
+    finally:
+        torch.set_default_dtype(prev)
+
 class FaceDetector:
     """YOLO face detector. Heavy imports stay inside ``__init__``."""
 
@@ -316,7 +340,9 @@ class FaceDetector:
         self.iou = float(iou)
         self.device = device
         self.max_detect_pixels = int(max_detect_pixels)
-        self.model = YOLO(weights)
+        with _float32_default():
+            self.model = YOLO(weights)
+            self.model.model.float()
 
     def _prepare(self, image: Image.Image) -> Tuple[np.ndarray, float]:
         """Downscale oversized inputs; return the array and the box rescale factor."""
@@ -337,7 +363,10 @@ class FaceDetector:
                                       iou=self.iou, verbose=False)
         if self.device is not None:
             kwargs["device"] = self.device
-        results = self.model.predict(**kwargs)
+        # predict() fuses conv+bn; fusion builds a zero bias with torch.zeros(),
+        # which follows the *default* dtype. Pin fp32 for the call and restore.
+        with _float32_default():
+            results = self.model.predict(**kwargs)
         if not results:
             return []
         res = results[0]

@@ -168,9 +168,15 @@ confidences on every single-face image in `test_images/`.
 **Why the area guard exists:** "exactly one detected face" is not the same as "single-face
 photo". On an 8495-px scene, a detector returning one box usually means it missed the others —
 passing that whole image through would issue a document-level REAL from a face occupying a few
-percent of the frame. The `passthrough_min_face_frac` floor (0.10 of frame area, ~30 % of frame
-width for a centred face) preserves passthrough for genuine portraits, which is what the model was
-validated on, and refuses it exactly where it would be wrong.
+percent of the frame. The `passthrough_min_face_frac` floor preserves passthrough for genuine
+portraits, which is what the model was validated on, and refuses it exactly where it would be
+wrong.
+
+The floor is **0.05 of frame area**, measured rather than guessed (2026-11-16): a real portrait
+(`omi.jpg`, 1644x1534) puts its lone face at **0.088**, while faces in a group or wide scene land
+at **0.021–0.029** (`3-people.jpg` 0.020–0.029, `chick.jpg` 0.021). 0.05 separates the two with
+margin on both sides. The first guess of 0.10 wrongly refused that portrait, which is why the
+number is now tied to measurements.
 
 **Consequence to state, not hide:** passthrough verdicts and per-face verdicts are not directly
 comparable. One is whole-scene evidence (FFT over the frame, hotspots over the frame), the other
@@ -233,7 +239,8 @@ face_pipeline:
   min_face_px: 96                # shorter box side, original pixels
   max_faces: 8
   passthrough_single_face: true    # 1 face filling the frame -> today's whole-image path
-  passthrough_min_face_frac: 0.10  # face box area / image area floor for passthrough
+  passthrough_min_face_frac: 0.05  # face box area / image area floor for passthrough
+                                   # (portraits ~0.088, group/wide-scene faces 0.021-0.029)
   margin: 0.30
   face_threshold: 0.42
   aggregate: "max"
