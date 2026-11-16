@@ -171,14 +171,47 @@ it shows exactly what the gate is doing: two faces judged, two reported `face_to
 2. **`top1` saves 2.8x on a 4-face image**: 115.1 s instead of 326.0 s, i.e. 211 s per image for
    reasoning about three faces that are not the highest-risk one. This is the whole justification
    for the default; `all` is a deliberate, expensive opt-in.
-3. **Per-call reasoning cost varies 65-115 s** because generation length varies under the
-   512-token cap (greedy stop at `</answer>`). `--max_new_tokens` is therefore the real latency
-   lever, ahead of anything in the crop or batching path.
+3. **Per-call reasoning cost varies 65-115 s in that session** because generation length varies
+   and greedy decoding stops at `</answer>`. **`--max_new_tokens` is not the lever, though** —
+   measuring it proved the earlier assumption wrong; see the token-cap table below.
 4. **Classifier cost per face is ~0.13 s** (151 ms for 1, 519 ms for 4), and detection is
    13-22 ms regardless of frame size (the detector letterboxes to `imgsz=640`).
 5. **Screening without reasoning is 0.17 s (1 face) to 0.54 s (4 faces)** by the same medians
    (0.6-2.2 s if the occasional 3-4 s classify outlier is averaged in). That is the mode for
    volumes; reserve reasoning for escalated cases.
+
+### 5.1 Token cap: measured, and a negative result
+
+Generation is 99 % of the cost, so the obvious lever is the 512-token cap. Three caps were run
+back to back under identical conditions (one generation per face, `--max_new_tokens`):
+
+| Cap | 1-face reason | 4-face, reason per face | 4-face total `top1` | 4-face total `all` | Answers (4-face) |
+| --- | --- | --- | --- | --- | --- |
+| **512** (default) | 14.9 s | 24.8 / 15.8 / 13.9 / 16.3 s | 25.3 s | 71.4 s | fake, real, real, real |
+| 256 | 15.4 s | 24.0 / 16.2 / 14.5 / 16.6 s | 24.5 s | 71.8 s | **unknown**, real, real, real |
+| 192 | 15.3 s | 18.0 / 16.2 / 14.3 / 16.5 s | 18.5 s | 65.5 s | **unknown**, real, real, real |
+
+**The cap is not what bounds generation.** Lowering 512 -> 256 saves nothing measurable (25.3 ->
+24.5 s) because greedy decoding already stops at `</answer>` well inside 512 tokens. Lowering to
+192 appears to save 27 % on `top1` (25.3 -> 18.5 s) but that is an artefact: the only face that
+changed was the slowest one, whose trace was **cut off before its answer tag**, so the audit
+signal became `unknown` instead of `fake`. `all` moves 71.4 -> 65.5 s (8 %) for the same reason.
+On a single face all three caps are identical (14.9 / 15.4 / 15.3 s).
+
+So the honest conclusion is the opposite of the hypothesis this section started with: keep
+`max_new_tokens = 512`. A lower cap buys no speed on normal generations and silently discards the
+answer on the longest ones — the ones most likely to matter. If reasoning cost must come down,
+the lever is *how many faces get reasoned about* (`top1`, already the default), not how long each
+one may run.
+
+### 5.2 Variance between sessions
+
+The same 512-token configuration measured again in a later session produced **14.9-24.8 s per
+face** instead of the 64.9-117.9 s in the table above — a ~4x difference on identical inputs,
+same GPU, same code. The likely cause is machine state (GPU clocks/contention from other work on
+the box); it was not instrumented, so it is not explained, only recorded. What stayed stable is
+the **ratio**: `all` / `top1` = 2.84 in the first session and 2.82 in the second. Quote the ratio
+and the range, not a single absolute figure.
 
 Measurement caveats: single machine, CUDA clocks not locked, and roughly one call in fifteen
 lands 3-4 s outside the median on classify (allocator growth), which is why medians are quoted
@@ -218,6 +251,13 @@ python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --out runs/timing/face_timing.json
 python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --skip_reason --repeats_fast 15 --out runs/timing/face_timing_fast.json
+
+# token-cap probe (section 5.1): one generation per face, three caps
+for T in 512 256 192; do
+    python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \
+        --max_new_tokens $T --repeats_reason 1 --extra "" \
+        --out runs/timing/face_timing_t$T.json
+done
 ```
 
 Frames are cached to `runs/calibration/ffiw_cache.jsonl` as they are scored, so an

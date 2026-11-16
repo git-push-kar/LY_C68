@@ -37,7 +37,7 @@ it is the failure mode of the system.
 
 ## 2. Adapter deployment is lossless
 
-Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (18 tests).
+Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (21 tests).
 
 | Claim | Number | Status |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (18 tests).
 | Package contents | llm_adapter 392 tensors / 73,859,072 params; vision_adapter 192 / 6,291,456; custom_heads 59 / 13,257,034 | **MEASURED** |
 | The wrong base is refused | `check_base_model` (pure): different base raises, same base accepted, absent provenance tolerated — plus `_check_base` on a real temp dir, and 9 path-identity tests | **VERIFIED** |
 | Dropped / unknown adapter keys are refused | `check_adapter_keys` (pure): dropped key, unknown key, mismatch in both directions, and non-set iterables | **VERIFIED** |
-| The real load path uses those checks | `_attach_one` calls `check_adapter_keys(file_sd.keys(), live_keys, subdir)`; `_check_base` calls `check_base_model`. The wiring itself needs a built model, so it is exercised end to end by the 18/18 parity gate rather than a unit test | **MEASURED** |
+| The real load path uses those checks | wiring tests with a stubbed model and stubbed peft/safetensors: `_attach_one` calls `check_adapter_keys` exactly once with the file keys, the live keys and the subdir; `attach_adapters` delegates to `check_base_model` with the resolved provenance, and skips it when no base is requested | **VERIFIED** |
 
 Safe sentence: "the 93.4 M-parameter adapter package is verdict-identical to the 4.36 GB
 checkpoint on the comparison set". Do not say "bit-identical weights" — the claim is about
@@ -137,13 +137,19 @@ every call.
 | --- | --- | --- |
 | Detect | 13.6 ms on a 256² frame to 21.7 ms on 1600² — near-flat in input size (two sizes measured, not a size sweep) | **MEASURED** |
 | Classify | 151.4 ms (1 face), 518.9 ms (4 faces) — ~0.13 s/face | **MEASURED** |
-| Reason | 64.9-117.9 s per face; ~99 % of total wall time | **MEASURED** |
-| 1-face end to end, `top1` | 65.8 s | **MEASURED** |
-| 4-face end to end | **115.1 s (`top1`) vs 326.0 s (`all`)** — 2.8× saving | **MEASURED** |
+| Reason | 14.9-117.9 s per face depending on session (~4× machine-state spread); ~98-99 % of total wall time | **MEASURED** |
+| 1-face end to end, `top1` | 15.1-65.8 s | **MEASURED** |
+| 4-face end to end | `top1` **25.3-115.1 s** vs `all` **71.4-326.0 s**; the ratio is 2.82-2.84× in both sessions | **MEASURED** |
 | Screening without reasoning | 0.17 s (1 face) to 0.54 s (4 faces) by medians | **MEASURED** |
+| Lowering `max_new_tokens` does not save time | 512 vs 256: 25.3 vs 24.5 s; 512 vs 192: 18.5 s but the slowest face's answer was truncated to `unknown`; single-face identical at all three caps | **MEASURED** |
 
 **DO NOT CLAIM** these as throughput figures: single machine, unlocked clocks, one 4-face image
 (a synthetic montage), and ~1 in 15 classify calls lands 3-4 s outside the median.
+
+**DO NOT CLAIM** that a lower token cap makes reasoning cheaper. The same configuration differed
+~4× between two sessions, while the `all`/`top1` **ratio** held at 2.82-2.84×. Quote the ratio and
+the range, not one absolute number — and do not use the 27 % `top1` "saving" at cap 192, which is
+the slowest generation being cut off before its answer.
 
 ## 8. What is still unmeasured (do not paper over)
 
@@ -181,7 +187,7 @@ cd deepfake_project
 python test_regression_fixes.py        # 8   single-image invariants
 python test_face_pipeline.py           # 29  geometry / cropping
 python test_face_routing.py            # 25  routing, aggregation, disagreement
-python test_adapter_loader.py          # 18  strict adapter loading (keys + base)
+python test_adapter_loader.py          # 21  strict adapter loading (keys, base, wiring)
 python test_calibration.py             # 15  AUC, sweeps, floor routing
 python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips

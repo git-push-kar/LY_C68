@@ -194,6 +194,8 @@ def main() -> int:
                    help="additional image (the FFIW 4-face frame, 2 above the gate)")
     p.add_argument("--repeats_fast", type=int, default=10)
     p.add_argument("--repeats_reason", type=int, default=2)
+    p.add_argument("--max_new_tokens", type=int, default=512,
+                   help="generation cap handed to reason_about_item (512 = default)")
     p.add_argument("--skip_reason", action="store_true",
                    help="time detect+classify only (cheap, many repeats); reason fields stay 0")
     p.add_argument("--detector_weights", default="./models/yolov8n-face.pt")
@@ -208,6 +210,7 @@ def main() -> int:
             attn_implementation=args.attn_implementation, device=str(device))
     except AdapterLoadError as exc:
         raise SystemExit(f"ERROR: {exc}")
+    REASON_ARGS.max_new_tokens = args.max_new_tokens     # record/report what was used
     transform = build_transform(448)
     detector = FaceDetector(args.detector_weights,
                             device=str(device) if device.type == "cuda" else None)
@@ -234,7 +237,7 @@ def main() -> int:
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump({"device": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
-                   "rows": rows}, f, indent=2)
+                   "max_new_tokens": args.max_new_tokens, "rows": rows}, f, indent=2)
     print(f"report -> {args.out}")
     return 0
 

@@ -14,6 +14,10 @@ Run:  python test_adapter_loader.py
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
+
+import torch
 
 from adapter_loader import (AdapterLoadError, _check_base, check_adapter_keys,
                             check_base_model, same_model_reference)
@@ -152,6 +156,78 @@ class TestCheckBaseModel(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("InternVL3-2B", message)
         self.assertIn("different base", message)
+
+
+class TestLoadPathWiring(unittest.TestCase):
+    """The real load path must call the strict helpers, not bypass them.
+
+    The helpers are pure and tested above; these two tests pin the *call sites*,
+    with a stubbed model and stubbed peft/safetensors so no weights are built.
+    """
+
+    SD = {"model.layers.0.q_proj.lora_A.weight": torch.zeros(2)}
+
+    @staticmethod
+    def stub_model(attr: str = "language_model"):
+        return SimpleNamespace(backbone=SimpleNamespace(**{attr: object()}),
+                               eval=lambda: None)
+
+    def test_attach_one_calls_check_adapter_keys_with_the_file_and_model_keys(self):
+        import adapter_loader as al
+        import peft
+
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "llm_adapter"))
+            open(os.path.join(tmp, "llm_adapter", "adapter_model.safetensors"), "wb").close()
+            with mock.patch.object(al, "safetensors_load", return_value=dict(self.SD)), \
+                 mock.patch.object(peft, "get_peft_model_state_dict", return_value=dict(self.SD)), \
+                 mock.patch.object(peft, "set_peft_model_state_dict"), \
+                 mock.patch.object(al, "check_adapter_keys",
+                                   side_effect=lambda f, l, s: seen.append((set(f), set(l), s))):
+                info = al._attach_one(self.stub_model(), tmp, "llm_adapter",
+                                      "language_model", None)
+
+        self.assertEqual(len(seen), 1, "check_adapter_keys must be called exactly once")
+        file_keys, live_keys, subdir = seen[0]
+        self.assertEqual(file_keys, set(self.SD))
+        self.assertEqual(live_keys, set(self.SD))
+        self.assertEqual(subdir, "llm_adapter")
+        self.assertEqual(info["tensors"], 1)
+
+    def test_attach_adapters_calls_check_base_model_with_recorded_provenance(self):
+        import adapter_loader as al
+
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(al, "_load_report", return_value={}), \
+                 mock.patch.object(al, "check_base_model",
+                                   side_effect=lambda r, b, d="<adapters>": seen.append((r, b, d))), \
+                 mock.patch.object(al, "_attach_one",
+                                   return_value={"tensors": 1, "params": 1, "dtype": "f"}), \
+                 mock.patch.object(al, "_attach_custom_heads",
+                                   return_value={"tensors": 1, "params": 1,
+                                                 "modules": ["cls_head"]}):
+                summary = al.attach_adapters(self.stub_model(), tmp,
+                                             base_model="./models/base")
+
+        self.assertEqual(seen, [(None, "./models/base", tmp)],
+                         "attach_adapters must delegate to check_base_model")
+        self.assertIn("parts", summary)
+
+    def test_attach_adapters_skips_the_base_check_when_none_is_requested(self):
+        import adapter_loader as al
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(al, "_load_report", return_value={}), \
+                 mock.patch.object(al, "check_base_model") as base_check, \
+                 mock.patch.object(al, "_attach_one",
+                                   return_value={"tensors": 1, "params": 1, "dtype": "f"}), \
+                 mock.patch.object(al, "_attach_custom_heads",
+                                   return_value={"tensors": 1, "params": 1,
+                                                 "modules": ["cls_head"]}):
+                al.attach_adapters(self.stub_model(), tmp, base_model=None)
+            base_check.assert_not_called()
 
 
 if __name__ == "__main__":

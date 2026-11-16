@@ -350,9 +350,12 @@ standard error across 0.42–0.55 and the Youden optimum moves with the margin (
 0.43 at 0.45). The plan's earlier hypothesis of 0.42 gained +0.25 pt document accuracy — inside
 the noise — and would have diverged from `inference.py`'s argmax for nothing.
 
-**Latency (plan §8.5), measured:** reasoning is ~99 % of wall time — 65.8 s on a 1-face image
-against 0.6 s for detect+classify, and 115 s (`top1`) vs 326 s (`all`) on a 4-face image, a 2.8x
-saving. That is what makes `top1` a default rather than an assumption. Table in
+**Latency (plan §8.5), measured:** reasoning is ~98-99 % of wall time — 65.8 s on a 1-face image
+against 0.6 s for detect+classify, and 115 s (`top1`) vs 326 s (`all`) on a 4-face image. A later
+session measured the same configuration 4x faster (15.1 s vs 71.4 s), so quote the range and the
+stable **2.82-2.84x** `all`/`top1` ratio, not one absolute number. That ratio is what makes `top1`
+a default rather than an assumption. Lowering `max_new_tokens` does **not** save time (the cap is
+not binding; at 192 tokens the slowest face's answer is truncated to `unknown`). Tables in
 `FACE_PIPELINE_CALIBRATION.md` §5; harness is `face_timing.py`.
 
 **Correction to §8.4:** FFIW as stored here is 256x256 and 92 % single-face, so it routes
@@ -395,7 +398,7 @@ per-face directly, bypassing routing, and the crop path's numbers should be read
 | M2 | Adapter loader | `adapter_loader.py`, strict key assertions | parity check §8.1 = 100 % |
 | M3 | Multi-face inference | `inference_faces.py` (detect → batch classify → per-face telemetry) | 4 images produce per-face verdicts |
 | M4 | Reasoning routing + aggregation | `--reason_faces`, `--aggregate`, JSON schema | aggregation unit tests green |
-| M5 | Calibration + eval set | `FACE_PIPELINE_CALIBRATION.md`, `face_calibration.py`, FFIW 400-frame numbers — **done 2026-11-16** | margin 0.30 ships (+0.63 pt over tight baseline); `face_threshold` 0.50 and frac 0.05 confirmed, not changed; latency measured (115 s top1 vs 326 s all on 4 faces) |
+| M5 | Calibration + eval set | `FACE_PIPELINE_CALIBRATION.md`, `face_calibration.py`, FFIW 400-frame numbers — **done 2026-11-16** | margin 0.30 ships (+0.63 pt over tight baseline); `face_threshold` 0.50 and frac 0.05 confirmed, not changed; latency measured (top1/all ratio 2.8x across two sessions; token cap is not a lever) |
 | M6 | Docs + launcher | `INTEGRATION_GUIDE.md` §11 multi-face section, `run_faces.bat` — **done 2026-11-16** | launcher ran both sample images end to end; the §11.4 snippet reproduced the CLI's per-face probabilities exactly (0.965119 / 0.102305 / 0.697197) |
 
 Each milestone is independently mergeable; M0–M2 unblock everything else and carry no risk to
