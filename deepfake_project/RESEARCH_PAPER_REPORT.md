@@ -311,9 +311,9 @@ three-epoch blocks:
   frozen here to protect it at its peak; the attention pooling, frequency branch, projector and
   router that produce telemetry keep training alongside the LM.
 
-So the released checkpoint has seen the classifier trained for six epochs (three joint + three
-frozen-but-present) and the reasoning and telemetry channels for six, and it is the only lineage
-where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
+So the classifier is trained in the **three joint epochs** and frozen through the **three grounded**
+ones — three classifier epochs, not six — while the reasoning and telemetry channels train in all
+six. This is the only lineage where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
 $|\Delta p_{\text{fake}}| = 0$).
 
 **Why not the LR-fused lineage, which scores higher.** Lineage A is **1.04 pp better on the macro
@@ -326,9 +326,12 @@ decided against shipping it anyway:
    **not reproducible from this repository** — no LR training logs, data manifest or merge script
    are archived (§3.1). Shipping A means shipping a dependency on a checkpoint whose provenance
    this work cannot reconstruct.
-2. **The gap is smaller than the headline.** On the 52k benchmark the split that drives the
-   difference is cross-forgery (LF-fusion helps most where compression/generator traces dominate);
-   on the validation set the two are 0.77 pp apart (95.23% vs 96.00%). Calibration at
+2. **The gap is smaller than the headline, and most of it sits in one split.** The macro difference
+   is 1.04 pp, but cross-forgery alone contributes 4.43 pp (82.56 vs 78.13) while cross-model and
+   cross-domain differ by 0.19 and 1.15 pp and the validation sets are 0.77 pp apart (95.23% vs
+   96.00%). **Why logical-reasoning pre-adaptation helps that particular split is not established
+   here** — this work varies the foundation, not the compression or generator type, so no mechanism
+   is claimed; §8 lists the missing ablation. Calibration at
    $T^*\approx0.06$ moves the deployed model's CF accuracy 78.13 → 86.27 (+8.1 pp), larger than the
    4.43 pp gap — but that is a threshold fitted and evaluated on the same split, so it is a
    diagnostic, not a gain the shipped default ($T=0.5$) realises (§5.4). The deployed model also
@@ -595,10 +598,11 @@ Decoding defaults to **greedy** (`do_sample=False`) with a `</answer>` stopping 
 4. **Eager attention in every recorded run.** `attn_implementation="sdpa"` is rejected by the InternVL chat wrapper and silently falls back to `eager`; FlashAttention-2 is not installed. All timings above therefore reflect eager attention, not a fused-SDPA kernel.
 5. **Train/inference verdict mismatch.** Grounding is trained on ground-truth verdicts but applied to classifier predictions. When the classifier is wrong, the LLM receives a wrong verdict and tends to rationalise it (observed in the 160932 failure case). The `--force_verdict` audit exists but no audit results are archived.
 6. **Telemetry is descriptive, not calibrated.** The spectral ratio has no validated threshold or direction per generator family; values are zero-mean standardized means and are typically negative.
-7. **Reasoning is not quantitatively evaluated.** No faithfulness, hallucination-rate or human-preference metric is computed; §5.6 is illustrative.
+7. **Reasoning is not quantitatively evaluated.** No faithfulness, hallucination-rate or human-preference metric is computed; §5.6 is illustrative. The DPO stage's 96.61% / 91.03% reward accuracy measures preference fit, not trace correctness, and is not used as a quality claim (§3.4).
 8. **Weak regimes persist.** CD accuracy stays at 76–78% and CF F1 at 0.76–0.79; threshold calibration helps CF but is not deployable as computed (tuned and evaluated on the same split).
 9. **Dead weight in the checkpoint.** `domain_router` is never called and `custom_projector` is only a fallback, yet both are saved, exported and partly trained; they add ~8 M parameters and confound parameter accounting.
 10. **Config drift.** `config.yaml` carries a metrics block that disagrees with the archived logs; only log-derived numbers are reported here.
+11. **The foundation × split interaction is unmeasured.** The two lineages differ by 4.43 pp on cross-forgery but by ~0.2–1.2 pp elsewhere, and nothing here explains why: no ablation varies compression level or generator family on fixed weights. §3.8 therefore states the gap without naming a mechanism.
 
 ---
 

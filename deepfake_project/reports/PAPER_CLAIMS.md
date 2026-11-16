@@ -223,6 +223,50 @@ Mean p_fake separates the two failure modes cleanly:
 **DO NOT CLAIM** a single cause for the CD gap, and do not mix in 0.7660 from the retired epoch-1
 log: this table and §1's CD row are the same run on the shipped weights (0.7698).
 
+### 1.4 The DPO stage — trained, benchmarked, **not shipped**
+
+Both DPO checkpoints exist and are fully benchmarked. They are an ablation, and the report says so
+in `RESEARCH_PAPER_REPORT.md` §3.4; the ledger mirrors it here so the numbers have one home.
+Sources: `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log`
+(both read 2026-11-16), `train_dpo.py`, `datasets/hydrafake/jsons/train/mipo_3k.json`.
+
+| Checkpoint | ID | CM | CF | CD | Macro acc / F1 / AUC | Calibrated mean |
+| --- | --- | --- | --- | --- | --- | --- |
+| `intern_fused_dpo` (Lineage A) | 92.08 / 0.9852 | 98.48 / 0.9993 | 80.42 / 0.9510 | 75.96 / 0.8503 | 86.74 / 0.8519 / 0.9465 | 89.60 / 90.27 |
+| `intern_v2_dpo` (Lineage B) | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 | 89.35 / 89.50 |
+| *parent, for contrast* — `intern_v2` Stage 2 | 92.42 / 0.9823 | 99.17 / 0.9995 | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / 0.9479 | — |
+
+Against its own Stage-2 parent, vanilla DPO costs **2.69 pp in-domain, 5.34 pp cross-forgery,
+1.49 pp cross-domain, 2.44 pp macro**. Reward accuracy during training was 96.61 % (LR-fused) and
+91.03 % (vanilla) — that is preference fit, not trace correctness (see §8).
+
+**Why Stage 3 is off the shipping path.** Two code/data facts, both checked directly:
+
+1. **The classifier and the LM are trained against each other and never reconciled.** `train_dpo.py`
+   optimises `loss = dpo_loss` with no `cls` and no `cons` term, and freezes every non-LoRA
+   parameter, so `cls_head`, `attn_pool`, `freq_branch`, `custom_projector` and `domain_router` stay
+   at their Stage-2 values while the LM is pushed toward preferred traces. The self-consistency loss
+   that exists to keep the two aligned is absent from the objective — **VERIFIED** (loss assignment
+   and freeze loop in `train_dpo.py`).
+2. **The preference data carries no telemetry.** `mipo_3k.json` records are
+   `{images, type, video_id, label, messages, rejected_response}` — no hotspot, spectral or other
+   telemetry target. With the telemetry heads frozen as well, Stage 3 contributes no supervision to
+   the grounding channel — **VERIFIED** (first record of `mipo_3k.json` has exactly those keys).
+3. **The disagreement shows up in outputs.** On the 18-image smoke set, the grounded model produces
+   **0/18** classifier/LLM disagreements (`runs/inference_logs/inference_best_20261014_210419.log`)
+   while four `intern_fused_dpo` runs produce **4/18, 3/18, 1/18, 4/18**
+   (`inference_dpo_best_*.log`) — **MEASURED**, n = 18.
+
+Consequence, and the reason Stage 4 initialises from Stage 2 rather than from DPO: Stage 4 is the
+only stage that trains classifier-attention, telemetry and LM reasoning jointly with the
+consistency term active.
+
+**DO NOT CLAIM** that DPO improves trace quality — no rubric exists (§8) and reward accuracy is not
+one. Do not claim preference tuning *caused* the disagreement rate: 18 hand-picked images, no
+counterfactual, association only. Do not claim Stage 3 degrades telemetry — it never trains it; the
+heads are frozen and unchanged, not damaged. And do not quote the 89.60 calibrated mean as the best
+model: four per-split thresholds fitted and scored on the same split.
+
 ## 5. Per-face classification and aggregation
 
 Sources: `inference_faces.py`, `test_face_routing.py`, real CLI runs.
@@ -320,6 +364,8 @@ the slowest generation being cut off before its answer.
 | Multi-face evaluation on full-resolution group photos | the eval set is 256 px, 92 % single-face | a labelled high-res multi-face set |
 | Latency on other hardware | measured on one A5000 | repeat `face_timing.py` on the target GPU |
 | Effect of margin on high-res crops | FFIW's upscaling confounds it | high-res faces where margin 0 already has upscale ≈ 1 |
+| DPO trace quality (does preference tuning help?) | reward accuracy measures preference fit, not correctness; no rubric | side-by-side trace scoring on ~50 samples, both checkpoints |
+| Why LR pre-adaptation helps the cross-forgery split | the sweep varies the foundation, not compression or generator type | a compression/generator-stratified ablation on the same weights |
 
 The honest summary for a reviewer: classification, deployment parity and the passthrough
 guarantee (bounded to images that take that path) are measured and testable; the multi-face crop
@@ -340,6 +386,7 @@ open measurement.
 | Calibration | `face_calibration.py` | `test_calibration.py` | `FACE_PIPELINE_CALIBRATION.md` §2-4 |
 | Per-split F1 / PR / CIs | `eval_metrics.py` | derivation verified against logged F1 | this ledger §1 |
 | Per-generator CD | `eval_by_generator.py` | reproduces the split total before splitting | this ledger §1.1 |
+| DPO ablation / non-usage | `train_dpo.py` | `eval_dpo_best.log` per lineage; smoke-set disagreement counts | this ledger §1.4, RP §3.4 |
 | Latency | `face_timing.py` | — (measurement, not an assertion) | `FACE_PIPELINE_CALIBRATION.md` §5 |
 
 ## 10. Re-verifying everything
@@ -357,6 +404,8 @@ python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0 (vanil
 python eval_metrics.py --log runs/intern_v2_ground/logs/eval_best.log        # §1 (deployed)
 python eval_by_generator.py --checkpoint runs/intern_v2_ground/checkpoints/best.pth \
     --split cd --out runs/timing/eval_by_generator_cd_vanilla.json   # ~15 min, CD only
+python eval_metrics.py --log runs/intern_v2_dpo/logs/eval_dpo_best.log       # §1.4 DPO rows
+python eval_metrics.py --log runs/intern_fused_dpo/logs/eval_dpo_best.log    # §1.4 DPO rows
 python face_calibration.py --adapter_dir ./runs/intern_v2_ground/adapters \
     --cache runs/calibration/ffiw_cache_vanilla.jsonl --n_per_class 200      # ~3 min
 python face_timing.py --adapter_dir ./runs/intern_v2_ground/adapters \
