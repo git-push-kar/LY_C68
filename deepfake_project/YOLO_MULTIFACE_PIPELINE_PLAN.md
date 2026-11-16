@@ -163,7 +163,10 @@ crop, and it classifies and reasons about exactly one crop at a time.
 
 The single-face passthrough is the default and must byte-match today's output on portrait
 inputs; M3's gate is that `inference_faces.py` and `inference.py` produce identical verdicts and
-confidences on every single-face image in `test_images/`.
+confidences on every single-face image that takes the passthrough path. It is deliberately **not**
+"every single-face image": a lone face below the area floor is cropped by design, so `om.jpg`
+(0.026) and `chick.jpg` (0.021) are routed to the crop path, and the gate is scoped to the images
+above it.
 
 **Why the area guard exists:** "exactly one detected face" is not the same as "single-face
 photo". On an 8495-px scene, a detector returning one box usually means it missed the others —
