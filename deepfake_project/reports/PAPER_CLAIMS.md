@@ -21,15 +21,28 @@ Measured 2026-11-16 on `feature/yolo-multiface` (commits `b6cc6c5`..`06d9c8c`), 
 Source: `RESEARCH_PAPER_REPORT.md` §5.1-5.3, computed from archived `eval_*.log` over the full
 52,266-sample held-out set.
 
-| Claim | Number | Status |
-| --- | --- | --- |
-| Validation accuracy / AUC | 96.00 % / 0.993647 | **MEASURED** |
-| Cross-model (CM, 11,249) | 98.88 % / AUC 0.9994 | **MEASURED** |
-| In-domain (ID, 12,819) | 92.13 % / AUC 0.9881 | **MEASURED** |
-| Cross-forgery (CF, 12,730) | 82.66 % / AUC 0.9507 — best of the five checkpoints | **MEASURED** |
-| Cross-domain (CD, 15,468) | 76.60 % / AUC 0.8480 — weakest regime | **MEASURED** |
-| Macro mean | 87.57 % / F1 0.8655 / AUC 0.9465 | **MEASURED** |
-| Threshold-calibrated mean (grounded vanilla) | 89.50 % / F1 89.62 % | **MEASURED** |
+Per-split figures with 95 % intervals, extracted by `eval_metrics.py` from the archived log.
+Positive class = FAKE; TP/FP/FN/TN are reconstructed from the logged counts and verified against
+the logged F1, so precision/recall are derived rather than re-run.
+
+| Split | N | Accuracy [95 % CI] | F1 | Precision [CI] | Recall [CI] | AUC [CI] |
+| --- | --- | --- | --- | --- | --- | --- |
+| ID (in-domain) | 12,819 | 0.9213 [0.9165, 0.9258] | 0.9219 | 0.9904 [0.9876, 0.9925] | 0.8624 [0.8540, 0.8703] | 0.9881 [0.9863, 0.9899] |
+| CM (cross-model) | 11,249 | 0.9888 [0.9867, 0.9906] | 0.9887 | 0.9957 [0.9936, 0.9971] | 0.9819 [0.9780, 0.9850] | 0.9994 [0.9989, 0.9999] |
+| CF (cross-forgery) | 12,730 | 0.8266 [0.8200, 0.8331] | 0.7917 | 0.9917 [0.9885, 0.9940] | **0.6588 [0.6471, 0.6704]** | 0.9507 [0.9468, 0.9546] |
+| CD (cross-domain) | 15,468 | 0.7660 [0.7593, 0.7726] | 0.7598 | 0.7804 [0.7708, 0.7897] | 0.7403 [0.7304, 0.7500] | 0.8480 [0.8418, 0.8542] |
+| Macro mean | — | 0.8757 | 0.8655 | — | — | 0.9465 |
+| Validation (epoch 3) | 4,000 | 0.9600 | 0.9483 | — | — | 0.993647 |
+
+**The CF failure is a recall failure, not a precision failure.** Precision 0.9917 but recall
+0.6588: when the model says FAKE on a cross-forgery edit it is almost always right, and it misses
+a third of them. CD fails the other way (precision 0.7804, recall 0.7403). Those are different
+problems with different remedies, and the single accuracy number hides both.
+
+Acc/precision/recall intervals are Wilson 95 %; AUC intervals are Hanley-McNeil approximations
+(the log has no per-sample scores). Threshold-calibrated macro mean, grounded vanilla checkpoint:
+89.50 % accuracy / 89.62 % F1 — still without an interval, and it is a per-split-optimal-threshold
+total, so it is optimistic.
 
 Rules for writing these: they are **log-derived**, not re-runnable from `config.yaml`, whose
 metrics block is stale (see report §5.3). Do not describe the CD number as a solved problem —
@@ -114,7 +127,9 @@ seed 1234, one frame per video).
 
 | Claim | Number | Status |
 | --- | --- | --- |
-| Margin 0.30 beats tight crops | doc AUC 0.8845 vs 0.8782 (+0.63 pt); acc 0.7925 vs 0.7375 | **MEASURED** |
+| Margin 0.30 is **no worse** than tight crops | doc AUC 0.8845 [0.8545, 0.9142] vs 0.8782 [0.8454, 0.9079] (+0.63 pt, **intervals overlap**); acc 0.7925 vs 0.7375 | **MEASURED** |
+| The size gate excludes faces that are no harder | < 96 px AUC 0.8626 [0.726, 0.953] (40 faces) vs >= 96 px 0.8926 [0.858, 0.922] (398); flat across 0-48/48-96/96-144/144+ px bins | **MEASURED** |
+| Padding mode has no measurable effect | `none` 0.9444 [0.786, 1.000] (15 faces), `reflect` 0.9167 [0.811, 0.988] (31), `stretch` 0.8836 [0.849, 0.914] (392) at margin 0.30 | **MEASURED** |
 | Margin 0.45 looks better, for the wrong reason | 0.8970 AUC, but 99 % of faces are already >2× upscaled at margin 0 and 423/438 crops degrade to `stretch` | **MEASURED** |
 | `face_threshold` is not a tuned number | sweep flat within 1 SE across 0.42-0.55; Youden optimum moves 0.52 → 0.43 with the margin | **MEASURED** |
 | Passthrough floor sits in a stable basin | floors 0.03, 0.05 and 0.06 route all 33 unique local images identically (0.04 is not in the sweep; the rule is monotone, so it cannot differ) | **MEASURED** |
@@ -126,6 +141,12 @@ question is answerable at all — say that explicitly.
 
 **DO NOT CLAIM** a calibrated `face_threshold` improvement. The sweep's spread is inside the
 error bar (n = 400, 1 SE ≈ 1.5 pt); the value is confirmed, not optimised.
+
+**DO NOT CLAIM** that margin 0.30 is *significantly* better than tight crops, that `min_face_px`
+was validated as necessary, or that mirrored padding is harmful. The intervals overlap in all
+three comparisons. 0.30 is chosen for non-inferiority plus training-frame agreement; the 96 px
+gate is a stated conservative choice about upscaling, and the reflect-padding worry is not
+supported by the 31 measured faces. Say *why* the default was chosen, not that the data proved it.
 
 ## 7. Latency
 
@@ -178,6 +199,7 @@ open measurement.
 | Detection & cropping | `face_detect.py` | `test_face_pipeline.py` | plan §3 |
 | Routing & aggregation | `inference_faces.py` | `test_face_routing.py` | `INTEGRATION_GUIDE.md` §11.1-11.3 |
 | Calibration | `face_calibration.py` | `test_calibration.py` | `FACE_PIPELINE_CALIBRATION.md` §2-4 |
+| Per-split F1 / PR / CIs | `eval_metrics.py` | derivation verified against logged F1 | this ledger §1 |
 | Latency | `face_timing.py` | — (measurement, not an assertion) | `FACE_PIPELINE_CALIBRATION.md` §5 |
 
 ## 10. Re-verifying everything
@@ -192,6 +214,7 @@ python test_calibration.py             # 15  AUC, sweeps, floor routing
 python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips
 python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0
+python eval_metrics.py --log runs/intern_fused_ground/logs/eval_best.log
 python face_calibration.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --n_per_class 200                  # ~15 min; analysis is deterministic from the cache
 python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \

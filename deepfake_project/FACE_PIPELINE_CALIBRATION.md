@@ -37,12 +37,18 @@ That is what makes the margin comparison possible at all.
 
 Document-level probabilities use the pipeline's `max` aggregation. Threshold columns at 0.50.
 
-| margin | faces | face AUC | doc AUC | doc acc | mean upscale | share >2x | pad mode mix (none / reflect / stretch) |
+| margin | faces | face AUC | doc AUC [95 % CI] | doc acc | mean upscale | share >2x | pad mode mix (none / reflect / stretch) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0.00 | 438 | 0.8811 | 0.8782 | 0.7375 | 4.08 | 99 % | 349 / 51 / 38 |
-| 0.15 | 438 | 0.8833 | 0.8787 | 0.7825 | 3.26 | 27 % | 40 / 282 / 116 |
-| **0.30** | 438 | **0.8870** | **0.8845** | **0.7925** | 2.88 | 11 % | 15 / 31 / 392 |
-| 0.45 | 438 | 0.8981 | 0.8970 | 0.8025 | 2.69 | 8 % | 12 / 3 / 423 |
+| 0.00 | 438 | 0.8811 | 0.8782 [0.8454, 0.9079] | 0.7375 | 4.08 | 99 % | 349 / 51 / 38 |
+| 0.15 | 438 | 0.8833 | 0.8787 [0.8473, 0.9080] | 0.7825 | 3.26 | 27 % | 40 / 282 / 116 |
+| **0.30** | 438 | **0.8870** | **0.8845 [0.8545, 0.9142]** | **0.7925** | 2.88 | 11 % | 15 / 31 / 392 |
+| 0.45 | 438 | 0.8981 | 0.8970 [0.8697, 0.9245] | 0.8025 | 2.69 | 8 % | 12 / 3 / 423 |
+
+Intervals are 1,000-sample percentile bootstraps over frames. **They all overlap**, so the
+margin ranking is a point-estimate ordering, not a statistically resolved one (n = 400). The
++0.63 pt at 0.30 over tight crops must be written as "no worse, and framed like the training
+crops", not as "significantly better". The choice is defensible; the *difference* is not
+demonstrated.
 
 Reference point, the same frames through the whole image (what passthrough uses):
 **AUC 0.9037**, acc@0.50 0.8125, acc@0.42 0.8175.
@@ -69,6 +75,38 @@ table:
 On full-resolution photos neither effect applies: a 0.30 margin already yields an upscale
 of ~1.0, which is why 0.30 stays the default and the sweep above is reported as evidence
 that padding does not *hurt*, not as a reason to add more of it.
+
+### 2.1 Where the gate and the padding actually matter
+
+Face AUC at the **shipped** margin 0.30, split two ways (`face_calibration.auc_by`):
+
+| Size gate | Faces | Positives | AUC | 95 % CI |
+| --- | --- | --- | --- | --- |
+| below gate, < 96 px | 40 | 26 | 0.8626 | [0.726, 0.953] |
+| judged, >= 96 px | 398 | 200 | 0.8926 | [0.858, 0.922] |
+
+| Pad mode (margin 0.30) | Faces | Positives | AUC | 95 % CI |
+| --- | --- | --- | --- | --- |
+| `none` | 15 | 12 | 0.9444 | [0.786, 1.000] |
+| `reflect` | 31 | 16 | 0.9167 | [0.811, 0.988] |
+| `stretch` | 392 | 198 | 0.8836 | [0.849, 0.914] |
+
+Finer size bins, same margin: 0-48 px 0.8523 [0.693, 0.964] (30 faces), 48-96 px 0.8750
+[0.600, 1.000] (10), 96-144 px 0.9019 [0.865, 0.935] (299), 144+ px 0.8627 [0.785, 0.925] (99).
+
+**What this does and does not establish:**
+
+- The gate is **not** validated as *necessary*. Faces it excludes score 0.8626 against 0.8926
+  for the faces it keeps, with overlapping intervals — and AUC is flat across the size bins above
+  and below 96 px. On this data, size does not predict accuracy.
+- The gate is **not harmful** either: the 40 excluded faces are 9 % of all faces, and skipping
+  them costs no measured accuracy. It remains a conservative choice about *upscaling* (a 6 px face
+  is stretched 56x into 448, and its prediction is not evidence), which AUC does not capture.
+  Keeping 96 px is justified as a stated safety margin, not as a measured improvement.
+- **Padding mode shows no measurable effect**: `reflect` 0.9167 and `stretch` 0.8836 against
+  `none` 0.9444, all overlapping. The worry that mirrored skin would manufacture FFT "evidence"
+  is **not supported** here — though `none`/`reflect` are only 15 and 31 faces, so this is weak
+  evidence rather than a clearance.
 
 ---
 
@@ -241,6 +279,7 @@ path (§6 of `INTEGRATION_GUIDE.md`) adds nothing here: passthrough is the 1-fac
 ## 7. Reproducing
 
 ```bash
+python eval_metrics.py --log runs/intern_fused_ground/logs/eval_best.log   # per-split F1/PR + CIs
 python face_calibration.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --n_per_class 200 --out runs/calibration/ffiw_report.json     # ~15 min, A5000
 python face_calibration.py --analyze_only --out runs/calibration/ffiw_report.json

@@ -188,6 +188,59 @@ def roc_auc(y: np.ndarray, s: np.ndarray) -> float:
     return float((ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
 
 
+def bootstrap_ci(y: np.ndarray, s: np.ndarray, n_boot: int = 1000, seed: int = 0,
+                 alpha: float = 0.05) -> tuple:
+    """Percentile bootstrap interval for AUC (scores are available here)."""
+    y = np.asarray(y, dtype=int)
+    s = np.asarray(s, dtype=float)
+    if len(y) < 2 or len(set(y.tolist())) < 2:
+        return (float("nan"), float("nan"))
+    rng = np.random.default_rng(seed)
+    stats = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, len(y), len(y))
+        if len(set(y[idx].tolist())) < 2:
+            continue
+        stats.append(roc_auc(y[idx], s[idx]))
+    if not stats:
+        return (float("nan"), float("nan"))
+    return (float(np.quantile(stats, alpha / 2)), float(np.quantile(stats, 1 - alpha / 2)))
+
+
+def face_rows(records: List[Dict[str, Any]], margin: float):
+    """Yield (label, p, side, pad_mode) for every scored face at this margin."""
+    for r in records:
+        for face, entry in zip(r["faces"], r["margins"][f"{margin}"]):
+            if entry.get("p") is None:
+                continue
+            yield (r["label"], entry["p"], face["side"], entry.get("pad_mode") or "unknown")
+
+
+def auc_by(records: List[Dict[str, Any]], margin: float, key: str,
+           min_face_px: int) -> List[Dict[str, Any]]:
+    """Face AUC split by size gate ('size') or padding mode ('pad_mode').
+
+    The size split answers whether min_face_px excludes faces that could have
+    been judged; the pad split answers whether reflected/stretched padding is
+    injecting the high-frequency evidence the FFT branch reads.
+    """
+    groups: Dict[str, List[tuple]] = {}
+    for label, p, side, pad in face_rows(records, margin):
+        if key == "size":
+            name = f">= {min_face_px}px" if side >= min_face_px else f"< {min_face_px}px"
+        else:
+            name = pad
+        groups.setdefault(name, []).append((label, p))
+    out = []
+    for name, pairs in sorted(groups.items()):
+        y = np.asarray([a for a, _ in pairs], dtype=int)
+        s = np.asarray([b for _, b in pairs], dtype=float)
+        out.append({"group": name, "faces": len(pairs),
+                    "positives": int(y.sum()), "auc": roc_auc(y, s),
+                    "ci": bootstrap_ci(y, s)})
+    return out
+
+
 def face_probs(records: List[Dict[str, Any]], margin: float):
     """(labels, p) for every face that was scored at this margin."""
     y, s = [], []
@@ -295,7 +348,7 @@ def margin_table(records: List[Dict[str, Any]], margins, threshold: float) -> Li
 
 
 def summarize(records: List[Dict[str, Any]], margins, min_face_px: int,
-              threshold: float) -> Dict[str, Any]:
+              threshold: float, shipped_margin: float = 0.30) -> Dict[str, Any]:
     labeled = [r for r in records if r.get("label") is not None]
     y = np.asarray([r["label"] for r in labeled], dtype=int)
     ys, sw = np.asarray([r["label"] for r in labeled]), np.asarray([r["whole_p"] for r in labeled])
@@ -317,6 +370,15 @@ def summarize(records: List[Dict[str, Any]], margins, min_face_px: int,
                         "acc_at_0.42": float(((sw >= 0.42).astype(int) == ys).mean())},
         "margins": table,
         "chosen_margin": chosen,
+        "face_auc_by_size": auc_by(labeled, chosen, "size", min_face_px),
+        "face_auc_by_pad_mode": auc_by(labeled, chosen, "pad_mode", min_face_px),
+        # The shipped default is 0.30; report the same splits there too, because
+        # pad modes are wildly unbalanced at the sweep's data-chosen margin.
+        "shipped_margin": shipped_margin,
+        "face_auc_by_size_shipped": auc_by(labeled, shipped_margin, "size", min_face_px),
+        "face_auc_by_pad_mode_shipped": auc_by(labeled, shipped_margin, "pad_mode", min_face_px),
+        "doc_auc_ci_by_margin": {str(m["margin"]): bootstrap_ci(*doc_probs(labeled, m["margin"]))
+                                 for m in table},
         "threshold_sweep_doc": sweep_threshold(yd, sd),
         "threshold_sweep_face": sweep_threshold(per_face_y, per_face_s),
         "frac_sweep": frac_sweep(labeled, chosen, threshold, min_face_px),
@@ -342,6 +404,17 @@ def print_report(rep: Dict[str, Any], margins) -> None:
               f"{r['doc_auc']:>8.4f} {r['doc_acc']:>8.4f} {r['mean_upscale']:>8.2f} "
               f"{r['share_upscale_gt2']:>6.0%}")
     print("pad modes:", {r["margin"]: r["pad_modes"] for r in rep["margins"]})
+    for key, title, m in (("face_auc_by_size", "FACE AUC BY SIZE GATE", rep["chosen_margin"]),
+                          ("face_auc_by_pad_mode", "FACE AUC BY PAD MODE", rep["chosen_margin"]),
+                          ("face_auc_by_size_shipped", "FACE AUC BY SIZE GATE", rep["shipped_margin"]),
+                          ("face_auc_by_pad_mode_shipped", "FACE AUC BY PAD MODE", rep["shipped_margin"])):
+        print(f"\n{title} (margin {m})")
+        for r in rep.get(key, []):
+            ci = r["ci"]
+            ci_txt = ("n too small for an interval" if r["faces"] < 20
+                      else f"95% CI [{ci[0]:.4f}, {ci[1]:.4f}]")
+            print(f"  {r['group']:<14} faces {r['faces']:>4} (pos {r['positives']:>4})  "
+                  f"AUC {r['auc']:.4f}  {ci_txt}")
 
     for name in ("threshold_sweep_doc", "threshold_sweep_face"):
         rows = rep[name]
@@ -386,6 +459,8 @@ def parse_args():
     p.add_argument("--detector_weights", default="./models/yolov8n-face.pt")
     p.add_argument("--cache", default="runs/calibration/ffiw_cache.jsonl")
     p.add_argument("--out", default="runs/calibration/ffiw_report.json")
+    p.add_argument("--shipped_margin", type=float, default=0.30,
+                   help="margin reported alongside the data-chosen one (default 0.30)")
     p.add_argument("--analyze_only", action="store_true")
     return p.parse_args()
 
@@ -446,7 +521,8 @@ def main() -> int:
     if not labeled:
         sys.exit("ERROR: no labeled records scored yet")
 
-    rep = summarize(labeled, margins, args.min_face_px, args.threshold)
+    rep = summarize(labeled, margins, args.min_face_px, args.threshold,
+                    shipped_margin=args.shipped_margin)
     rep["local_reference"] = [
         {"image": r["rel"], "faces": len(r["faces"]),
          "fracs": [f["frac"] for f in r["faces"]],
