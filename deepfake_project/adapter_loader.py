@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 import torch
 from safetensors.torch import load_file as safetensors_load
@@ -110,18 +110,53 @@ def same_model_reference(a: str, b: str) -> bool:
     return os.path.basename(ca) == os.path.basename(cb)
 
 
+def check_base_model(recorded: Optional[str], base_model: str,
+                     adapter_dir: str = "<adapters>") -> None:
+    """Refuse adapters extracted from a different base model.
+
+    Pure: the caller resolves ``recorded`` (extraction report, then adapter
+    config); this only compares and raises. An unrecorded provenance is *not* an
+    error -- packages extracted before the field existed simply skip the check.
+    """
+    if not recorded or same_model_reference(recorded, base_model):
+        return
+    raise AdapterLoadError(
+        f"adapter_dir={adapter_dir!r} was extracted from base_model={recorded!r}, "
+        f"but you asked for base_model={base_model!r}. Attaching these adapters to a "
+        f"different base silently changes every verdict."
+    )
+
+
+def check_adapter_keys(file_keys: Iterable[str], live_keys: Iterable[str],
+                       subdir: str) -> None:
+    """Refuse an adapter whose keys do not match the live model exactly.
+
+    ``missing_in_model`` is a key in the file with no target in the model (an
+    unknown key); ``missing_in_file`` is a model parameter with no value in the
+    file (a dropped key). Either one leaves part of the adapter unattached, which
+    yields a model that looks fine, loads fine, and is silently only partially
+    adapted -- so the load is refused rather than tolerated.
+    """
+    file_keys, live_keys = set(file_keys), set(live_keys)
+    missing_in_model = sorted(file_keys - live_keys)
+    missing_in_file = sorted(live_keys - file_keys)
+    if not (missing_in_model or missing_in_file):
+        return
+    raise AdapterLoadError(
+        f"{subdir}: adapter file and model do not agree.\n"
+        f"  {len(missing_in_model)} key(s) in the file have no target in the model "
+        f"(e.g. {missing_in_model[:3]})\n"
+        f"  {len(missing_in_file)} model adapter parameter(s) have no value in the file "
+        f"(e.g. {missing_in_file[:3]})\n"
+        f"  This would produce a partially-adapted model, so the load is refused."
+    )
+
+
 def _check_base(adapter_dir: str, report: Dict[str, Any], base_model: str) -> None:
     """Adapters are only valid on the base they were trained on."""
     recorded = ((report.get("provenance") or {}).get("base_model")
                 or _config_base_model(adapter_dir))
-    if not recorded:
-        return
-    if not same_model_reference(recorded, base_model):
-        raise AdapterLoadError(
-            f"adapter_dir={adapter_dir!r} was extracted from base_model={recorded!r}, "
-            f"but you asked for base_model={base_model!r}. Attaching these adapters to a "
-            f"different base silently changes every verdict."
-        )
+    check_base_model(recorded, base_model, adapter_dir)
 
 
 def _config_base_model(adapter_dir: str) -> Optional[str]:
@@ -154,19 +189,7 @@ def _attach_one(model: DeepfakeReasoningModel,
 
     file_sd = safetensors_load(path, device="cpu")
     live_keys = set(get_peft_model_state_dict(peft_module))
-    file_keys = set(file_sd)
-
-    missing_in_model = sorted(file_keys - live_keys)
-    missing_in_file = sorted(live_keys - file_keys)
-    if missing_in_model or missing_in_file:
-        raise AdapterLoadError(
-            f"{subdir}: adapter file and model do not agree.\n"
-            f"  {len(missing_in_model)} key(s) in the file have no target in the model "
-            f"(e.g. {missing_in_model[:3]})\n"
-            f"  {len(missing_in_file)} model adapter parameter(s) have no value in the file "
-            f"(e.g. {missing_in_file[:3]})\n"
-            f"  This would produce a partially-adapted model, so the load is refused."
-        )
+    check_adapter_keys(file_sd.keys(), live_keys, subdir)
 
     if expected_tensors is not None and len(file_sd) != expected_tensors:
         raise AdapterLoadError(

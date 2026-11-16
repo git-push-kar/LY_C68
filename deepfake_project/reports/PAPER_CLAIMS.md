@@ -37,14 +37,15 @@ it is the failure mode of the system.
 
 ## 2. Adapter deployment is lossless
 
-Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (10 tests).
+Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (18 tests).
 
 | Claim | Number | Status |
 | --- | --- | --- |
 | Adapter package reproduces the checkpoint | **18/18 identical verdicts, max \|Δp_fake\| = 0.000e+00** (`images=18 verdict mismatches=0 tol=1e-04`, re-run 2026-11-16) | **MEASURED** |
 | Package contents | llm_adapter 392 tensors / 73,859,072 params; vision_adapter 192 / 6,291,456; custom_heads 59 / 13,257,034 | **MEASURED** |
-| The wrong base is refused | `test_adapter_loader.py::test_wrong_base_is_refused` (9 further path-matching tests) | **VERIFIED** |
-| Dropped / unknown adapter keys are refused | the check exists in `_attach_lora` (file-vs-live key diff, raises `AdapterLoadError`), but it needs a built model, so it was exercised **once by hand in M2** (drop a key, add an unknown key, both refused) and has **no regression test** | **MEASURED** (one-off) |
+| The wrong base is refused | `check_base_model` (pure): different base raises, same base accepted, absent provenance tolerated — plus `_check_base` on a real temp dir, and 9 path-identity tests | **VERIFIED** |
+| Dropped / unknown adapter keys are refused | `check_adapter_keys` (pure): dropped key, unknown key, mismatch in both directions, and non-set iterables | **VERIFIED** |
+| The real load path uses those checks | `_attach_one` calls `check_adapter_keys(file_sd.keys(), live_keys, subdir)`; `_check_base` calls `check_base_model`. The wiring itself needs a built model, so it is exercised end to end by the 18/18 parity gate rather than a unit test | **MEASURED** |
 
 Safe sentence: "the 93.4 M-parameter adapter package is verdict-identical to the 4.36 GB
 checkpoint on the comparison set". Do not say "bit-identical weights" — the claim is about
@@ -180,7 +181,7 @@ cd deepfake_project
 python test_regression_fixes.py        # 8   single-image invariants
 python test_face_pipeline.py           # 29  geometry / cropping
 python test_face_routing.py            # 25  routing, aggregation, disagreement
-python test_adapter_loader.py          # 10  strict adapter loading
+python test_adapter_loader.py          # 18  strict adapter loading (keys + base)
 python test_calibration.py             # 15  AUC, sweeps, floor routing
 python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips

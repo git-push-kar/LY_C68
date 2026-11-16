@@ -1,11 +1,12 @@
 """
 test_adapter_loader.py
 ======================
-Path-identity tests for adapter_loader's base-model guard.
+Strict-loading tests for adapter_loader.
 
-The guard exists to stop adapters being attached to the wrong foundation. It
-must not fire on the *same* base merely passed differently (relative vs
-absolute vs Windows casing), and it must still fire for vanilla-vs-fused.
+The guards exist to stop adapters being attached to the wrong foundation, or
+attached only partially. They must not fire on the *same* base merely passed
+differently (relative vs absolute vs Windows casing), and they must fire for
+vanilla-vs-fused, for a dropped key and for an unknown key.
 
 Run:  python test_adapter_loader.py
 """
@@ -14,7 +15,8 @@ import os
 import tempfile
 import unittest
 
-from adapter_loader import AdapterLoadError, _check_base, same_model_reference
+from adapter_loader import (AdapterLoadError, _check_base, check_adapter_keys,
+                            check_base_model, same_model_reference)
 
 
 class TestSameModelReference(unittest.TestCase):
@@ -66,6 +68,49 @@ class TestSameModelReference(unittest.TestCase):
             "./models/internvl3_2b_lr_fused"))
 
 
+class TestCheckAdapterKeys(unittest.TestCase):
+    """Strictness that keeps a partial adapter from loading silently.
+
+    These are the three shapes a broken package takes: a key missing from the
+    file (dropped during extraction), a key the model has no target for (wrong
+    architecture or a stale file), and a mismatch in both directions at once.
+    """
+
+    LIVE = {"model.layers.0.q_proj.lora_A.weight",
+            "model.layers.0.q_proj.lora_B.weight"}
+
+    def test_identical_key_sets_pass(self):
+        check_adapter_keys(self.LIVE, self.LIVE, "llm_adapter")      # must not raise
+
+    def test_dropped_key_is_refused(self):
+        dropped = set(self.LIVE) - {"model.layers.0.q_proj.lora_B.weight"}
+        with self.assertRaises(AdapterLoadError) as ctx:
+            check_adapter_keys(dropped, self.LIVE, "llm_adapter")
+        message = str(ctx.exception)
+        self.assertIn("llm_adapter", message)
+        self.assertIn("no value in the file", message)
+        self.assertIn("partially-adapted", message)
+
+    def test_unknown_key_is_refused(self):
+        extra = set(self.LIVE) | {"model.layers.9.mlp.lora_A.weight"}
+        with self.assertRaises(AdapterLoadError) as ctx:
+            check_adapter_keys(extra, self.LIVE, "vision_adapter")
+        message = str(ctx.exception)
+        self.assertIn("vision_adapter", message)
+        self.assertIn("no target in the model", message)
+
+    def test_mismatch_in_both_directions_is_reported_together(self):
+        file_keys = {"model.layers.0.q_proj.lora_A.weight", "ghost.key"}
+        with self.assertRaises(AdapterLoadError) as ctx:
+            check_adapter_keys(file_keys, self.LIVE, "custom_heads")
+        message = str(ctx.exception)
+        self.assertIn("ghost.key", message)
+        self.assertIn("lora_B.weight", message)
+
+    def test_any_iterable_is_accepted(self):
+        check_adapter_keys(list(self.LIVE), tuple(self.LIVE), "llm_adapter")
+
+
 class TestCheckBase(unittest.TestCase):
 
     def test_absolute_path_of_recorded_base_is_accepted(self):
@@ -87,6 +132,26 @@ class TestCheckBase(unittest.TestCase):
 
     def test_missing_report_is_not_a_failure(self):
         _check_base("<tmp>", {}, "./models/internvl3_2b_lr_fused")
+
+
+class TestCheckBaseModel(unittest.TestCase):
+    """The pure comparison behind _check_base, tested without any files."""
+
+    def test_unrecorded_provenance_is_not_an_error(self):
+        check_base_model(None, "./models/internvl3_2b_lr_fused")
+        check_base_model("", "./models/internvl3_2b_lr_fused")
+
+    def test_same_base_is_accepted(self):
+        check_base_model("./models/internvl3_2b_lr_fused",
+                         "./models/internvl3_2b_lr_fused")
+
+    def test_different_base_is_refused(self):
+        with self.assertRaises(AdapterLoadError) as ctx:
+            check_base_model("./models/InternVL3-2B", "./models/internvl3_2b_lr_fused",
+                             "runs/x/adapters")
+        message = str(ctx.exception)
+        self.assertIn("InternVL3-2B", message)
+        self.assertIn("different base", message)
 
 
 if __name__ == "__main__":
