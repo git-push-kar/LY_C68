@@ -168,3 +168,4 @@ $RECYCLE.BIN/
 test_gemini.py
 
 adapters/
+.cloud-attachments/

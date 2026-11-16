@@ -97,6 +97,8 @@ def parse_args():
                    help="Skip rebuilding the model to strict-load the extracted adapters")
     p.add_argument("--no_custom_heads", action="store_true",
                    help="Skip extracting the full-finetune custom heads (adapters only)")
+    p.add_argument("--init_checkpoint", default=None,
+                   help="Optional upstream checkpoint this run was post-trained from (recorded in the report)")
     return p.parse_args()
 
 
@@ -254,16 +256,23 @@ def main():
                 "params": n_params,
                 "modules": sorted({k.split(".")[0] for k in custom}),
                 "file": "custom_heads/custom_heads.safetensors",
-                "note": ("Load onto a fresh DeepfakeReasoningModel (same arch_version/arch) "
+                 "note": ("Load onto a fresh DeepfakeReasoningModel (same arch_version/arch) "
                          "via model.load_state_dict(..., strict=False) together with the "
-                         "two PEFT adapters. cls_head was frozen during intern_fused_ground "
+                         "two PEFT adapters. cls_head was frozen during grounded "
                          "post-training but is still required at inference."),
             }
     else:
         print("  [custom_heads] skipped (--no_custom_heads)")
 
+    # Derive the run name from <run>/adapters so the report is accurate for any run.
+    run_name = (os.path.basename(os.path.dirname(os.path.abspath(args.output_dir)))
+                or os.path.basename(os.path.abspath(args.output_dir)))
+    provenance_training = f"{run_name} grounded joint post-training"
+    if args.init_checkpoint:
+        provenance_training += f" from {args.init_checkpoint}"
     report["provenance"] = {
-        "training": "intern_fused_ground joint post-training from runs/intern_fused/checkpoints/ep006.pth",
+        "run": run_name,
+        "training": provenance_training,
         "base_model": args.base_model,
         "frozen": "cls_head (4 tensors); trainable: LLM LoRA r=64 + vision LoRA r=16 + attn_pool/freq_branch/custom_projector/domain_router",
         "checkpoint_type": "whole-model state_dict (backbone + LoRA + custom heads), NOT adapter-only",
