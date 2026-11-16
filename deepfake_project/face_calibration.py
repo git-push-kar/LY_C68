@@ -55,7 +55,7 @@ from PIL import Image
 from adapter_loader import AdapterLoadError, load_model
 from face_detect import FaceDetector, crop_with_context
 from inference import build_transform
-from inference_faces import classify
+from inference_faces import classify, lone_face_fills_frame
 
 MARGINS = (0.00, 0.15, 0.30, 0.45)
 FRAC_CANDIDATES = (0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.10, 0.15, 0.20, 0.30)
@@ -237,9 +237,13 @@ def best_threshold(rows: List[Dict[str, float]], key: str = "youden") -> Dict[st
 
 def route_at_frac(record: Dict[str, Any], frac: float, margin: float,
                   min_face_px: int) -> Dict[str, Any]:
-    """Mirror route_image() for one frame at a candidate passthrough floor."""
+    """Mirror route_image() for one frame at a candidate passthrough floor.
+
+    The passthrough predicate itself comes from inference_faces.lone_face_fills_frame,
+    so this sweep measures the shipped rule rather than a copy of it.
+    """
     faces = record["faces"]
-    if len(faces) == 1 and faces[0]["frac"] >= frac:
+    if lone_face_fills_frame([f["frac"] for f in faces], frac):
         return {"path": "passthrough", "p": record["whole_p"]}
     kept = [e["p"] for f, e in zip(faces, record["margins"][f"{margin}"])
             if f["side"] >= min_face_px and e.get("p") is not None]

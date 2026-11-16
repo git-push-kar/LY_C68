@@ -19,7 +19,8 @@ from types import SimpleNamespace
 from PIL import Image
 
 from face_detect import FaceBox
-from inference_faces import (aggregate_verdict, find_disagreements, route_image,
+from inference_faces import (aggregate_verdict, find_disagreements,
+                             lone_face_fills_frame, route_image,
                              select_reason_targets)
 
 
@@ -113,6 +114,12 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(route["path"], "no_detect")
         self.assertEqual(route["items"][0]["kind"], "whole")
         self.assertEqual(route["boxes"], [])
+
+    def test_lone_face_rule_is_shared_with_the_floor_sweep(self):
+        self.assertTrue(lone_face_fills_frame([0.05], 0.05))     # floor is inclusive
+        self.assertFalse(lone_face_fills_frame([0.049], 0.05))
+        self.assertFalse(lone_face_fills_frame([0.60, 0.55], 0.05))  # two faces, never
+        self.assertFalse(lone_face_fills_frame([], 0.05))
 
     def test_whole_image_rows_never_have_a_null_id(self):
         # flags.reasoned_faces is built from rows[i]["id"], so a null id on the

@@ -388,7 +388,7 @@ per-face directly, bypassing routing, and the crop path's numbers should be read
 | M3 | Multi-face inference | `inference_faces.py` (detect → batch classify → per-face telemetry) | 4 images produce per-face verdicts |
 | M4 | Reasoning routing + aggregation | `--reason_faces`, `--aggregate`, JSON schema | aggregation unit tests green |
 | M5 | Calibration + eval set | `FACE_PIPELINE_CALIBRATION.md`, `face_calibration.py`, FFIW 400-frame numbers — **done 2026-11-16** | margin 0.30 ships (+0.63 pt over tight baseline); `face_threshold` 0.50 and frac 0.05 confirmed, not changed |
-| M6 | Docs + launcher | `INTEGRATION_GUIDE.md` §11 multi-face section, `run_faces.bat` | guide code block runs verbatim |
+| M6 | Docs + launcher | `INTEGRATION_GUIDE.md` §11 multi-face section, `run_faces.bat` — **done 2026-11-16** | launcher ran both sample images end to end; the §11.4 snippet reproduced the CLI's per-face probabilities exactly (0.965119 / 0.102305 / 0.697197) |
 
 Each milestone is independently mergeable; M0–M2 unblock everything else and carry no risk to
 the validated single-image path.

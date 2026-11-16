@@ -10,9 +10,12 @@ Run:  python test_calibration.py
 import unittest
 
 import numpy as np
+from PIL import Image
 
 from face_calibration import (best_threshold, doc_probs, face_probs, frac_sweep,
                               roc_auc, route_at_frac, sweep_threshold)
+from face_detect import FaceBox
+from inference_faces import route_image
 
 
 def record(label, whole_p, faces, margin_ps):
@@ -100,6 +103,33 @@ class TestRoutingAtFrac(unittest.TestCase):
         routed = route_at_frac(rec, 0.05, 0.3, 96)
         self.assertEqual(routed["path"], "no_face")
         self.assertEqual(routed["p"], 0.30)
+
+    def test_route_at_frac_agrees_with_route_image_on_every_path(self):
+        # The floor sweep must measure the shipped rule, so both must answer the
+        # same way on passthrough, per_face and no_face geometry.
+        from types import SimpleNamespace
+        args = SimpleNamespace(margin=0.30, min_face_px=96, max_faces=8,
+                               image_size=448, passthrough_min_face_frac=0.05)
+
+        class Stub:
+            def __init__(self, boxes):
+                self.boxes = boxes
+
+            def detect(self, image):
+                return list(self.boxes)
+
+        cases = {
+            "passthrough": (200, 200, [FaceBox(60, 45, 140, 155)]),
+            "per_face": (4000, 3000, [FaceBox(1000, 900, 1400, 1500)]),
+            "no_face": (4000, 3000, [FaceBox(1000, 900, 1080, 1000)]),
+        }
+        for expected, (w, h, boxes) in cases.items():
+            route = route_image(Image.new("RGB", (w, h)), Stub(boxes), args)
+            rec = record(0, 0.5,
+                         [(min(b.width, b.height), b.area / (w * h)) for b in boxes],
+                         [0.5] * len(boxes))
+            self.assertEqual(route["path"], expected)
+            self.assertEqual(route_at_frac(rec, 0.05, 0.3, 96)["path"], expected)
 
     def test_frac_sweep_on_single_large_faces_is_flat(self):
         # All FFIW-style frames: 1 face at 0.38 of the frame. Any floor up to

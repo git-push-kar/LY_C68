@@ -37,7 +37,7 @@ import os
 import sys
 from contextlib import nullcontext
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -131,6 +131,20 @@ def parse_args():
 
 # ── Routing ──────────────────────────────────────────────────────────────────
 
+def lone_face_fills_frame(face_fracs: Sequence[float], min_frac: float) -> bool:
+    """The passthrough rule (plan section 5.1), in one place.
+
+    True only for exactly one detected face covering at least ``min_frac`` of the
+    frame. Deliberately independent of ``min_face_px``: passthrough crops nothing,
+    so the crop-size gate must not veto it -- a 200x200 training-style crop has an
+    ~80 px face box and would otherwise be mislabelled "no_face".
+
+    Shared with ``face_calibration.route_at_frac`` so the floor sweep cannot drift
+    from the routing it is supposed to measure.
+    """
+    return len(face_fracs) == 1 and face_fracs[0] >= min_frac
+
+
 def route_image(image: Image.Image, detector: Optional[FaceDetector], args) -> Dict[str, Any]:
     """Decide what the model is shown, without touching the model.
 
@@ -153,11 +167,11 @@ def route_image(image: Image.Image, detector: Optional[FaceDetector], args) -> D
     # inference.py does), so nothing is cropped and min_face_px never applies.
     # Applying the gate first would reject the 200x200 training-style crops,
     # whose face boxes are ~80 px wide, and mislabel them "no_face".
-    if len(boxes) == 1:
-        lone = boxes[0].clamped(img_w, img_h)
-        if lone.area / float(img_w * img_h) >= args.passthrough_min_face_frac:
-            return {"path": "passthrough", "boxes": boxes, "kept": [lone],
-                    "skipped": [], "items": [whole]}
+    fracs = [b.clamped(img_w, img_h).area / float(img_w * img_h) for b in boxes]
+    if lone_face_fills_frame(fracs, args.passthrough_min_face_frac):
+        return {"path": "passthrough", "boxes": boxes,
+                "kept": [boxes[0].clamped(img_w, img_h)],
+                "skipped": [], "items": [whole]}
 
     kept, skipped = filter_faces(boxes, (img_w, img_h),
                                  min_face_px=args.min_face_px, max_faces=args.max_faces)

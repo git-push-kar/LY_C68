@@ -491,3 +491,212 @@ In production environments, automated decision policies should follow these rule
 | `./models/internvl3_2b_lr_fused` | Base fused Hugging Face weights (~4.18 GB `model.safetensors`) | Required model directory (both deployment paths) |
 | `./runs/intern_fused_ground/checkpoints/best.pth` | Peak whole-model checkpoint, epoch 3 (1,328 tensors, ~4.36 GB; VaAcc 96.00%, VaAUC 0.993647) | Required weights file (full-checkpoint path, §5.2) |
 | `./runs/intern_fused_ground/adapters/` | Deployable adapter package: `llm_adapter/` (~147.8 MB) + `vision_adapter/` (~12.6 MB) + `custom_heads/` (~26.5 MB) + `extraction_report.json` | Required weights dir (adapter path, §5.3) |
+| `adapter_loader.py` | Strict adapter/base loader (`load_model`, `attach_adapters`) | Same weights, verified key-for-key |
+| `face_detect.py` | YOLOv8-face detector + context-crop geometry (`FaceBox`, `crop_with_context`, `filter_faces`) | Multi-face routing (§11) |
+| `inference_faces.py` | Multi-face CLI: detect → batch classify → per-face telemetry → reasoning | Multi-face entry point (§11) |
+| `run_faces.bat` | Windows launcher for `inference_faces.py` | Multi-face one-click run |
+| `face_calibration.py` | Margin/threshold/floor sweep against FFIW | Re-derive the numbers in §11.5 |
+| `FACE_PIPELINE_CALIBRATION.md` | Measured margin, threshold and floor results | Calibration record (§11.5) |
+| `./models/yolov8n-face.pt` | Face detector weights, 6,247,065 bytes, SHA-256 pinned | Fetched by `fetch_detector_weights.py` (AGPL-3.0) |
+| `verify_adapter_parity.py` | Adapter-vs-checkpoint verdict comparison | Pre-deployment parity gate |
+| `test_passthrough_parity.py` | Bitwise check that single-face images match `inference.py` | Regression gate |
+
+---
+
+## 11. Multi-Face Images (detection + per-face crops)
+
+The single-image path in §6 answers "is this face fake?". Given a group photo, it answers for the
+whole scene instead: the FFT spectrum is computed over the frame and the attention hotspots span
+every person, so one manipulated face can be averaged away, and a fake background can be blamed
+on an innocent face. Multi-face mode fixes that by detecting the faces and asking the same model
+about each one.
+
+Nothing about the model changes. No retraining, no new preprocessing, no new thresholds inside
+the network. Detection only decides **which image the model sees**, so the validated single-face
+behaviour survives intact.
+
+### 11.1 Routing rules
+
+Detection runs once per image, then one of three paths is taken
+(`inference_faces.route_image`, shared with the calibration sweep):
+
+| Detected faces | Face area / frame | Path | What the model sees |
+| :--- | :--- | :--- | :--- |
+| 0 | — | `no_face` | whole image, `faces_detected: 0` (flagged, never silently "REAL") |
+| 1 | ≥ 0.05 | `passthrough` | the whole image — **bitwise identical to `inference.py`** |
+| 1 | < 0.05 | `per_face` | a context crop of that face (a lone small face usually means the detector missed others) |
+| ≥ 2 | any | `per_face` | one context crop per face, largest first, max 8 |
+| any | box shorter side < 96 px | skipped | not judged: reported as `face_too_small` rather than upscaled into a verdict |
+
+Two ordering details matter and are covered by tests:
+
+- **Passthrough is decided before the 96 px gate.** Passthrough crops nothing, so the crop-size
+  gate must not veto it — a 200×200 training-style crop has an ~80 px face box and would
+  otherwise be mislabelled `no_face`.
+- **The crop is square.** The model does `Resize((448, 448))` with no letterboxing, so a 2:1 crop
+  is distorted, not padded. Each box is expanded 30 % per side, squared about its centre, then
+  clamped. Overflow up to 10 % of the side is mirror-padded; beyond that it degrades to the
+  clamped rectangle (`pad_mode: "stretch"`) rather than inventing mirrored skin for the FFT
+  branch to read as "evidence".
+
+### 11.2 Running it
+
+On Windows, `run_faces.bat` wraps the CLI (it fetches the pinned detector weights on first run):
+
+```bat
+run_faces.bat
+run_faces.bat test_images\3-people.jpg test_images\multiple-faces.jpg
+```
+
+Directly:
+
+```bash
+python inference_faces.py \
+    --adapter_dir ./runs/intern_fused_ground/adapters \
+    --images test_images/3-people.jpg test_images/multiple-faces.jpg \
+    --json_out runs/face_results.json
+```
+
+| Flag | Default | Meaning |
+| :--- | :--- | :--- |
+| `--adapter_dir` / `--checkpoint` | — | exactly one weight source; both paths verified equal by `verify_adapter_parity.py` |
+| `--images` | 2 sample images | input paths |
+| `--json_out` | — | writes the §11.3 array |
+| `--reason_faces {none,top1,all}` | `top1` | which faces get LLM reasoning; `top1` = highest `p_fake` |
+| `--margin` | `0.30` | context ring around each face box |
+| `--face_threshold` | `0.50` | per-face `p_fake` decision boundary |
+| `--passthrough_min_face_frac` | `0.05` | lone-face area floor for the whole-image path |
+| `--min_face_px` / `--max_faces` | `96` / `8` | skip below this box size / keep this many largest |
+| `--aggregate {max,mean,any_fake,per_face}` | `max` | document verdict from per-face probabilities |
+| `--no_detect` | off | reference mode: no detection, exactly `inference.py`'s behaviour |
+| `--save_crops`, `--save_annotated` | off | dump crops / box overlays for debugging |
+
+`max` is the default aggregation because one compromised identity is enough; `requires_human_review`
+rises when faces disagree, when any face is below 0.70 confidence, or when the LLM answer
+contradicts the classifier.
+
+### 11.3 JSON contract
+
+One array element per image (values below are a real 3-face run):
+
+```json
+[
+  {
+    "image": "3-people.jpg",
+    "path": "per_face",
+    "faces_detected": 3,
+    "faces_evaluated": 3,
+    "faces_skipped": [],
+    "document_verdict": "FAKE",
+    "aggregate": "max",
+    "threshold": 0.5,
+    "reason_mode": "top1",
+    "faces": [
+      {
+        "id": 0,
+        "kind": "face",
+        "verdict": "FAKE",
+        "p_fake": 0.965119,
+        "confidence": 0.965119,
+        "box": [311.0, 1204.0, 802.0, 1695.0],
+        "crop": {"margin": 0.3, "pad_mode": "none", "crop_size": [786, 786],
+                 "face_frac": 0.0294, "upscale": 0.57},
+        "telemetry": {"hotspots": ["Peripheral / Ear & Hair blending seams", "Mouth & Lower jaw"],
+                      "spectral": "HF/LF log-magnitude energy ratio=0.61 (...)"},
+        "reasoning": {"quick_take": "...", "planning": "...", "analysis": "...",
+                      "reflection": "...", "conclusion": "...",
+                      "generated_answer": "fake"}
+      },
+      {"id": 1, "verdict": "REAL", "p_fake": 0.102305, "reasoning": null},
+      {"id": 2, "verdict": "FAKE", "p_fake": 0.697197, "reasoning": null}
+    ],
+    "flags": {
+      "faces_disagree": true,
+      "model_disagreement": false,
+      "requires_human_review": true,
+      "faces_skipped": 0,
+      "reasoned_faces": [0]
+    }
+  }
+]
+```
+
+Notes that prevent integration bugs:
+
+- `faces[].id` is always an integer. A whole-image row (passthrough, `no_face`, `no_detect`) is
+  `id: 0` with `kind: "whole_image"`, so `reasoned_faces` never contains `null`.
+- `p_fake` is `null`-free and rounded to 6 dp; `document_verdict` is `null` only when
+  `--aggregate per_face` is requested.
+- `faces_skipped` appears twice by design: the list (which boxes, and why) at image level, the
+  count inside `flags` for cheap routing.
+
+### 11.4 Embedding it in a service
+
+The CLI is the tested path; a service that already holds the model can call the same functions
+directly. This returns per-face probabilities with no LLM cost:
+
+```python
+from types import SimpleNamespace
+
+import torch
+from inference import build_transform
+from face_detect import FaceDetector
+from inference_faces import route_image, classify, aggregate_verdict
+
+ROUTING = SimpleNamespace(margin=0.30, min_face_px=96, max_faces=8,
+                          image_size=448, passthrough_min_face_frac=0.05)
+
+@torch.no_grad()
+def detect_document(image, model, detector, device, threshold=0.50):
+    """Faces in, per-face verdicts and a document verdict out. No reasoning pass."""
+    route = route_image(image, detector, ROUTING)          # detection happens once
+    probs, _, _ = classify(model, [item["image"] for item in route["items"]],
+                           build_transform(448), device)
+    rows = [{"p_fake": round(float(probs[i, 1]), 6),
+             "verdict": "FAKE" if float(probs[i, 1]) >= threshold else "REAL"}
+            for i, item in enumerate(route["items"])]
+    return {
+        "path": route["path"],
+        "faces_detected": len(route["boxes"]),
+        "faces_skipped": route["skipped"],
+        "faces": rows,
+        "document_verdict": aggregate_verdict(rows, "max", threshold),
+    }
+```
+
+`detector = FaceDetector("./models/yolov8n-face.pt")` and the model comes from
+`adapter_loader.load_model(...)` (§5.3). Build order does not matter: the model build leaves
+torch defaulting to bf16, and `FaceDetector` pins fp32 inside its own predict call so detection
+never inherits it.
+
+### 11.5 Calibration status
+
+Defaults are measured, not guessed — full tables in `FACE_PIPELINE_CALIBRATION.md`:
+
+| Parameter | Value | Evidence |
+| :--- | :--- | :--- |
+| `margin` | 0.30 | FFIW document AUC 0.8845 vs 0.8782 for tight crops (+0.63 pt); 0.45 scores higher but only by reducing upscaling on FFIW's 256 px frames |
+| `face_threshold` | 0.50 | sweep flat within one standard error across 0.42–0.55 (n = 400); 0.50 also matches `inference.py`'s argmax |
+| `passthrough_min_face_frac` | 0.05 | floors 0.03–0.06 route all 33 unique local images identically, with measured failures bracketing the range |
+| `aggregate` | `max` | one compromised identity is enough; documented in §9 |
+
+Two honest limits from that evaluation: FFIW as stored is **256 px and 92 % single-face**, so it
+never exercises the crop path (the sweep scores crops directly, bypassing routing), and it ships
+without ground-truth face boxes, so detector recall is unmeasured. Treat per-face numbers as
+"competitive with", not "better than", the whole-image path.
+
+### 11.6 Cost and operational limits
+
+- **Classification is cheap**: all faces of an image go through one batched forward pass.
+- **Reasoning is linear in face count** (`generate()` runs once per face), which is why `top1` is
+  the default. On a 6-face photo, `--reason_faces all` is 6× the LLM latency. Use `none` for
+  screening volumes and reason only about escalated cases.
+- **Per-face verdicts on padded crops are out-of-distribution** relative to HydraFake training
+  crops. Do not quote the benchmark figures from `RESEARCH_PAPER_REPORT.md` for this path.
+- **A missed face cannot be reported as clean.** Always surface `faces_detected` alongside
+  `document_verdict`; a REAL document on a single detected face is not evidence the photo is clean.
+- **Not for identity**: no recognition or clustering is performed, and boxes are not tracked
+  across video frames.
+- **Detector licensing**: `models/yolov8n-face.pt` is AGPL-3.0. `FaceDetector` is a thin wrapper,
+  so a permissively licensed detector (YuNet/SCRFD) can be swapped in one file without touching
+  the classifier.
