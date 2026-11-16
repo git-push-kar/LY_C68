@@ -16,8 +16,11 @@ unchanged -- detection only decides *which image* the model sees:
   0 faces, or every face below --min_face_px
       -> NO_FACE: the whole image is evaluated and flagged faces_detected=0
 
-Reasoning generation is M4; this milestone reports the classifier verdict plus
-per-face forensic telemetry (attention hotspots + FFT ratio) for every crop.
+Reasoning uses the same grounded prompt and tag parser as inference.py. It runs
+for the highest-risk face by default (--reason_faces top1), optionally for every
+face (all) or not at all (none). The classifier verdict remains the only
+decision; the LLM answer is reported for audit and any disagreement sets
+flags.model_disagreement and forces human review.
 
 Examples:
     python inference_faces.py --adapter_dir ./runs/intern_fused_ground/adapters \
@@ -48,7 +51,14 @@ from face_detect import (
     draw_boxes,
     filter_faces,
 )
-from inference import build_transform, extract_forensic_telemetry, setup_logger
+from inference import (
+    build_telemetry_prompt,
+    build_transform,
+    extract_forensic_telemetry,
+    parse_reasoning,
+    setup_logger,
+    trim_after_answer,
+)
 
 
 # ── Args ─────────────────────────────────────────────────────────────────────
@@ -97,6 +107,22 @@ def parse_args():
                          "with inference.py's argmax until the plan's margin sweep calibrates it")
     g3.add_argument("--save_crops", default=None, help="directory for per-face crops")
     g3.add_argument("--save_annotated", default=None, help="directory for box overlays")
+
+    g4 = p.add_argument_group("reasoning")
+    g4.add_argument("--reason_faces", default="top1", choices=["none", "top1", "all"],
+                    help="which evaluated faces get LLM reasoning: the highest p_fake only "
+                         "(default), every face, or none")
+    g4.add_argument("--grounded_reasoning", action="store_true", default=True,
+                    help="condition the LLM on classifier telemetry (verdict, hotspots, FFT)")
+    g4.add_argument("--no_grounded_reasoning", action="store_false", dest="grounded_reasoning",
+                    help="pure visual reasoning, no telemetry prefix")
+    g4.add_argument("--max_new_tokens", type=int, default=512)
+    g4.add_argument("--do_sample", action="store_true", default=False,
+                    help="stochastic sampling (default: deterministic greedy, which is how "
+                         "the model was validated)")
+    g4.add_argument("--temperature", type=float, default=1.0)
+    g4.add_argument("--top_p", type=float, default=1.0)
+    g4.add_argument("--repetition_penalty", type=float, default=1.05)
     return p.parse_args()
 
 
@@ -109,7 +135,10 @@ def route_image(image: Image.Image, detector: Optional[FaceDetector], args) -> D
     {"kind", "image", "meta", "box", "id"}.
     """
     img_w, img_h = image.size
-    whole = {"kind": "whole", "image": image, "meta": {}, "box": None, "id": None}
+    # Whole-image rows still carry an integer id: faces[].id and
+    # flags.reasoned_faces are keyed by id, so a null here leaks into the JSON
+    # (reasoned_faces: [null]) for passthrough, no_face and no_detect alike.
+    whole = {"kind": "whole", "image": image, "meta": {}, "box": None, "id": 0}
 
     if detector is None:
         return {"path": "no_detect", "boxes": [], "kept": [], "skipped": [], "items": [whole]}
@@ -188,17 +217,98 @@ def aggregate_verdict(rows: List[Dict[str, Any]], mode: str,
     return "FAKE" if max(p) >= threshold else "REAL"     # "max" and "any_fake"
 
 
+def select_reason_targets(rows: List[Dict[str, Any]], mode: str) -> List[int]:
+    """Indices of rows to reason about.
+
+    top1 = the highest p_fake (ties broken by position, so the choice is
+    deterministic). Generation is one LLM call per item, so a 6-face photo is 6x
+    the latency for reasoning the classifier already decided.
+    """
+    if mode == "none" or not rows:
+        return []
+    ranked = sorted(range(len(rows)), key=lambda i: (-rows[i]["p_fake"], i))
+    return list(ranked) if mode == "all" else ranked[:1]
+
+
+def find_disagreements(rows: List[Dict[str, Any]], reasoned: List[int]) -> List[int]:
+    """Indices where the LLM's answer contradicts the classifier verdict.
+
+    Only reasoned rows can disagree, and only a parseable real/fake answer
+    counts: 'unknown' means the generation did not commit to anything, which is
+    a parse failure rather than a contradiction.
+    """
+    out = []
+    for i in reasoned:
+        answer = (rows[i].get("reasoning") or {}).get("generated_answer", "unknown")
+        if answer in ("real", "fake") and answer.upper() != rows[i]["verdict"]:
+            out.append(i)
+    return out
+
+
+REASON_FIELDS = (("quick_take", "Quick take"), ("planning", "Planning"),
+                 ("analysis", "Reasoning"), ("reflection", "Reflection"),
+                 ("conclusion", "Conclusion"))
+
+
+def _log_reasoning(logger, label: str, reason: Dict[str, Any], verdict: str) -> None:
+    logger.info(f"              -- reasoning for {label} --")
+    for key, title in REASON_FIELDS:
+        text = (reason.get(key) or "").strip()
+        if not text:
+            continue
+        logger.info(f"              [{title}]")
+        for line in text.splitlines():
+            if line.strip():
+                logger.info(f"                {line.strip()}")
+    answer = reason.get("generated_answer", "unknown")
+    mark = "" if answer.upper() == verdict else f"  (classifier says {verdict})"
+    logger.info(f"              LLM answer: {answer}{mark}")
+
+
+@torch.no_grad()
+def reason_about_item(model, tokenizer, item_pv: torch.Tensor, item_freq: torch.Tensor,
+                      telemetry: Dict[str, Any], args, device) -> Dict[str, Any]:
+    """One grounded generation for one already-classified item.
+
+    Mirrors inference.py: optional telemetry prefix via build_grounding_prompt,
+    deterministic greedy by default, output trimmed at </answer> and parsed by
+    the shared tag parser.
+    """
+    prompt_text = build_telemetry_prompt(telemetry) if args.grounded_reasoning else None
+    result = model.predict(
+        item_pv, tokenizer, freq_features=item_freq,
+        max_new_tokens=args.max_new_tokens,
+        do_sample=args.do_sample,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        repetition_penalty=args.repetition_penalty,
+        prompt_text=prompt_text,
+    )
+    raw = trim_after_answer(result["reasoning"][0])
+    tags = parse_reasoning(raw)
+    return {
+        "quick_take": tags.get("fast", ""),
+        "planning": tags.get("planning", ""),
+        "analysis": tags.get("reasoning", ""),
+        "reflection": tags.get("reflection", ""),
+        "conclusion": tags.get("conclusion", ""),
+        "generated_answer": tags.get("answer", "unknown"),
+        "answer_heuristic": bool(tags.get("answer_heuristic", False)),
+        "raw": raw,
+    }
+
+
 # ── Per-image evaluation ─────────────────────────────────────────────────────
 
-def evaluate_image(image: Image.Image, route: Dict[str, Any], model, transform,
-                   device, args, logger) -> Dict[str, Any]:
-    """Classify the items a precomputed route selected, then aggregate."""
+def evaluate_image(image: Image.Image, route: Dict[str, Any], model, tokenizer,
+                   transform, device, args, logger) -> Dict[str, Any]:
+    """Classify the route's items, reason where asked, then aggregate."""
     items = route["items"]
 
     probs, freqs, pv = classify(model, [it["image"] for it in items], transform, device)
     attn = attention_weights(model, pv, device)
 
-    rows = []
+    rows, telemetries = [], []
     for i, item in enumerate(items):
         p_fake = float(probs[i, 1])
         conf = float(probs[i].max())
@@ -209,6 +319,7 @@ def evaluate_image(image: Image.Image, route: Dict[str, Any], model, transform,
             freq_features=freqs[i:i + 1],
             attn_weights=attn[i:i + 1],
         )
+        telemetries.append(telemetry)
         rows.append({
             "id": item["id"],
             "kind": "whole_image" if item["kind"] == "whole" else "face",
@@ -221,16 +332,32 @@ def evaluate_image(image: Image.Image, route: Dict[str, Any], model, transform,
                 "hotspots": telemetry["regions"],
                 "spectral": telemetry["spectral_desc"],
             },
+            "reasoning": None,
         })
+
+    # Reasoning for the selected items only. Classification above is untouched:
+    # predict() receives the same crops but never feeds back into the verdict.
+    reasoned = []
+    for i in select_reason_targets(rows, args.reason_faces):
+        rows[i]["reasoning"] = reason_about_item(
+            model, tokenizer, pv[i:i + 1], freqs[i:i + 1].to(device),
+            telemetries[i], args, device)
+        reasoned.append(i)
 
     doc = aggregate_verdict(rows, args.aggregate, args.face_threshold)
     face_verdicts = [r["verdict"] for r in rows if r["kind"] == "face"] or [r["verdict"] for r in rows]
+    # The classifier is the decision authority (INTEGRATION_GUIDE section 9);
+    # the LLM answer is recorded and a disagreement escalates to review.
+    disagreements = find_disagreements(rows, reasoned)
     flags = {
         "faces_disagree": len(set(face_verdicts)) > 1,
+        "model_disagreement": bool(disagreements),
         "requires_human_review": (len(set(face_verdicts)) > 1
+                                  or bool(disagreements)
                                   or any(r["confidence"] < 0.70 for r in rows)
                                   or bool(route["skipped"])),
         "faces_skipped": len(route["skipped"]),
+        "reasoned_faces": [rows[i]["id"] for i in reasoned],
     }
 
     logger.info(f"\n{'=' * 64}")
@@ -249,7 +376,10 @@ def evaluate_image(image: Image.Image, route: Dict[str, Any], model, transform,
         if r["crop"]:
             logger.info(f"              crop={r['crop']['crop_size']} "
                         f"pad={r['crop']['pad_mode']} upscale={r['crop']['upscale']}")
-    logger.info(f"  Review needed     : {flags['requires_human_review']}")
+        if r["reasoning"]:
+            _log_reasoning(logger, label, r["reasoning"], r["verdict"])
+    logger.info(f"  Review needed     : {flags['requires_human_review']}"
+                + ("   (LLM and classifier disagree)" if disagreements else ""))
     logger.info("=" * 64)
 
     return {
@@ -261,6 +391,7 @@ def evaluate_image(image: Image.Image, route: Dict[str, Any], model, transform,
         "document_verdict": doc,
         "aggregate": args.aggregate,
         "threshold": args.face_threshold,
+        "reason_mode": args.reason_faces,
         "faces": rows,
         "flags": flags,
     }
@@ -290,9 +421,12 @@ def main():
     logger.info(f"Routing       : aggregate={args.aggregate} "
                 f"passthrough_min_face_frac={args.passthrough_min_face_frac} "
                 f"detect={not args.no_detect}")
+    logger.info(f"Reasoning     : {args.reason_faces} "
+                f"(grounded={args.grounded_reasoning}, max_new_tokens={args.max_new_tokens}, "
+                f"sample={args.do_sample})")
 
     try:
-        model, _tokenizer, info = load_model(
+        model, tokenizer, info = load_model(
             base_model=args.base_model, adapter_dir=args.adapter_dir,
             checkpoint=args.checkpoint, arch_version=args.arch_version,
             attn_implementation=args.attn_implementation, device=str(device))
@@ -339,7 +473,8 @@ def main():
                 args.save_annotated, f"{os.path.splitext(image.filename)[0]}_annotated.jpg"),
                 quality=88)
 
-        results.append(evaluate_image(image, route, model, transform, device, args, logger))
+        results.append(evaluate_image(image, route, model, tokenizer, transform,
+                                      device, args, logger))
 
     logger.info("\nSUMMARY")
     logger.info(f"  {'Image':<24} {'Path':<12} {'Faces':<6} {'Doc verdict':<12}")

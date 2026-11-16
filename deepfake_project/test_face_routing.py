@@ -19,7 +19,8 @@ from types import SimpleNamespace
 from PIL import Image
 
 from face_detect import FaceBox
-from inference_faces import route_image
+from inference_faces import (aggregate_verdict, find_disagreements, route_image,
+                             select_reason_targets)
 
 
 def make_args(**overrides):
@@ -112,6 +113,94 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(route["path"], "no_detect")
         self.assertEqual(route["items"][0]["kind"], "whole")
         self.assertEqual(route["boxes"], [])
+
+    def test_whole_image_rows_never_have_a_null_id(self):
+        # flags.reasoned_faces is built from rows[i]["id"], so a null id on the
+        # passthrough row surfaced in the JSON as reasoned_faces: [null].
+        routes = [
+            route_image(image(200, 200), StubDetector([FaceBox(60, 45, 140, 155)]), make_args()),
+            route_image(image(), StubDetector([]), make_args()),
+            route_image(image(), None, make_args()),
+        ]
+        for route in routes:
+            self.assertIsInstance(route["items"][0]["id"], int, route["path"])
+        self.assertEqual([r["items"][0]["id"] for r in routes], [0, 0, 0])
+
+
+class TestAggregation(unittest.TestCase):
+    """Document-verdict rules (plan section 5)."""
+
+    ROWS = [{"p_fake": 0.10}, {"p_fake": 0.72}, {"p_fake": 0.40}]
+
+    def test_max_takes_the_worst_face(self):
+        self.assertEqual(aggregate_verdict(self.ROWS, "max", 0.50), "FAKE")
+        self.assertEqual(aggregate_verdict(self.ROWS, "any_fake", 0.50), "FAKE")
+
+    def test_mean_can_differ_from_max(self):
+        # mean = 0.407 -> REAL at 0.50 although one face is FAKE
+        self.assertEqual(aggregate_verdict(self.ROWS, "mean", 0.50), "REAL")
+
+    def test_per_face_has_no_document_verdict(self):
+        self.assertIsNone(aggregate_verdict(self.ROWS, "per_face", 0.50))
+
+    def test_threshold_is_respected(self):
+        rows = [{"p_fake": 0.42}]
+        self.assertEqual(aggregate_verdict(rows, "max", 0.42), "FAKE")
+        self.assertEqual(aggregate_verdict(rows, "max", 0.50), "REAL")
+
+    def test_empty_rows_have_no_verdict(self):
+        self.assertIsNone(aggregate_verdict([], "max", 0.50))
+
+
+class TestDisagreement(unittest.TestCase):
+    """LLM/classifier conflict detection (INTEGRATION_GUIDE section 9)."""
+
+    @staticmethod
+    def row(verdict, answer):
+        return {"verdict": verdict, "p_fake": 0.9,
+                "reasoning": {"generated_answer": answer}}
+
+    def test_agreement_is_not_a_disagreement(self):
+        rows = [self.row("FAKE", "fake"), self.row("REAL", "real")]
+        self.assertEqual(find_disagreements(rows, [0, 1]), [])
+
+    def test_contradiction_is_flagged(self):
+        rows = [self.row("FAKE", "real"), self.row("REAL", "fake")]
+        self.assertEqual(find_disagreements(rows, [0, 1]), [0, 1])
+
+    def test_unparsed_answer_is_not_a_contradiction(self):
+        rows = [self.row("FAKE", "unknown")]
+        self.assertEqual(find_disagreements(rows, [0]), [])
+
+    def test_unreasoned_rows_are_ignored(self):
+        rows = [{"verdict": "FAKE", "p_fake": 0.9, "reasoning": None}]
+        self.assertEqual(find_disagreements(rows, []), [])
+
+
+class TestReasonTargets(unittest.TestCase):
+    """Default = reason about the highest-risk face only."""
+
+    ROWS = [{"p_fake": 0.04}, {"p_fake": 0.97}, {"p_fake": 0.31}]
+
+    def test_top1_picks_the_highest_p_fake(self):
+        self.assertEqual(select_reason_targets(self.ROWS, "top1"), [1])
+
+    def test_top1_ties_break_deterministically(self):
+        rows = [{"p_fake": 0.5}, {"p_fake": 0.5}]
+        self.assertEqual(select_reason_targets(rows, "top1"), [0])
+        self.assertEqual(select_reason_targets(rows, "all"), [0, 1])
+
+    def test_all_reasons_every_face_worst_first(self):
+        self.assertEqual(select_reason_targets(self.ROWS, "all"), [1, 2, 0])
+
+    def test_none_reasons_about_nothing(self):
+        self.assertEqual(select_reason_targets(self.ROWS, "none"), [])
+
+    def test_empty_rows(self):
+        self.assertEqual(select_reason_targets([], "top1"), [])
+
+    def test_single_passthrough_row_is_the_top1(self):
+        self.assertEqual(select_reason_targets([{"p_fake": 0.16}], "top1"), [0])
 
 
 if __name__ == "__main__":
