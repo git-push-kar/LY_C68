@@ -17,7 +17,9 @@ Training follows a four-stage curriculum (classifier warm-up → joint classific
 **Verified results.** **The released detector is the grounded vanilla checkpoint** — three classifier
 epochs, three reasoning epochs and three telemetry epochs, then three grounded epochs — scoring
 **93.38% in-domain (AUC 0.9872), 87.09% mean accuracy (AUC 0.9455)** on the 52,266-sample HydraFake
-benchmark and **95.23% / AUC 0.9903** on the balanced validation set. It ships because its adapter
+benchmark and **95.23% / AUC 0.9903** on the balanced validation set. Training runs as three
+classifier-and-reasoning epochs followed by three grounded reasoning-and-telemetry epochs; it ships
+because its adapter
 package attaches to the unmodified upstream base and passes verdict parity against the checkpoint
 (18/18, $\Delta p_{\text{fake}} = 0$). The LR-fused lineage is reported as the **comparison**: it
 is stronger on the same benchmark — **94.10% in-domain, 88.13% mean accuracy, 96.00% validation,
@@ -304,16 +306,16 @@ The deployment shift is a deliberate trade, and the report states both sides of 
 **What the shipped model is.** `intern_v2_ground` is the Lineage B path, and it is trained in two
 three-epoch blocks:
 
-- **Stage 2 — three joint epochs** (§5.1), each one training the **classifier**, the **reasoning
-  branch** and the **telemetry heads** under one objective (§2.10): three epochs of classifier
-  training, three of reasoning, three with telemetry data.
+- **Stage 2 — three joint epochs** (§5.1): the **classifier** and the **reasoning branch** train
+  under one objective (§2.10). The telemetry channel is *not* trained here.
 - **Stage 4 — three grounded epochs** (§3.5), initialised from Stage 2's `ep006.pth`. `cls_head` is
-  frozen here to protect it at its peak; the attention pooling, frequency branch, projector and
-  router that produce telemetry keep training alongside the LM.
+  frozen here to protect it at its peak; reasoning **and telemetry** train together, because
+  grounding is what actually exercises the telemetry prefix (§2.7).
 
-So the classifier is trained in the **three joint epochs** and frozen through the **three grounded**
-ones — three classifier epochs, not six — while the reasoning and telemetry channels train in all
-six. This is the only lineage where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
+So the three training channels have three different histories: the **classifier** trains for three
+epochs (the joint ones) and is frozen through the grounded ones; **reasoning** trains for all six;
+**telemetry** trains only for the final three, when grounding is on. This is the only lineage where
+both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
 $|\Delta p_{\text{fake}}| = 0$).
 
 **Why not the LR-fused lineage, which scores higher.** Lineage A is **1.04 pp better on the macro

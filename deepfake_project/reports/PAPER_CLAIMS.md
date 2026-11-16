@@ -84,65 +84,6 @@ Rules for writing these: they are **log-derived**, not re-runnable from `config.
 metrics block is stale (see report §5.3). Do not describe the CD number as a solved problem —
 it is the failure mode of the system.
 
-## 2. Adapter deployment is lossless
-
-Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (21 tests). Measured on the **deployed**
-package (`runs/intern_v2_ground/adapters` on `./models/InternVL3-2B`), which is what the tool
-defaults to since 2026-11-16.
-
-| Claim | Number | Status |
-| --- | --- | --- |
-| Adapter package reproduces the checkpoint | **18/18 identical verdicts, max \|Δp_fake\| = 0.000e+00** (`images=18 verdict mismatches=0 tol=1e-04`, vanilla run 2026-11-16 00:19) | **MEASURED** |
-| Package contents | llm_adapter 392 tensors / 73,859,072 params; vision_adapter 192 / 6,291,456; custom_heads 59 / 13,257,034 | **MEASURED** |
-| The wrong base is refused | `check_base_model` (pure): different base raises, same base accepted, absent provenance tolerated — plus `_check_base` on a real temp dir, and 9 path-identity tests | **VERIFIED** |
-| Dropped / unknown adapter keys are refused | `check_adapter_keys` (pure): dropped key, unknown key, mismatch in both directions, and non-set iterables | **VERIFIED** |
-| The real load path uses those checks | wiring tests with a stubbed model and stubbed peft/safetensors: `_attach_one` calls `check_adapter_keys` exactly once with the file keys, the live keys and the subdir; `attach_adapters` delegates to `check_base_model` with the resolved provenance, and skips it when no base is requested | **VERIFIED** |
-
-Safe sentence: "the 93.4 M-parameter adapter package is verdict-identical to the 4.07 GB deployed
-checkpoint on the comparison set" (18 single-face images). The Lineage A package passed the same
-check earlier the same day, so the lossless-deployment property holds for both lineages. Do not
-say "bit-identical weights" — the claim is about verdicts and probabilities, which is what was
-compared.
-
-## 3. Single-face behaviour is preserved exactly — on the passthrough path
-
-Source: `test_passthrough_parity.py` (`RUN_MODEL_PARITY_TESTS=1`), `inference_faces.py --no_detect`.
-
-**Scope, stated first because it is easy to get wrong: not every single-face image takes the
-passthrough path.** The router keys on face *area*, not face count. `om.jpg` (lone face at 0.026
-of the frame) and `chick.jpg` (0.021) fall below the 0.05 floor and are classified from a context
-crop — deliberately, since that is the range where the whole-image verdict is unreliable (§6).
-
-| Claim | Number | Status |
-| --- | --- | --- |
-| Single-face images **above the area floor** take the whole-image path | 3/3 asserted in the test (`161022.jpg` 0.2047, `310151.png` 0.2446, `omi.jpg` 0.0876) | **VERIFIED** |
-| Lone small faces do **not** | `om.jpg` 0.026 and `chick.jpg` 0.021 route `per_face` | **MEASURED** |
-| On that path, verdicts and probabilities match `inference.py` | `torch.equal` on probabilities, 3/3 real single-face images, reference forward built by `inference.py`'s own loop | **VERIFIED** |
-| The inputs are identical before the model even runs | `pixel_values` and `freq_features` bitwise equal to `build_transform(448)` + `compute_fft_features(224)` of the whole image (always-on layer, synthetic image, runs without weights) | **VERIFIED** |
-| The test can tell the paths apart | a `per_face` crop is provably *not* bitwise equal to the passthrough tensor, so a router that cropped or passed everything through could not pass | **VERIFIED** |
-
-This is what lets the paper say "multi-face support is additive": for an image that takes the
-passthrough path, the output is bitwise unchanged. It is the strongest guarantee in the repo, and
-it is bounded — lone small faces are routed to crops by design, so "single-face images are
-unchanged" is **not** the claim.
-
-## 4. Detection and routing
-
-Sources: `face_detect.py`, `test_face_pipeline.py` (29), `test_face_routing.py` (25), FFIW cache
-(400 frames).
-
-| Claim | Number | Status |
-| --- | --- | --- |
-| Finds the visible faces in the sample multi-face photos | 3 boxes in `3-people.jpg` and 3 in `multiple-faces.jpg`, one per visible face (visual check of the overlay; there is no ground-truth count) | **MEASURED** |
-| FFIW frames are mostly single-face | 368 × 1 face, 24 × 2, 3 × 0, 5 with ≥3 (1 × 3, 2 × 4, 1 × 5, 1 × 6) — n = 400 | **MEASURED** |
-| Face area distribution | 0.0007-0.7107 of frame over all 438 faces; the separate 40-frame detection probe showed a single-face median of 0.38 | **MEASURED** |
-| Routing rules are deterministic and tested | passthrough / per_face / no_face, ordering of the passthrough check before `min_face_px` | **VERIFIED** |
-| The floor sweep measures the shipped rule | `lone_face_fills_frame` is shared; a parity test checks all three paths | **VERIFIED** |
-
-**DO NOT CLAIM** detector recall on FFIW. This copy has no ground-truth boxes, so
-detected-vs-GT at IoU ≥ 0.5 was never computed (**BLOCKED**). The 3/3 sample result is not a
-recall estimate.
-
 ### 1.2 Where CD loses its points — deployed vanilla model
 
 `eval_by_generator.py` run on `runs/intern_v2_ground/checkpoints/best.pth` (2026-11-16 00:23–00:38,
@@ -266,6 +207,65 @@ one. Do not claim preference tuning *caused* the disagreement rate: 18 hand-pick
 counterfactual, association only. Do not claim Stage 3 degrades telemetry — it never trains it; the
 heads are frozen and unchanged, not damaged. And do not quote the 89.60 calibrated mean as the best
 model: four per-split thresholds fitted and scored on the same split.
+
+## 2. Adapter deployment is lossless
+
+Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (21 tests). Measured on the **deployed**
+package (`runs/intern_v2_ground/adapters` on `./models/InternVL3-2B`), which is what the tool
+defaults to since 2026-11-16.
+
+| Claim | Number | Status |
+| --- | --- | --- |
+| Adapter package reproduces the checkpoint | **18/18 identical verdicts, max \|Δp_fake\| = 0.000e+00** (`images=18 verdict mismatches=0 tol=1e-04`, vanilla run 2026-11-16 00:19) | **MEASURED** |
+| Package contents | llm_adapter 392 tensors / 73,859,072 params; vision_adapter 192 / 6,291,456; custom_heads 59 / 13,257,034 | **MEASURED** |
+| The wrong base is refused | `check_base_model` (pure): different base raises, same base accepted, absent provenance tolerated — plus `_check_base` on a real temp dir, and 9 path-identity tests | **VERIFIED** |
+| Dropped / unknown adapter keys are refused | `check_adapter_keys` (pure): dropped key, unknown key, mismatch in both directions, and non-set iterables | **VERIFIED** |
+| The real load path uses those checks | wiring tests with a stubbed model and stubbed peft/safetensors: `_attach_one` calls `check_adapter_keys` exactly once with the file keys, the live keys and the subdir; `attach_adapters` delegates to `check_base_model` with the resolved provenance, and skips it when no base is requested | **VERIFIED** |
+
+Safe sentence: "the 93.4 M-parameter adapter package is verdict-identical to the 4.07 GB deployed
+checkpoint on the comparison set" (18 single-face images). The Lineage A package passed the same
+check earlier the same day, so the lossless-deployment property holds for both lineages. Do not
+say "bit-identical weights" — the claim is about verdicts and probabilities, which is what was
+compared.
+
+## 3. Single-face behaviour is preserved exactly — on the passthrough path
+
+Source: `test_passthrough_parity.py` (`RUN_MODEL_PARITY_TESTS=1`), `inference_faces.py --no_detect`.
+
+**Scope, stated first because it is easy to get wrong: not every single-face image takes the
+passthrough path.** The router keys on face *area*, not face count. `om.jpg` (lone face at 0.026
+of the frame) and `chick.jpg` (0.021) fall below the 0.05 floor and are classified from a context
+crop — deliberately, since that is the range where the whole-image verdict is unreliable (§6).
+
+| Claim | Number | Status |
+| --- | --- | --- |
+| Single-face images **above the area floor** take the whole-image path | 3/3 asserted in the test (`161022.jpg` 0.2047, `310151.png` 0.2446, `omi.jpg` 0.0876) | **VERIFIED** |
+| Lone small faces do **not** | `om.jpg` 0.026 and `chick.jpg` 0.021 route `per_face` | **MEASURED** |
+| On that path, verdicts and probabilities match `inference.py` | `torch.equal` on probabilities, 3/3 real single-face images, reference forward built by `inference.py`'s own loop | **VERIFIED** |
+| The inputs are identical before the model even runs | `pixel_values` and `freq_features` bitwise equal to `build_transform(448)` + `compute_fft_features(224)` of the whole image (always-on layer, synthetic image, runs without weights) | **VERIFIED** |
+| The test can tell the paths apart | a `per_face` crop is provably *not* bitwise equal to the passthrough tensor, so a router that cropped or passed everything through could not pass | **VERIFIED** |
+
+This is what lets the paper say "multi-face support is additive": for an image that takes the
+passthrough path, the output is bitwise unchanged. It is the strongest guarantee in the repo, and
+it is bounded — lone small faces are routed to crops by design, so "single-face images are
+unchanged" is **not** the claim.
+
+## 4. Detection and routing
+
+Sources: `face_detect.py`, `test_face_pipeline.py` (29), `test_face_routing.py` (25), FFIW cache
+(400 frames).
+
+| Claim | Number | Status |
+| --- | --- | --- |
+| Finds the visible faces in the sample multi-face photos | 3 boxes in `3-people.jpg` and 3 in `multiple-faces.jpg`, one per visible face (visual check of the overlay; there is no ground-truth count) | **MEASURED** |
+| FFIW frames are mostly single-face | 368 × 1 face, 24 × 2, 3 × 0, 5 with ≥3 (1 × 3, 2 × 4, 1 × 5, 1 × 6) — n = 400 | **MEASURED** |
+| Face area distribution | 0.0007-0.7107 of frame over all 438 faces; the separate 40-frame detection probe showed a single-face median of 0.38 | **MEASURED** |
+| Routing rules are deterministic and tested | passthrough / per_face / no_face, ordering of the passthrough check before `min_face_px` | **VERIFIED** |
+| The floor sweep measures the shipped rule | `lone_face_fills_frame` is shared; a parity test checks all three paths | **VERIFIED** |
+
+**DO NOT CLAIM** detector recall on FFIW. This copy has no ground-truth boxes, so
+detected-vs-GT at IoU ≥ 0.5 was never computed (**BLOCKED**). The 3/3 sample result is not a
+recall estimate.
 
 ## 5. Per-face classification and aggregation
 
