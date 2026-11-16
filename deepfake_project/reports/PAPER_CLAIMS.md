@@ -16,10 +16,19 @@ Measured 2026-11-16 on `feature/yolo-multiface` (commits `b6cc6c5`..`06d9c8c`), 
 
 ---
 
-## 1. The single-image detector (Lineage A, `intern_fused_ground` best.pth, epoch 3)
+## 1. The single-image detector (Lineage A, `intern_fused_ground` best.pth)
 
 Source: `RESEARCH_PAPER_REPORT.md` §5.1-5.3, computed from archived `eval_*.log` over the full
 52,266-sample held-out set.
+
+**Epoch provenance — read before quoting these numbers.** `eval_best.log` records
+`epoch=1 stage=cls_only`, and that checkpoint file has since been **replaced** by the epoch-3
+weights now on disk (`{'epoch': 3, 'best_auc': 0.993646875}`). The table below is therefore
+*epoch 1*, while everything shipped — adapters, parity tests, `inference_faces.py` — runs
+*epoch 3*. Re-scoring the current weights on CD gives **0.7698 acc / 0.8533 AUC** where the
+archived log has 0.7660 / 0.8480, i.e. the two checkpoints differ by ~0.4 pt on the hardest
+split. §1.1 below is measured on the epoch-3 weights that ship. Quoting §1 as "epoch 3" was
+wrong; either label it epoch 1 or re-run all four splits on the shipped checkpoint (~51 min).
 
 Per-split figures with 95 % intervals, extracted by `eval_metrics.py` from the archived log.
 Positive class = FAKE; TP/FP/FN/TN are reconstructed from the logged counts and verified against
@@ -102,6 +111,50 @@ Sources: `face_detect.py`, `test_face_pipeline.py` (29), `test_face_routing.py` 
 **DO NOT CLAIM** detector recall on FFIW. This copy has no ground-truth boxes, so
 detected-vs-GT at IoU ≥ 0.5 was never computed (**BLOCKED**). The 3/3 sample result is not a
 recall estimate.
+
+### 1.1 Where CD loses its points (per-generator, epoch-3 weights)
+
+`eval.py` logs only four split totals, so 0.7660 on CD was never attributable. `eval_by_generator.py`
+keeps per-sample probabilities and groups them by the generator segment already present in the
+image path. Split total on the shipped weights: **0.7698 acc / 0.8533 AUC** (N = 15,468).
+
+| Generator | N | GT R/F | Pred R/F | Acc [95 % CI] | P | R | F1 | AUC [CI] |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| FFIW | 6,832 | 3417/3415 | 3624/3208 | 0.8055 [0.7959, 0.8147] | 0.825 | 0.775 | 0.7993 | 0.8936 [0.8858, 0.9014] |
+| deepfacelab | 3,094 | 1547/1547 | 459/2635 | 0.6412 [0.6242, 0.6580] | **0.583** | **0.993** | 0.7346 | 0.8667 [0.8538, 0.8796] |
+| dreamina | 952 | 476/476 | 498/454 | 0.9685 [0.9554, 0.9778] | 0.991 | 0.945 | 0.9677 | 0.9939 [0.9890, 0.9989] |
+| gpt4o | 630 | 315/315 | 407/223 | 0.8476 [0.8175, 0.8736] | 0.991 | **0.702** | 0.8216 | 0.9474 [0.9293, 0.9655] |
+| hailuo | 1,000 | 500/500 | 635/365 | 0.8550 [0.8318, 0.8755] | 0.986 | **0.720** | 0.8324 | 0.9875 [0.9805, 0.9944] |
+| InfiniteYou-CD | 2,960 | 1480/1480 | 2312/648 | 0.7128 [0.6963, 0.7289] | 0.986 | **0.432** | 0.6006 | 0.9067 [0.8955, 0.9178] |
+| **SPLIT TOTAL** | 15,468 | 7735/7733 | 7935/7533 | **0.7698 [0.7631, 0.7764]** | 0.777 | 0.757 | 0.7668 | **0.8533 [0.8472, 0.8593]** |
+
+Mean p_fake separates the two failure modes cleanly:
+
+| Generator | mean p_fake on REAL | mean p_fake on FAKE |
+| --- | --- | --- |
+| FFIW | 0.2172 | 0.7400 |
+| deepfacelab | **0.6713** | 0.9410 |
+| dreamina | 0.0736 | 0.8518 |
+| gpt4o | 0.0697 | 0.6527 |
+| hailuo | 0.0701 | 0.6683 |
+| InfiniteYou-CD | 0.0669 | **0.4512** |
+
+**The CD "drop" is the average of two opposite failures, not one weakness.**
+
+1. **deepfacelab over-triggers on REAL faces.** Mean p_fake on genuine images is 0.6713, so the
+   model calls 2,635 of 3,094 faces fake: recall 0.993 with precision 0.583. Its reals carry the
+   visual signature the classifier associates with face-swap output, and score > 0.5 almost by
+   default. This is the only generator where the false-positive rate is the problem.
+2. **AI-generated faces under-trigger.** InfiniteYou-CD recall 0.432 (mean p_fake on fakes 0.4512),
+   gpt4o 0.702, hailuo 0.720 — precision stays at 0.986-0.991 throughout, so these are silent misses,
+   not confusions. Whole-image diffusion/GAN output at this resolution simply does not look fake to
+   this classifier as often as face-swap output does.
+3. **dreamina (0.9685) and FFIW (0.8055) are the two that behave.** FFIW is the weakest AUC of the
+   six (0.8936) despite being the largest group — the in-domain-ish generator is not automatically
+   the easy one, which is worth a sentence in the paper.
+
+**DO NOT CLAIM** a single cause for the CD gap, and do not quote 0.7660 alongside this table: that
+is the epoch-1 checkpoint. Use 0.7698 (epoch 3) here, or re-run §1 on the shipped weights.
 
 ## 5. Per-face classification and aggregation
 
@@ -200,6 +253,7 @@ open measurement.
 | Routing & aggregation | `inference_faces.py` | `test_face_routing.py` | `INTEGRATION_GUIDE.md` §11.1-11.3 |
 | Calibration | `face_calibration.py` | `test_calibration.py` | `FACE_PIPELINE_CALIBRATION.md` §2-4 |
 | Per-split F1 / PR / CIs | `eval_metrics.py` | derivation verified against logged F1 | this ledger §1 |
+| Per-generator CD | `eval_by_generator.py` | reproduces the split total before splitting | this ledger §1.1 |
 | Latency | `face_timing.py` | — (measurement, not an assertion) | `FACE_PIPELINE_CALIBRATION.md` §5 |
 
 ## 10. Re-verifying everything
@@ -215,6 +269,8 @@ python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips
 python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0
 python eval_metrics.py --log runs/intern_fused_ground/logs/eval_best.log
+python eval_by_generator.py --checkpoint runs/intern_fused_ground/checkpoints/best.pth \
+    --split cd --out runs/timing/eval_by_generator_cd.json      # ~15 min, CD only
 python face_calibration.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --n_per_class 200                  # ~15 min; analysis is deterministic from the cache
 python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \

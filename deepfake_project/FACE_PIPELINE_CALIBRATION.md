@@ -108,6 +108,67 @@ Finer size bins, same margin: 0-48 px 0.8523 [0.693, 0.964] (30 faces), 48-96 px
   is **not supported** here — though `none`/`reflect` are only 15 and 31 faces, so this is weak
   evidence rather than a clearance.
 
+### 2.2 How much surrounding context? (full-resolution sensitivity)
+
+The FFIW margin sweep above **cannot** answer "how wide should the crop be": those frames are
+256 px, 99 % of faces are upscaled at margin 0, and at 0.45 some 423/438 crops degrade to
+`stretch`. There the sweep measures padding. The question only becomes clean on full-resolution
+faces, where every margin is *downscaled* into 448 and the only variable is how much ears, hair
+and background sit inside the square.
+
+Two unlabelled local images, every margin, one forward pass each
+(`runs/samples/context_sweep.py`; it reproduces the CLI's p_fake exactly at margin 0.30, which is
+how the harness was checked):
+
+`3-people.jpg`, 8495x5663, faces 823-960 px wide (p_fake per face):
+
+| margin | crop px | face 0 | face 1 | face 2 | verdicts |
+| --- | --- | --- | --- | --- | --- |
+| 0.00 | 1170-1473 | 0.0775 | 0.0478 | 0.0579 | all REAL |
+| 0.10 | 1404-1767 | 0.2002 | 0.0526 | 0.1204 | all REAL |
+| 0.20 | 1638-2062 | 0.7511 | 0.0642 | 0.6092 | FAKE / REAL / FAKE |
+| **0.30** | 1872-2356 | **0.9651** | **0.1023** | **0.6972** | FAKE / REAL / FAKE |
+| 0.45 | 2224-2798 | 0.9649 | 0.5112 | 0.8592 | all FAKE |
+| 0.60 | 2574-3240 | 0.9621 | 0.8264 | 0.5375 | all FAKE |
+| 0.80 | 3043-3829 | 0.9526 | 0.8515 | 0.7980 | all FAKE |
+| 1.00 | 3511-3916 | 0.9440 | 0.9482 | 0.9266 | all FAKE |
+
+`multiple-faces.jpg`, 1448x1086, faces 244-318 px wide (pipeline says REAL at the shipped margin):
+
+| margin | face 0 | face 1 | face 2 | verdicts |
+| --- | --- | --- | --- | --- |
+| 0.00 | 0.0399 | 0.0601 | 0.9260 | REAL / REAL / FAKE |
+| **0.30** | **0.0418** | **0.0471** | **0.0418** | all REAL |
+| 0.45 | 0.0619 | 0.0467 | 0.0430 | all REAL |
+| 0.60 | 0.0792 | 0.0882 | 0.1334 | all REAL |
+| 0.80 | 0.5137 | 0.8250 | 0.6671 | all FAKE |
+| 1.00 | 0.4340 | 0.8852 | 0.7599 | REAL / FAKE / FAKE |
+
+What this establishes, and what it does not:
+
+- **Crop geometry is a first-order factor, not a rounding detail.** The same face spans 0.078-0.965
+  in p_fake across the sweep (spread 0.89 on `3-people` faces 0-2). Any claim of the form "the
+  model scores this face at X" is really "at X *given this crop*", and must say so.
+- **The direction supports more context for seam evidence.** On `3-people` the tight box (no ears,
+  no hair, no background) reads REAL for every face, and p_fake rises monotonically as the
+  surrounding is added — the ear/hair/background boundary is exactly where blending seams live, and
+  margin 0 crops them away. If background-merge discrepancies are the target, 0.30 is closer to
+  right than 0.00, and 0.45 changes four of the six verdicts across the two images.
+- **But more is not monotonically safer.** `multiple-faces` sits at ~0.04 from margin 0 to 0.60 and
+  then jumps to 0.51/0.83/0.67 at 0.80 — a face that becomes small in frame plus mirrored padding
+  is enough to turn a REAL document FAKE. Extreme margins manufacture positives; this is the same
+  confound the FFIW table warns about, in the opposite direction.
+- **This is a sensitivity demo, not a selection criterion** (n = 2 unlabelled images, and the
+  `3-people` montage has no ground truth beyond "the pipeline was pointed at it"). Choosing which
+  box size is *most accurate* needs labelled full-resolution faces: that is the OpenForensics
+  work-package in `PAPER_CLAIMS.md` §8, which ships per-face boxes, per-face forgery labels and
+  full-resolution images, so margins 0.00/0.15/0.30/0.45 can be scored for AUC rather than
+  inspected.
+- **Cheap hedge until then:** classify two crops per face (tight 0.00 + context 0.45) and aggregate
+  with `max`. It costs one extra batched forward (~0.13 s/face), removes the dependence on which
+  single margin happened to be chosen, and would have caught all three `3-people` faces at both
+  ends of the sweep. Not adopted in this change — it needs the labelled evaluation first.
+
 ---
 
 ## 3. `face_threshold`
