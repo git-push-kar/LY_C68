@@ -146,7 +146,48 @@ range (0.073-0.088) rather than being raised to "be safe".
 
 ---
 
-## 5. Limitations
+## 5. Stage latency and the `top1` default
+
+Measured with `face_timing.py` on the RTX A5000, bf16, defaults (greedy, grounded,
+`max_new_tokens=512`). Detect and classify are **medians of 15 calls** after a discarded warmup;
+reasoning is the **mean of 2 greedy generations per face**. Every timed call is bracketed by
+`torch.cuda.synchronize()`.
+
+| Image | Faces evaluated | Path | Detect | Classify | Reason / face | Total, `top1` | Total, `all` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `test_images/omi.jpg` (1644x1534) | 1 | passthrough | 21.1 ms | 151.4 ms | 65.6 s | **65.8 s** | 65.8 s |
+| 4-photo montage (1600x1600) | 4 | per_face | 21.7 ms | 518.9 ms | 64.9 - 114.6 s | **115.1 s** | 326.0 s |
+| FFIW `test_00000929/053.png` | 2 of 4 (2 below 96 px) | per_face | 13.6 ms | 256.8 ms | 117.8, 118.0 s | **118.3 s** | 236.1 s |
+
+The 4-face image is a montage of four real photographs (tiled 2x2), because FFIW's only rated
+4-face frame has just two faces above the 96 px gate — it is measured separately in row 3, where
+it shows exactly what the gate is doing: two faces judged, two reported `face_too_small`.
+
+**What the numbers say:**
+
+1. **Reasoning is ~99 % of wall time at every face count**: 65.6 s of generation vs 0.15 s of
+   classification for one face, and 64.9-114.6 s vs 0.52 s for four. Classification is not the
+   cost centre and batching it harder would optimise nothing.
+2. **`top1` saves 2.8x on a 4-face image**: 115.1 s instead of 326.0 s, i.e. 211 s per image for
+   reasoning about three faces that are not the highest-risk one. This is the whole justification
+   for the default; `all` is a deliberate, expensive opt-in.
+3. **Per-call reasoning cost varies 65-115 s** because generation length varies under the
+   512-token cap (greedy stop at `</answer>`). `--max_new_tokens` is therefore the real latency
+   lever, ahead of anything in the crop or batching path.
+4. **Classifier cost per face is ~0.13 s** (151 ms for 1, 519 ms for 4), and detection is
+   13-22 ms regardless of frame size (the detector letterboxes to `imgsz=640`).
+5. **Screening without reasoning is 0.17 s (1 face) to 0.54 s (4 faces)** by the same medians
+   (0.6-2.2 s if the occasional 3-4 s classify outlier is averaged in). That is the mode for
+   volumes; reserve reasoning for escalated cases.
+
+Measurement caveats: single machine, CUDA clocks not locked, and roughly one call in fifteen
+lands 3-4 s outside the median on classify (allocator growth), which is why medians are quoted
+rather than means. The montage is synthetic in composition though not in pixels. The single-image
+path (§6 of `INTEGRATION_GUIDE.md`) adds nothing here: passthrough is the 1-face row.
+
+---
+
+## 6. Limitations
 
 - **No ground-truth face boxes** in this copy of FFIW, so the plan's §8.4 detector recall
   (detected vs GT boxes, IoU >= 0.5) **was not measured**. Only document-level numbers exist.
@@ -164,13 +205,19 @@ range (0.073-0.088) rather than being raised to "be safe".
 
 ---
 
-## 6. Reproducing
+## 7. Reproducing
 
 ```bash
 python face_calibration.py --adapter_dir ./runs/intern_fused_ground/adapters \
     --n_per_class 200 --out runs/calibration/ffiw_report.json     # ~15 min, A5000
 python face_calibration.py --analyze_only --out runs/calibration/ffiw_report.json
 python test_calibration.py                                        # analysis unit tests
+
+# stage latency (section 5); --skip_reason gives the cheap detect/classify pass
+python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \
+    --out runs/timing/face_timing.json
+python face_timing.py --adapter_dir ./runs/intern_fused_ground/adapters \
+    --skip_reason --repeats_fast 15 --out runs/timing/face_timing_fast.json
 ```
 
 Frames are cached to `runs/calibration/ffiw_cache.jsonl` as they are scored, so an
