@@ -215,6 +215,7 @@ calibration point in `config.yaml`), because margin-padded crops shift the distr
 | `inference.py` | **untouched** | Validated single-image behaviour must not move; it stays the reference and is the passthrough target (§5.1) |
 | `config.yaml` | +`face_pipeline:` block | detector/crop/aggregation defaults |
 | `requirements.txt` | +`ultralytics` pin, +`opencv-python-headless` | detection |
+| `fetch_detector_weights.py` | **new** | Pinned, SHA-256-verified download of the detector weights (they stay out of git) |
 | `run_faces.bat` | **new** (optional) | Launcher in the style of `run_intern_v2_ground.bat` |
 | `test_face_pipeline.py` | **new** | `unittest` suite matching `test_regression_fixes.py` conventions |
 
@@ -222,7 +223,9 @@ calibration point in `config.yaml`), because margin-padded crops shift the distr
 
 ```yaml
 face_pipeline:
-  detector_weights: "./models/yolov8n-face.pt"   # or yolov8m-face.pt
+  # fetched + digest-verified by fetch_detector_weights.py (see 6.3); no upstream
+  # URL serves a file literally named yolov8n-face.pt, this is the local name
+  detector_weights: "./models/yolov8n-face.pt"
   detector_imgsz: 640
   detector_conf: 0.25
   detector_iou: 0.50
@@ -256,9 +259,31 @@ pip check
 python -c "import torch, numpy, ultralytics; print(torch.__version__, numpy.__version__, ultralytics.__version__)"
 ```
 
-`opencv-python-headless` (not `opencv-python`) avoids a GUI dependency on the inference box.
-Commit the resolved versions to `requirements.txt` only after `pip check` is clean and the
+`opencv-python-headless` (not `opencv-python`) avoids a GUI dependency on the inference box; it
+supplies the same `cv2` module, so `pip check` keeps one benign line about the `opencv-python`
+distribution name. Commit the resolved versions to `requirements.txt` only after the
 `test_regression_fixes.py` suite still passes.
+
+### 6.4 Detector weights (pinned, not committed)
+
+`models/` is gitignored, and no upstream URL serves a file literally named
+`yolov8n-face.pt` — so the weights are fetched by name with their identity checked:
+
+```bash
+python fetch_detector_weights.py            # download if absent, verify either way
+python fetch_detector_weights.py --check    # verify only, no network
+```
+
+| Field | Value |
+| --- | --- |
+| Source | `arnabdhar/YOLOv8-Face-Detection` → `model.pt` (Hugging Face, AGPL-3.0) |
+| Local name | `models/yolov8n-face.pt` |
+| Size | 6,247,065 bytes |
+| SHA-256 | `37396ac6a9601ab9f5177e4231b09d81cf6f65a7f22db99ec3b36ab63f674e71` |
+
+A mismatch aborts the fetch instead of leaving a wrong checkpoint in place: which faces get
+cropped changes every downstream verdict, so the detector is part of the measurement, not a
+detail. If upstream changes the artifact, update the pin deliberately.
 
 **License note:** ultralytics is AGPL-3.0. If this pipeline ships inside a closed-source product,
 either accept AGPL, buy the commercial licence, or swap the detector behind the same

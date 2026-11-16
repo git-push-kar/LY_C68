@@ -23,6 +23,20 @@ einops>=0.7.0
 timm>=0.9.0
 tokenizers>=0.15.0
 
+# Face detection (multi-face pipeline, see YOLO_MULTIFACE_PIPELINE_PLAN.md)
+# Installed with --no-deps on purpose: ultralytics declares torch/torchvision/numpy
+# and would otherwise upgrade the pinned stack above (verified working set stays
+# torch 2.6.0+cu126 / numpy 2.2.6 / transformers 4.37.2).
+# opencv-python-HEADLESS provides the same `cv2` module without GUI libs, so
+# `pip check` reports one benign line ("ultralytics requires opencv-python");
+# swap to opencv-python only if a fully clean pip check matters more than
+# headless portability.
+ultralytics==8.3.253
+opencv-python-headless
+polars
+polars-runtime-32
+ultralytics-thop
+
 # Scientific & Visualization
 numpy>=1.24.0,<2.3.0
 Pillow>=10.0.0
