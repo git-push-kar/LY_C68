@@ -182,7 +182,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Per-stage face pipeline timing")
     p.add_argument("--adapter_dir", default=None)
     p.add_argument("--checkpoint", default=None)
-    p.add_argument("--base_model", default="./models/internvl3_2b_lr_fused")
+    p.add_argument("--base_model", default="./models/InternVL3-2B")
     p.add_argument("--arch_version", default="v2")
     p.add_argument("--attn_implementation", default="sdpa")
     p.add_argument("--device", default=None)

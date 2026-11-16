@@ -60,7 +60,7 @@ The **DeepfakeReasoningModel v2** is a multimodal deepfake detection and explain
 * **Minimum GPU:** NVIDIA GPU with $\ge 12\text{ GB}$ VRAM (e.g., RTX 3060 12GB, RTX 4070, T4).
 * **Recommended GPU (Batch size $\ge 4$):** NVIDIA GPU with $\ge 16\text{ GB}$–$24\text{ GB}$ VRAM (e.g., RTX 3090, RTX 4090, RTX A5000, A10, V100, A100).
 * **RAM:** Minimum 16 GB system memory (32 GB recommended).
-* **Disk Space:** ~8.5 GB for full-checkpoint deployment (fused base `model.safetensors` ~4.18 GB + `runs/intern_fused_ground/checkpoints/best.pth` ~4.36 GB), or ~4.4 GB for adapter deployment (fused base ~4.18 GB + `llm_adapter` ~147.8 MB + `vision_adapter` ~12.6 MB + `custom_heads` ~26.5 MB).
+* **Disk Space:** ~8.0 GB for full-checkpoint deployment (vanilla base `model.safetensors` ~3.89 GB + `runs/intern_v2_ground/checkpoints/best.pth` ~4.07 GB), or ~4.1 GB for adapter deployment (vanilla base ~3.89 GB + `llm_adapter` ~141 MB + `vision_adapter` ~13 MB + `custom_heads` ~26 MB).
 
 ### 2.2 Pinned Python Dependencies
 ```txt
@@ -157,21 +157,30 @@ def compute_fft_features(img: Image.Image, target_size: int = 224) -> torch.Tens
 
 ## 5. Model Initialization and Checkpoint Loading
 
-### 5.1 Base Model Architecture & Fusion Provenance (`internvl3_2b_lr_fused`)
+> **Deployed model (current):** the shipped detector is the **grounded vanilla** checkpoint
+> `runs/intern_v2_ground/checkpoints/best.pth` (epoch 3, `best_auc` 0.990270, 1,328 tensors,
+> ~4.07 GB) attached to the **upstream `./models/InternVL3-2B`** base, with the adapter package in
+> `runs/intern_v2_ground/adapters/` (18/18 verdict parity, Δp_fake = 0). Lineage A
+> (`internvl3_2b_lr_fused` + `runs/intern_fused_ground`) is retained as the comparison model —
+> it is *not* what `config.yaml`, `inference_faces.py`, `face_calibration.py`, `face_timing.py`
+> or `verify_adapter_parity.py` default to any more. §5.1 documents the fused base for completeness
+> because it is still the foundation of the Lineage A numbers in the paper.
+
+### 5.1 Base Model Architecture & Fusion Provenance (`internvl3_2b_lr_fused` — Lineage A, comparison)
 The foundation weights located at `./models/internvl3_2b_lr_fused` are not an off-the-shelf vanilla checkpoint. The base model is **InternVL3-2B (InternViT-300M + Qwen2.5-1.5B)** that was pre-adapted using **Parameter-Efficient Fine-Tuning (PEFT/LoRA) on a specialized Logical Reasoning (LR) dataset**, after which the LoRA adapter weights were **permanently merged and fused back into the base transformer matrices**:
 $$W_{\text{fused}} = W_{\text{base}} + \frac{\alpha_{\text{LR}}}{r_{\text{LR}}} (B_{\text{LR}} \cdot A_{\text{LR}})$$
 
 **Why this matters for engineering and deployment:**
 * **Enhanced Causal Discipline:** Pre-adapting on logical reasoning prevents the language model from jumping to intuitive, superficial conclusions or outputting generic mode-collapsed text. It establishes structured deductive pathways before deepfake-specific training.
 * **Standard Hugging Face Format:** Because the adapter was merged into the base weights, `./models/internvl3_2b_lr_fused` functions as a standard, self-contained Hugging Face model directory (`config.json`, `model.safetensors`). System integrators do not need to download or load a secondary base adapter at runtime.
-* **Independent Forensic Adapter Injection:** The fine-tuned forensic weights from `./runs/intern_fused_ground/checkpoints/best.pth` inject their own independent, task-specific LoRA adapters and custom classifier heads on top of this reasoning-enhanced base model.
+* **Independent Forensic Adapter Injection:** The fine-tuned forensic weights inject their own independent, task-specific LoRA adapters and custom classifier heads on top of the base model. The **deployed** package does this on the upstream vanilla base (`runs/intern_v2_ground` + `./models/InternVL3-2B`); the Lineage A package does the same on the LR-fused base (`runs/intern_fused_ground` + `./models/internvl3_2b_lr_fused`).
 
 ### 5.2 Hybrid Weight Loading Pipeline
 The runtime loading pipeline operates in two clean phases:
-1. **Base Fused Model:** Loaded directly via Hugging Face `AutoModel.from_pretrained()`.
+1. **Base Model:** Loaded directly via Hugging Face `AutoModel.from_pretrained()` — `./models/InternVL3-2B` for the deployed model.
 2. **Forensic Checkpoint State Dict:** Loaded into the instantiated model using PyTorch's native `load_state_dict(..., strict=False)`.
 
-> **Checkpoint-type note (verified 2026-10-14):** `runs/intern_fused_ground/checkpoints/best.pth` (epoch 3, 1,328 tensors, ~4.36 GB) is a **whole-model** checkpoint — frozen fused backbone + 584 LoRA tensors (392 LLM r=64 + 192 vision r=16) + 59 custom-head tensors — **not** adapter-only. Use §5.2 when you can ship the 4.36 GB file; use §5.3 (adapters, ~187 MB total) for lightweight redistribution. Both paths require the **same** base: `./models/internvl3_2b_lr_fused`.
+> **Checkpoint-type note (deployed model, verified 2026-11-16):** `runs/intern_v2_ground/checkpoints/best.pth` (epoch 3, `best_auc` 0.990270, 1,328 tensors, ~4.07 GB) is a **whole-model** checkpoint — frozen vanilla backbone + 584 LoRA tensors (392 LLM r=64 + 192 vision r=16) + 59 custom-head tensors (`cls_head` frozen during grounded post-training) — **not** adapter-only. Use §5.2 when you can ship the 4.07 GB file; use §5.3 (adapters, ~180 MB total) for lightweight redistribution. Both paths require the **same** base: `./models/InternVL3-2B`. Lineage A equivalents: `runs/intern_fused_ground/checkpoints/best.pth` (~4.36 GB) on `./models/internvl3_2b_lr_fused`.
 
 ```python
 import torch
@@ -179,8 +188,8 @@ from transformers import AutoTokenizer
 from model import DeepfakeReasoningModel
 
 def load_detector_service(
-    model_path: str = "./models/internvl3_2b_lr_fused",
-    checkpoint_path: str = "./runs/intern_fused_ground/checkpoints/best.pth",
+    model_path: str = "./models/InternVL3-2B",
+    checkpoint_path: str = "./runs/intern_v2_ground/checkpoints/best.pth",
     device: str = "cuda"
 ):
     print(f"Loading base model from {model_path}...")
@@ -210,15 +219,15 @@ def load_detector_service(
 Generated by the updated `extract_adapters.py` (defaults already point at the final model):
 ```bash
 python extract_adapters.py \
-    --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
-    --output_dir ./runs/intern_fused_ground/adapters \
-    --base_model ./models/internvl3_2b_lr_fused
+    --checkpoint ./runs/intern_v2_ground/checkpoints/best.pth \
+    --output_dir ./runs/intern_v2_ground/adapters \
+    --base_model ./models/InternVL3-2B
 ```
-Output package (`runs/intern_fused_ground/adapters/`, see `extraction_report.json`):
+Output package (`runs/intern_v2_ground/adapters/`, see `extraction_report.json`):
 | Path | Contents | Size |
 | :--- | :--- | :--- |
-| `llm_adapter/adapter_model.safetensors` + `adapter_config.json` | Qwen2.5 LoRA, r=64/a=128, 392 tensors, 73,859,072 params, bf16 | ~147.8 MB |
-| `vision_adapter/adapter_model.safetensors` + `adapter_config.json` | InternViT LoRA, r=16/a=32, targets `qkv/proj/fc1/fc2`, 192 tensors, 6,291,456 params, bf16 | ~12.6 MB |
+| `llm_adapter/adapter_model.safetensors` + `adapter_config.json` | Qwen2.5 LoRA, r=64/a=128, 392 tensors, 73,859,072 params, bf16 | ~141 MB |
+| `vision_adapter/adapter_model.safetensors` + `adapter_config.json` | InternViT LoRA, r=16/a=32, targets `qkv/proj/fc1/fc2`, 192 tensors, 6,291,456 params, bf16 | ~13 MB |
 | `custom_heads/custom_heads.safetensors` | `cls_head` + `attn_pool` + `freq_branch` + `custom_projector` + `domain_router`, 59 tensors, 13,257,034 params | ~26.5 MB |
 
 The two adapters cooperate at inference: the **vision adapter** enriches every image forward (classification features + attention hotspots + visual tokens), the **LLM adapter** drives the grounded reasoning generation, and the **custom heads** supply the classifier/pooling/spectral math the adapters alone cannot reproduce (`cls_head` was frozen during ground post-training but is still load-bearing at inference).
@@ -231,8 +240,8 @@ from peft import PeftModel
 from model import DeepfakeReasoningModel
 
 def load_detector_service_adapters(
-    model_path: str = "./models/internvl3_2b_lr_fused",
-    adapter_dir: str = "./runs/intern_fused_ground/adapters",
+    model_path: str = "./models/InternVL3-2B",
+    adapter_dir: str = "./runs/intern_v2_ground/adapters",
     device: str = "cuda",
 ):
     import os
@@ -485,12 +494,14 @@ In production environments, automated decision policies should follow these rule
 | :--- | :--- | :--- |
 | `model.py` | Complete PyTorch model definition (`DeepfakeReasoningModel`) | Core architecture import |
 | `inference.py` | Command-line inference script with telemetry builders | Logic reference & CLI testing |
-| `extract_adapters.py` | PEFT + custom-head extractor (defaults → `intern_fused_ground` / `internvl3_2b_lr_fused` base) | Build lightweight deployable artifact |
+| `extract_adapters.py` | PEFT + custom-head extractor (experiment defaults → Lineage A `intern_fused_ground` / `internvl3_2b_lr_fused`; the deployed package is built with the §5.3 command) | Build lightweight deployable artifact |
 | `dataset.py` | Data loaders, transformations, and FFT calculators | Preprocessing reference |
 | `config.yaml` | Hyperparameters, paths, and benchmark metrics | Configuration defaults |
-| `./models/internvl3_2b_lr_fused` | Base fused Hugging Face weights (~4.18 GB `model.safetensors`) | Required model directory (both deployment paths) |
-| `./runs/intern_fused_ground/checkpoints/best.pth` | Peak whole-model checkpoint, epoch 3 (1,328 tensors, ~4.36 GB; VaAcc 96.00%, VaAUC 0.993647) | Required weights file (full-checkpoint path, §5.2) |
-| `./runs/intern_fused_ground/adapters/` | Deployable adapter package: `llm_adapter/` (~147.8 MB) + `vision_adapter/` (~12.6 MB) + `custom_heads/` (~26.5 MB) + `extraction_report.json` | Required weights dir (adapter path, §5.3) |
+| `./models/InternVL3-2B` | Upstream vanilla base Hugging Face weights (~3.89 GB `model.safetensors`) | Required model directory (both deployment paths) |
+| `./runs/intern_v2_ground/checkpoints/best.pth` | **Deployed** whole-model checkpoint, epoch 3 (1,328 tensors, ~4.07 GB; VaAcc 95.23%, VaAUC 0.990270) | Required weights file (full-checkpoint path, §5.2) |
+| `./runs/intern_v2_ground/adapters/` | **Deployed** adapter package: `llm_adapter/` (~141 MB) + `vision_adapter/` (~13 MB) + `custom_heads/` (~26 MB) + `extraction_report.json` | Required weights dir (adapter path, §5.3) |
+| `./models/internvl3_2b_lr_fused` | Lineage A comparison base (LR-fused, ~3.89 GB) | Comparison only — not deployed |
+| `./runs/intern_fused_ground/` | Lineage A comparison checkpoint + adapters (epoch 3, ~4.36 GB) | Comparison only — not deployed |
 | `adapter_loader.py` | Strict adapter/base loader (`load_model`, `attach_adapters`) | Same weights, verified key-for-key |
 | `face_detect.py` | YOLOv8-face detector + context-crop geometry (`FaceBox`, `crop_with_context`, `filter_faces`) | Multi-face routing (§11) |
 | `inference_faces.py` | Multi-face CLI: detect → batch classify → per-face telemetry → reasoning | Multi-face entry point (§11) |
@@ -552,7 +563,7 @@ Directly:
 
 ```bash
 python inference_faces.py \
-    --adapter_dir ./runs/intern_fused_ground/adapters \
+    --adapter_dir ./runs/intern_v2_ground/adapters \
     --images test_images/3-people.jpg test_images/multiple-faces.jpg \
     --json_out runs/face_results.json
 ```

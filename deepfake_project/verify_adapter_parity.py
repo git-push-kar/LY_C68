@@ -43,9 +43,9 @@ from adapter_loader import attach_adapters, load_backbone, load_checkpoint
 from dataset import compute_fft_features
 from inference import build_transform
 
-DEFAULT_BASE = "./models/internvl3_2b_lr_fused"
-DEFAULT_ADAPTERS = "./runs/intern_fused_ground/adapters"
-DEFAULT_CKPT = "./runs/intern_fused_ground/checkpoints/best.pth"
+DEFAULT_BASE = "./models/InternVL3-2B"
+DEFAULT_ADAPTERS = "./runs/intern_v2_ground/adapters"
+DEFAULT_CKPT = "./runs/intern_v2_ground/checkpoints/best.pth"
 DEFAULT_GLOB = "test_images/real/*"
 
 

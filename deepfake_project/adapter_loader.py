@@ -16,13 +16,13 @@ Usage:
     from adapter_loader import load_model
 
     model, tokenizer, info = load_model(
-        base_model="./models/internvl3_2b_lr_fused",
-        adapter_dir="./runs/intern_fused_ground/adapters",
+        base_model="./models/InternVL3-2B",
+        adapter_dir="./runs/intern_v2_ground/adapters",
     )
     # or
     model, tokenizer, info = load_model(
-        base_model="./models/internvl3_2b_lr_fused",
-        checkpoint="./runs/intern_fused_ground/checkpoints/best.pth",
+        base_model="./models/InternVL3-2B",
+        checkpoint="./runs/intern_v2_ground/checkpoints/best.pth",
     )
 """
 
@@ -294,7 +294,7 @@ def load_checkpoint(model: DeepfakeReasoningModel, checkpoint: str) -> Dict[str,
 
 # ── Unified entry point ──────────────────────────────────────────────────────
 
-def load_model(base_model: str = "./models/internvl3_2b_lr_fused",
+def load_model(base_model: str = "./models/InternVL3-2B",
                adapter_dir: Optional[str] = None,
                checkpoint: Optional[str] = None,
                arch_version: str = "v2",

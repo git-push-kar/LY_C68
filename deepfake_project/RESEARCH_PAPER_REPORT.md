@@ -14,7 +14,7 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
-**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). The newest grounded vanilla-base model is now fully benchmarked: it reaches **93.38% in-domain accuracy (AUC 0.9872)** — below the deployed LR-fused model's **94.10% / 0.9891** — but trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), giving **87.09% mean accuracy / AUC 0.9455**. Grounding is therefore not a free accuracy gain.
+**Verified results.** On the 4,000-sample balanced validation set, the grounded LR-fused model reaches **96.00% accuracy / AUC 0.9936** after three epochs; the grounded vanilla-base continuation reaches **95.23% / AUC 0.9903**. On the 52,266-sample HydraFake test benchmark, the best mean AUC across evaluated checkpoints is **0.9479**, with **cross-model AUC 0.9995** in that checkpoint, a best-observed **cross-forgery AUC of 0.9510**, and cross-domain AUC 0.8680; cross-forgery and cross-domain accuracy remain the weak points (76–83%). **The released detector is the grounded vanilla checkpoint** (93.38% in-domain, AUC 0.9872; 87.09% mean accuracy, AUC 0.9455), chosen for portability onto the unmodified upstream base; its adapter package passes verdict parity against the checkpoint (18/18, Δp_fake = 0). Measured on the same benchmark, the LR-fused comparison model is **stronger: 94.10% in-domain, 88.13% mean accuracy, and +4.4 pp on cross-forgery** — that gap is reported, not hidden. Within the vanilla lineage, grounding still trails its ungrounded predecessor on cross-forgery (78.13% vs 81.51%), so grounding is not a free accuracy gain.
 
 A throughput study run on 21–23 October 2026 measured the grounded stage at **2.74–2.98 s/step** with batch 4 × accumulation 8 (effective 32). Doubling the micro-batch to 8 (effective 64) did **not** raise throughput (6.20 s/step; 1.29 vs 1.34–1.46 samples/s) and halved the optimizer updates, degrading one-epoch validation accuracy from ~87.5% to 84.95%.
 
@@ -238,7 +238,7 @@ AdamW; LoRA parameters at $5\times10^{-5}$; custom heads at $1\times10^{-4}$ (2�
 | Foundation | `internvl3_2b_lr_fused` | `InternVL3-2B` |
 | Stage 1–2 output | `runs/intern_fused` → `ep006.pth` (val AUC 0.9915) | `runs/intern_v2` → `ep006.pth` (val AUC 0.9848) |
 | Post-stage α | DPO → `runs/intern_fused_dpo` | DPO → `runs/intern_v2_dpo` |
-| Post-stage β | Grounded → `runs/intern_fused_ground` (**deployed checkpoint**) | Grounded → `runs/intern_v2_ground` (**latest trained**) |
+| Post-stage β | Grounded → `runs/intern_fused_ground` (comparison) | Grounded → `runs/intern_v2_ground` (**deployed checkpoint**) |
 | Stage-4 wall time | 8 h 27 m – 14 h 02 m per epoch (host load variance) | 6 h 41 m – 7 h 15 m per epoch (21 h 11 m total) |
 
 The lineages are identical through epoch 6 and diverge afterwards, which is what makes the comparison informative: any difference at Stage 4 is attributable to the foundation weights (and to host-level variance, which is not negligible — see §8).
@@ -260,6 +260,15 @@ Test composition (HydraFake): **ID** 12,819 (FaceForensics++, Hallo2, Midjourney
 ---
 
 ## 5. Results
+
+> **Deployed model:** the shipped detector is the **grounded vanilla** checkpoint
+> (`runs/intern_v2_ground/checkpoints/best.pth`, epoch 3, `best_auc` 0.990270) on the upstream
+> `./models/InternVL3-2B` base, with adapters in `runs/intern_v2_ground/adapters/` verified at
+> 18/18 verdict parity (§9.3). Its results are §5.2 (§5.3 row `intern_v2_ground`) and its
+> calibration is §5.4. Lineage A (`intern_fused_ground`, LR-fused) is retained throughout as the
+> **comparison** model: it is ~1.0 pp better on the macro benchmark and ~4.4 pp better on
+> cross-forgery, and both facts are reported rather than reconciled. The deployed choice trades
+> that accuracy for an unmodified upstream base.
 
 ### 5.1 Validation dynamics — LR-fused grounded (Lineage A)
 
@@ -478,8 +487,8 @@ python eval.py --dataset_root ./datasets/hydrafake \
 
 | Artifact | Contents | Size / params |
 | :--- | :--- | :--- |
-| `runs/intern_fused_ground/adapters/` | LLM adapter (392 tensors, 73,859,072), vision adapter (192 tensors, 6,291,456), custom heads (59 tensors, 13,256,070 params + 964 BatchNorm buffers) | ~179 MB, attach to `models/internvl3_2b_lr_fused` |
-| `runs/intern_v2_ground/adapters/` | Same structure, extracted against `models/InternVL3-2B` | ~179 MB, attach to the **vanilla** base |
+| `runs/intern_v2_ground/adapters/` | **Deployed.** LLM adapter (392 tensors, 73,859,072), vision adapter (192 tensors, 6,291,456), custom heads (59 tensors, 13,256,070 params), extracted against `models/InternVL3-2B` | ~180 MB, attach to the **vanilla** base |
+| `runs/intern_fused_ground/adapters/` | Comparison. Same structure on the LR-fused base (+964 BatchNorm buffers in the report of record) | ~179 MB, attach to `models/internvl3_2b_lr_fused` |
 
 Neither package reproduces classifier scores without its matching base and the custom heads; the adapters must travel together. Adapter files passed exact safetensors round-trip and clean-base attach checks (tensor-for-tensor); the 59 custom-head tensors passed round-trip but are loaded via `strict=False`, which the extractor does not exercise end to end. Neither `eval.py` nor `inference.py` accepts an adapter directory, so adapter-only deployment requires a loader not included in the repository. Full artifact details, hashes and the DPO package's missing-heads caveat are documented in [RESEARCH_PAPER_REPORT_VANILLA_ADAPTER_ONLY.md](RESEARCH_PAPER_REPORT_VANILLA_ADAPTER_ONLY.md).
 

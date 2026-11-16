@@ -23,11 +23,11 @@ decision; the LLM answer is reported for audit and any disagreement sets
 flags.model_disagreement and forces human review.
 
 Examples:
-    python inference_faces.py --adapter_dir ./runs/intern_fused_ground/adapters \
+    python inference_faces.py --adapter_dir ./runs/intern_v2_ground/adapters \
         --images test_images/multiple-faces.jpg test_images/real/161022.jpg
 
     # reference behaviour, no detection at all (identical to inference.py)
-    python inference_faces.py --checkpoint ./runs/intern_fused_ground/checkpoints/best.pth \
+    python inference_faces.py --checkpoint ./runs/intern_v2_ground/checkpoints/best.pth \
         --no_detect --images test_images/real/161022.jpg
 """
 
@@ -66,7 +66,7 @@ from inference import (
 def parse_args():
     p = argparse.ArgumentParser(
         description="Detect, crop and classify every face in an image")
-    p.add_argument("--base_model", default="./models/internvl3_2b_lr_fused")
+    p.add_argument("--base_model", default="./models/InternVL3-2B")
     p.add_argument("--adapter_dir", default=None,
                    help="adapter package (llm_adapter + vision_adapter + custom_heads)")
     p.add_argument("--checkpoint", default=None,
