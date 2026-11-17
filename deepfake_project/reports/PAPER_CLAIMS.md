@@ -78,7 +78,10 @@ an optimisation one.
 Acc/precision/recall intervals are Wilson 95 %; AUC intervals are Hanley-McNeil approximations
 (the log has no per-sample scores). Threshold-calibrated macro mean, grounded vanilla checkpoint:
 89.50 % accuracy / 89.62 % F1 — still without an interval, and it is a per-split-optimal-threshold
-total, so it is optimistic.
+total, so it is optimistic. The LR-fused comparison checkpoint calibrates to **89.97 % / 90.69 %**
+(`runs/timing/epoch3_calib/`, 2026-11-17 01:30–02:50, 51 min, which reproduces the §1.1 base
+accuracies exactly before calibration), so calibrating both lineages narrows the macro gap from
+1.04 to 0.47 pp without reordering them.
 
 Rules for writing these: they are **log-derived**, not re-runnable from `config.yaml`, whose
 metrics block is stale (see report §5.3). Do not describe the CD number as a solved problem —
@@ -205,8 +208,9 @@ consistency term active.
 **DO NOT CLAIM** that DPO improves trace quality — no rubric exists (§8) and reward accuracy is not
 one. Do not claim preference tuning *caused* the disagreement rate: 18 hand-picked images, no
 counterfactual, association only. Do not claim Stage 3 degrades telemetry — it never trains it; the
-heads are frozen and unchanged, not damaged. And do not quote the 89.60 calibrated mean as the best
-model: four per-split thresholds fitted and scored on the same split.
+heads are frozen and unchanged, not damaged. And do not quote a calibrated mean (89.97 fused
+grounded, 89.60 fused DPO, 89.50 deployed) as the best model: every one of them fits four per-split
+thresholds and scores them on the same split, so §1's uncalibrated table stays the reference.
 
 ## 2. Adapter deployment is lossless
 

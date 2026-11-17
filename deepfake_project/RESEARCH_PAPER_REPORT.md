@@ -333,11 +333,11 @@ decided against shipping it anyway:
    cross-domain differ by 0.19 and 1.15 pp and the validation sets are 0.77 pp apart (95.23% vs
    96.00%). **Why logical-reasoning pre-adaptation helps that particular split is not established
    here** — this work varies the foundation, not the compression or generator type, so no mechanism
-   is claimed; §8 lists the missing ablation. Calibration at
-   $T^*\approx0.06$ moves the deployed model's CF accuracy 78.13 → 86.27 (+8.1 pp), larger than the
-   4.43 pp gap — but that is a threshold fitted and evaluated on the same split, so it is a
-   diagnostic, not a gain the shipped default ($T=0.5$) realises (§5.4). The deployed model also
-   scores slightly **better** on the independent FFIW face set (0.8944 vs 0.8845 doc AUC at the
+   is claimed; §8 lists the missing ablation. Calibration narrows the gap without closing it: at
+   each model's own CF optimum ($T^*=0.06$ for both) the comparison reaches **89.25%** against
+   **86.27%** for the deployed model, so 4.43 pp becomes 2.98 pp — and those thresholds are fitted
+   and scored on the same split, so neither figure is a deployable gain (§5.4). The deployed model
+   also scores slightly **better** on the independent FFIW face set (0.8944 vs 0.8845 doc AUC at the
    shipped margin).
 3. **The foundation is not the interesting variable.** The report's contribution is the three-head
    architecture, the grounding objective and the telemetry channel; those are identical in both
@@ -447,17 +447,28 @@ A metrics block in `config.yaml` records slightly different accuracies (ID 92.01
 
 ### 5.4 Threshold calibration
 
-Calibration has been run for the **deployed** grounded vanilla checkpoint and both DPO checkpoints
-(`--calibrate`). The deployed row is the one that matters for shipped thresholds; the DPO rows show
-what an additional preference stage would buy. Per-split optima and resulting accuracy:
+Calibration has been run for the **deployed** grounded vanilla checkpoint, the **LR-fused comparison
+checkpoint** and both DPO checkpoints, all with `--calibrate`. The deployed row is the one that
+matters for shipped thresholds; the comparison rows say what the other lineages would buy. Per-split
+optima and resulting accuracy (the fused grounded run is `runs/timing/epoch3_calib/`, 2026-11-17
+01:30–02:50, 51 min, and it reproduces the uncalibrated base accuracies of §5.3 exactly):
 
 | Checkpoint | ID T* / acc | CM T* / acc | CF T* / acc | CD T* / acc | Calibrated mean acc / F1 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **`intern_v2_ground`** (deployed) | 0.14 / 95.00% | 0.22 / 99.34% | 0.06 / 86.27% | 0.09 / 77.39% | 89.50% / 89.62% |
-| `intern_fused_dpo` | 0.11 / 93.92% | 0.16 / 99.07% | 0.06 / 88.85% | 0.09 / 76.56% | **89.60% / 90.27%** |
+| `intern_fused_ground` (comparison) | 0.15 / 94.93% | 0.17 / 99.24% | 0.06 / 89.25% | 0.09 / 76.45% | **89.97% / 90.69%** |
+| `intern_fused_dpo` | 0.11 / 93.92% | 0.16 / 99.07% | 0.06 / 88.85% | 0.09 / 76.56% | 89.60% / 90.27% |
 | `intern_v2_dpo` | 0.09 / 94.07% | 0.13 / 99.42% | 0.06 / 85.76% | 0.07 / 78.16% | 89.35% / 89.50% |
 
-The optimal thresholds sit far below 0.5, and calibration buys most on CF (+8.4 pp for the LR-fused DPO model, +9.6 pp for the vanilla DPO model, +8.1 pp for the grounded vanilla model). This is a **post-hoc diagnostic**, not a deployable result: the thresholds are tuned and evaluated on the same split. The fused grounded checkpoint has no archived calibration run.
+The optimal thresholds sit far below 0.5 in every checkpoint, and calibration buys most on CF:
+**+8.1 pp** for the grounded vanilla model, **+6.7 pp** for the fused grounded comparison, +8.4 pp
+for the fused DPO model and +9.6 pp for the vanilla DPO model. Every checkpoint now has an archived
+calibration run, and the comparison still wins on the calibrated mean — 89.97% vs 89.50%, a 0.47 pp
+edge that is smaller than the 1.04 pp uncalibrated gap but in the same direction. **Calibration does
+not reorder the lineages.** It is also a **post-hoc diagnostic**, not a deployable result: the
+thresholds are tuned and evaluated on the same split, so the +6.7 to +9.6 pp CF figures are upper
+bounds on what a transferred threshold would achieve. None of these values replaces the $T=0.5$
+numbers in §5.3.
 
 ### 5.5 Grounded-stage throughput and batch-size study (21–23 Oct 2026)
 
