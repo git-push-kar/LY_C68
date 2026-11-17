@@ -421,8 +421,11 @@ is the reason it is not the shipped model despite the better numbers.
 
 ### 5.3 Held-out benchmark (52,266 samples)
 
-Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC. The **deployed `intern_v2_ground` row** is the 31 Oct 2026 measurement (00:23–01:14, **51 min 20 s**,
-`epoch=3`, `best_auc=0.990270`); it is the model of record. The `intern_fused_ground` comparison row
+Verified from archived `eval_*.log` files. Each cell is **accuracy / AUC**; the last column is macro-mean accuracy / F1 / AUC. The **deployed `intern_v2_ground` row** was re-measured on 2026-11-17 11:09–12:01
+(**52 min**, `epoch=3`, `best_auc=0.990270`) in the same `--calibrate` pass that produces §5.4, so
+both lineages now carry same-day numbers on the same GPU and code; that run reproduces the archived
+31 Oct 2026 measurement (00:23–01:14, 51 min 20 s) digit for digit, which stays the original
+record. The `intern_fused_ground` comparison row
 was re-measured on 2026-11-16 22:52–23:43 from its own epoch-3 checkpoint (`epoch=3`,
 `best_auc=0.993646875`, missing=0 / unexpected=0) over all 52,266 samples at batch 8 in bf16,
 **51 min** on the A5000. It replaces an earlier epoch-1 evaluation of the same directory
@@ -461,8 +464,10 @@ A metrics block in `config.yaml` records slightly different accuracies (ID 92.01
 Calibration has been run for the **deployed** grounded vanilla checkpoint, the **LR-fused comparison
 checkpoint** and both DPO checkpoints, all with `--calibrate`. The deployed row is the one that
 matters for shipped thresholds; the comparison rows say what the other lineages would buy. Per-split
-optima and resulting accuracy (the fused grounded run is `runs/timing/epoch3_calib/`, 2026-11-17
-01:30–02:50, 51 min, and it reproduces the uncalibrated base accuracies of §5.3 exactly):
+optima and resulting accuracy; the deployed row is `runs/timing/vanilla_calib/` (2026-11-17
+11:09–12:01, 52 min) and the fused row is `runs/timing/epoch3_calib/` (2026-11-17 01:30–02:50,
+51 min). Both are same-day runs, and both reproduce the uncalibrated base accuracies of §5.3
+exactly before calibration:
 
 | Checkpoint | ID T* / acc | CM T* / acc | CF T* / acc | CD T* / acc | Calibrated mean acc / F1 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -718,8 +723,8 @@ python inference.py --config config.yaml \
 | Architecture, losses, telemetry format | `model.py`, `train.py`, `dataset.py` |
 | Parameter counts | run logs (`launch_stdout.log`, `…/logs/train.log`), `extract_adapters.py` report |
 | Validation dynamics | `runs/intern_fused_ground/logs/epochs.csv`, `runs/intern_v2_ground/logs/epochs.csv` |
-| Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_v2_ground/logs/eval_best.log`, `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
-| Calibration | `runs/intern_v2_ground/logs/eval_best.log` and the two `eval_dpo_best.log` files |
+| Benchmark table | `runs/intern_v2/logs/eval_best.log`, `runs/intern_v2_ground/logs/eval_best.log` (reproduced by `runs/timing/vanilla_calib/eval_calib.log`), `runs/intern_fused_ground/logs/eval_best.log`, `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/logs/eval_dpo_best.log` |
+| Calibration | `runs/timing/vanilla_calib/eval_calib.log` (deployed), `runs/timing/epoch3_calib/` (fused), and the two `eval_dpo_best.log` files |
 | Throughput / batch study | `runs/gpu_util_demo_20261021_162502`, `…20261022_053241`, `…20261023_053405` (the fourth launch, `…162100`, terminated before its first logged step and left no directory) |
 | Qualitative examples | `runs/inference_logs/inference_best_20261014_210419.log`, `…20261019_203120.log` |
 | DPO details | `runs/*_dpo/logs/dpo_epochs.csv`, `dpo_train.log` |

@@ -18,11 +18,12 @@ Measured 2026-11-16 on `feature/yolo-multiface` (commits `b6cc6c5`..`06d9c8c`), 
 
 ## 1. The single-image detector (`intern_v2_ground` best.pth — **the deployed model**)
 
-Source: `runs/intern_v2_ground/logs/eval_best.log` — epoch 3, `best_auc` 0.990270, run 31 Oct 2026
-00:23–01:14 over the full 52,266-sample held-out set (`eval.py`, batch 8, bf16, 51 min 20 s on the
-A5000), with `--calibrate` in the same pass. The log was produced for the checkpoint file that is
-still on disk (`epoch=3`, `best_auc=0.990270` match), so it is reused verbatim rather than re-run;
-unlike the Lineage A directory, nothing has overwritten this path since.
+Source: `runs/timing/vanilla_calib/eval_calib.log` — a same-day re-run on 2026-11-17 11:09–12:01
+(52 min, exit 0) that loads the on-disk checkpoint (`epoch=3`, `best_auc` 0.990270) over the full
+52,266-sample held-out set (`eval.py`, batch 8, bf16, `--calibrate` in the same pass). It reproduces
+the archived 31 Oct 2026 run (`runs/intern_v2_ground/logs/eval_best.log`, 00:23–01:14, 51 min 20 s)
+exactly — same accuracies, AUCs and calibration optima — and gives the deployed and fused lineages
+numbers from the same day. The older log remains the original record.
 
 **This is the deployed model as of 2026-11-16.** `config.yaml`, `inference_faces.py`,
 `face_calibration.py`, `face_timing.py`, `verify_adapter_parity.py` and `adapter_loader.load_model`
@@ -77,7 +78,9 @@ an optimisation one.
 
 Acc/precision/recall intervals are Wilson 95 %; AUC intervals are Hanley-McNeil approximations
 (the log has no per-sample scores). Threshold-calibrated macro mean, grounded vanilla checkpoint:
-89.50 % accuracy / 89.62 % F1 — still without an interval, and it is a per-split-optimal-threshold
+89.50 % accuracy / 89.62 % F1 (`runs/timing/vanilla_calib/`, 2026-11-17 11:09–12:01, 52 min,
+reproducing the base accuracies exactly) — still without an interval, and it is a
+per-split-optimal-threshold
 total, so it is optimistic. The LR-fused comparison checkpoint calibrates to **89.97 % / 90.69 %**
 (`runs/timing/epoch3_calib/`, 2026-11-17 01:30–02:50, 51 min, which reproduces the §1.1 base
 accuracies exactly before calibration), so calibrating both lineages narrows the macro gap from
