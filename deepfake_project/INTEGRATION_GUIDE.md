@@ -1,5 +1,10 @@
 # DeepfakeReasoningModel v2: Production Integration & Engineering Guide
 
+> **Taking the adapter package to another project?** Start with [`ADAPTER_INTEGRATION.md`](ADAPTER_INTEGRATION.md):
+> what to copy, the exact preprocessing contract, the parity gate, and the failure modes that load
+> silently.
+
+
 **Complete Architecture Specification, API Contracts, and Deployment Guide for System Integrators**  
 *Target Audience: Backend Engineers, ML Ops Teams, and API Integrators*
 
