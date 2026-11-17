@@ -224,9 +224,16 @@ three training channels do **not** share one history, and the dates are why:
 | :--- | :---: | :--- |
 | classifier (`cls_head`) | 3 | `--freeze_cls_head` in Stage 4; `cls_head` tensors are bit-identical across `intern_v2_ground/checkpoints/ep001..003` (max \|Δ\| = 0.0) |
 | reasoning (584 LoRA tensors) | 6 | trainable in both blocks; non-zero Δ at both stage boundaries |
-| telemetry | 3 (Stage 4 only) | the telemetry path did not exist when Stage 2 ran: `build_grounding_prompt`, `set_tokenizer` (train.py) and `--no_grounding` all enter history in commit `967bbd0`, **2026-10-11 21:50**, while Stage 2 ran **25–26 Sep 2026** |
+| telemetry | 3 (Stage 4 only) | the telemetry path did not exist when Stage 2 ran: `build_grounding_prompt`, `set_tokenizer` (train.py) and `--no_grounding` all enter history in commit `967bbd0`, **2026-10-11 21:50**, while Stage 2 ran **25 Sep 2026** (`runs/intern_v2/logs/inference_best_20260925_124113.log`) |
 
-Supporting facts, all re-checkable:
+The switch is **run-level, not per-epoch**: `model._grounding_prefix()` returns `None` unless
+`self.grounding and self._tokenizer is not None`, and `train.py` sets `model.grounding = not
+args.no_grounding` once before the first epoch. A grounded run therefore conditions on telemetry in
+every epoch it runs (3 of 3 in Stage 4), and the 3-versus-6 question is decided only by which block
+ran code that had the feature. Stage 2's log prints no `grounding=` line at all, while Stage 4 prints
+`grounding=True` twice — consistent with the feature arriving after Stage 2.
+
+Supporting facts, all re-checkable (`python verify_stage_history.py`, §10):
 
 - Stage boundaries are recorded in the checkpoints: `intern_v2/checkpoints/ep003.pth` has
   `stage=cls_only`, `ep004.pth` has `stage=joint`; `intern_v2_ground/*` are all `stage=joint`.
@@ -234,12 +241,15 @@ Supporting facts, all re-checkable:
   `custom_projector` and `domain_router` are bit-identical — those two sit off the LM training path
   in every checkpoint of both lineages.
 - Stage 4's log states `grounding=True  flip=0.0` and `Froze 4 tensors (cls_head=True,
-  projector=False)`; `attn_pool` and `freq_branch` do move there (|Δ| 8.9e-3 and 0.59 over ep001→ep003).
+  projector=False)`; `attn_pool` and `freq_branch` weights do move there (|Δ| 8.9e-3 and 7.2e-3 over
+  ep001→ep003), while `cls_head` stays at |Δ| = 0.0 — the classifier really is frozen.
 - `attn_pool`/`freq_branch` also move during Stage 2 — they emit the telemetry numbers — but under
   the classifier loss only, with no telemetry prefix in the input.
 
 **DO NOT CLAIM** that Stage 2 trained telemetry, or that Stage 2 had grounding "on by default": that
-flag did not exist in the code it ran. **DO NOT CLAIM** the opposite of the table either — the
+flag did not exist in the code it ran. Equally, do not present the split as a per-epoch schedule in
+code — there is no epoch condition anywhere; re-running the joint block today with default flags
+would put telemetry in all six. **DO NOT CLAIM** the opposite of the table either — the
 classifier is the channel with three epochs and reasoning the one with six.
 
 ## 2. Adapter deployment is lossless
@@ -438,6 +448,7 @@ python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0 (vanil
 python eval_metrics.py --log runs/timing/vanilla_calib/eval_calib.log        # §1 (deployed, same-day)
 python eval_metrics.py --log runs/intern_v2_ground/logs/eval_best.log        # §1 (deployed, original)
 git log -S build_grounding_prompt --format='%h %ad %s' --date=iso -- model.py  # §1.5: 967bbd0
+python verify_stage_history.py         # §1.5 weight diffs (read-only, mmap; ~1 min)
 python eval_by_generator.py --checkpoint runs/intern_v2_ground/checkpoints/best.pth \
     --split cd --out runs/timing/eval_by_generator_cd_vanilla.json   # ~15 min, CD only
 python eval_metrics.py --log runs/intern_v2_dpo/logs/eval_dpo_best.log       # §1.4 DPO rows

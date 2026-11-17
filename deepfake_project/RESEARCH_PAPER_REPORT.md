@@ -228,9 +228,15 @@ off the LM training path.
 
 **No telemetry in this stage.** The telemetry prefix and its `build_grounding_prompt` builder, the
 `set_tokenizer` hook and the `--no_grounding` flag all entered the repository on **2026-10-11**
-(commit `967bbd0`), whereas this stage ran **25–26 Sep 2026**. The code it ran therefore had no
+(commit `967bbd0`), whereas this stage ran **25 Sep 2026**. The code it ran therefore had no
 telemetry path at all: here the LM conditions on visual tokens plus the answer target, and nothing
 in this stage is trained against telemetry (§3.8).
+
+The switch is **run-level, not per-epoch**: `_grounding_prefix()` returns `None` unless
+`self.grounding and self._tokenizer is not None`, and `train.py` assigns `model.grounding` once
+before the first epoch. A grounded run therefore sees telemetry in every epoch it runs, so the
+six-versus-three question is settled by which block had the feature, not by a schedule inside the
+loop.
 
 Each step pairs one classification batch (`all.json`) with one reasoning batch (`sft_36k.json`), giving 8,765 paired steps per epoch and 1,096 optimizer updates at batch 4 × accumulation 8. The LM loss weight is scheduled by joint-epoch index:
 
@@ -331,7 +337,8 @@ three-epoch blocks:
 So the three training channels have three different histories, and the dates are what make them
 different: the **classifier** trains for the three joint epochs and is frozen through the grounded
 ones; **reasoning** trains for all six; **telemetry** is trained only in the final three, because
-that is the only block whose code contained a telemetry prefix to condition on. `attn_pool` and
+that is the only block whose code contained a telemetry prefix to condition on — the flag is set
+once per run, with no epoch gating (§3.3). `attn_pool` and
 `freq_branch` — the modules that *emit* the telemetry numbers (§2.7) — did receive gradients in
 Stage 2, but only from the classifier loss; they saw no telemetry signal until Stage 4. This is the
 only lineage where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
