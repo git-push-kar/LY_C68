@@ -15,7 +15,8 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
 **Verified results.** **The released detector is the grounded vanilla checkpoint** — three classifier
-epochs, three reasoning epochs and three telemetry epochs, then three grounded epochs — scoring
+epochs plus three joint classifier-and-reasoning epochs, then three grounded epochs with the
+classifier frozen while the reasoning adapters and the telemetry-emitting heads keep training — scoring
 **93.38% in-domain (AUC 0.9872), 87.09% mean accuracy (AUC 0.9455)** on the 52,266-sample HydraFake
 benchmark and **95.23% / AUC 0.9903** on the balanced validation set. Training runs as three
 joint classifier-and-reasoning epochs followed by three grounded epochs with the classifier frozen;
