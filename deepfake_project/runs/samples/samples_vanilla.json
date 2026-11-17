@@ -1,0 +1,189 @@
+[
+  {
+    "image": "omi.jpg",
+    "path": "passthrough",
+    "faces_detected": 1,
+    "faces_evaluated": 1,
+    "faces_skipped": [],
+    "document_verdict": "REAL",
+    "aggregate": "max",
+    "threshold": 0.5,
+    "reason_mode": "top1",
+    "faces": [
+      {
+        "id": 0,
+        "kind": "whole_image",
+        "verdict": "REAL",
+        "p_fake": 0.195594,
+        "confidence": 0.804406,
+        "box": null,
+        "crop": {},
+        "telemetry": {
+          "hotspots": "Peripheral / Ear & Hair blending seams, Forehead / Upper hairline",
+          "spectral": "HF/LF log-magnitude energy ratio=-0.24 (lower ratio = smoother image with less high-frequency detail)"
+        },
+        "reasoning": {
+          "quick_take": "At first glance, the image appears authentic with natural facial features and no obvious signs of manipulation.",
+          "planning": "",
+          "analysis": "Upon inspection, the image shows consistent skin tone and realistic facial proportions without distortion or asymmetry. The expression is neutral and coherent across facial components. Further examination reveals smooth edges, natural skin texture, and absence of artificial blurring or missing high-frequency details such as pores. There are no visible blending boundaries or unnatural lighting effects that would suggest digital generation. The background context aligns with the subject's appearance, and the optical focus remains consistent throughout the image.",
+          "reflection": "",
+          "conclusion": "Considering all visual, subtle, and physical aspects, the image does not exhibit any signs of being fake and is judged to be authentic.",
+          "generated_answer": "real",
+          "answer_heuristic": false,
+          "raw": "<fast> At first glance, the image appears authentic with natural facial features and no obvious signs of manipulation. </fast>\n<reasoning> Upon inspection, the image shows consistent skin tone and realistic facial proportions without distortion or asymmetry. The expression is neutral and coherent across facial components. Further examination reveals smooth edges, natural skin texture, and absence of artificial blurring or missing high-frequency details such as pores. There are no visible blending boundaries or unnatural lighting effects that would suggest digital generation. The background context aligns with the subject's appearance, and the optical focus remains consistent throughout the image. </reasoning>\n<conclusion>   \nConsidering all visual, subtle, and physical aspects, the image does not exhibit any signs of being fake and is judged to be authentic. </conclusion>\n<answer> real </answer>"
+        }
+      }
+    ],
+    "flags": {
+      "faces_disagree": false,
+      "model_disagreement": false,
+      "requires_human_review": false,
+      "faces_skipped": 0,
+      "reasoned_faces": [
+        0
+      ]
+    }
+  },
+  {
+    "image": "3-people.jpg",
+    "path": "per_face",
+    "faces_detected": 3,
+    "faces_evaluated": 3,
+    "faces_skipped": [],
+    "document_verdict": "FAKE",
+    "aggregate": "max",
+    "threshold": 0.5,
+    "reason_mode": "top1",
+    "faces": [
+      {
+        "id": 0,
+        "kind": "face",
+        "verdict": "FAKE",
+        "p_fake": 0.923039,
+        "confidence": 0.923039,
+        "box": [
+          1227.09,
+          878.36,
+          2187.27,
+          2351.03
+        ],
+        "crop": {
+          "box": [
+            1227.09,
+            878.36,
+            2187.27,
+            2351.03
+          ],
+          "score": 0.8788,
+          "margin": 0.3,
+          "pad_mode": "none",
+          "reflect_rejected": false,
+          "overflow_frac": 0.0,
+          "crop_size": [
+            2356,
+            2356
+          ],
+          "face_frac": 0.0294,
+          "upscale": 0.19
+        },
+        "telemetry": {
+          "hotspots": "Peripheral / Ear & Hair blending seams, Chin & Neck boundary",
+          "spectral": "HF/LF log-magnitude energy ratio=-0.24 (lower ratio = smoother image with less high-frequency detail)"
+        },
+        "reasoning": {
+          "quick_take": "At first glance, the image appears highly realistic with no obvious signs of being fake. The facial structure, expression, and lighting all seem natural, making it difficult to determine its authenticity immediately.",
+          "planning": "Given the lack of immediate visual anomalies, a structured forensic analysis is necessary. We begin by examining for subtle generator artifacts that may not be immediately apparent. Then, we assess whether any implicit inconsistencies--such as violations of physical realism or stylistic tendencies--can reveal the image's synthetic origin.",
+          "analysis": "Upon closer inspection, several subtle but telling signs emerge. While the skin tone and facial proportions appear consistent and symmetrical, the texture lacks the fine details typically found in real human skin, such as pores and micro-variations in tone. This absence of high-frequency detail suggests artificial generation. Additionally, the overall appearance exhibits a slight stylization--realistic enough to fool casual observers but subtly off when analyzed through the lens of photographic realism.\n\nTo dive deeper, the lighting and shadows are physically plausible, and there are no contextual mismatches between the face and background. However, the uniform sharpness across the entire face deviates from how natural camera optics behave, where depth of field often results in some areas being slightly out of focus. This optical inconsistency further supports the hypothesis that the image was generated rather than captured.",
+          "reflection": "But wait--there's another layer to consider. The holistic realism of the image might itself be a clue. Real photographs rarely exhibit such perfect consistency in every aspect: lighting, texture, and focus. The fact that this image maintains these traits without any visible flaws could imply a deliberate construction rather than a spontaneous capture.",
+          "conclusion": "While the image passes initial scrutiny with convincing realism, a detailed analysis reveals subtle yet consistent indicators of AI generation. These include missing high-frequency skin details, slight stylization, and an unnatural optical focus uniformity. Taken together, these clues suggest that the image is likely AI-generated, placing it firmly in the category of hard-to-detect synthetic media.",
+          "generated_answer": "fake",
+          "answer_heuristic": false,
+          "raw": "<fast> At first glance, the image appears highly realistic with no obvious signs of being fake. The facial structure, expression, and lighting all seem natural, making it difficult to determine its authenticity immediately. </fast>\n<planning> Given the lack of immediate visual anomalies, a structured forensic analysis is necessary. We begin by examining for subtle generator artifacts that may not be immediately apparent. Then, we assess whether any implicit inconsistencies--such as violations of physical realism or stylistic tendencies--can reveal the image's synthetic origin. </planning>\n<reasoning> Upon closer inspection, several subtle but telling signs emerge. While the skin tone and facial proportions appear consistent and symmetrical, the texture lacks the fine details typically found in real human skin, such as pores and micro-variations in tone. This absence of high-frequency detail suggests artificial generation. Additionally, the overall appearance exhibits a slight stylization--realistic enough to fool casual observers but subtly off when analyzed through the lens of photographic realism.\n\nTo dive deeper, the lighting and shadows are physically plausible, and there are no contextual mismatches between the face and background. However, the uniform sharpness across the entire face deviates from how natural camera optics behave, where depth of field often results in some areas being slightly out of focus. This optical inconsistency further supports the hypothesis that the image was generated rather than captured. </reasoning>\n<reflection> But wait--there's another layer to consider. The holistic realism of the image might itself be a clue. Real photographs rarely exhibit such perfect consistency in every aspect: lighting, texture, and focus. The fact that this image maintains these traits without any visible flaws could imply a deliberate construction rather than a spontaneous capture. </reflection>\n<conclusion>   \nWhile the image passes initial scrutiny with convincing realism, a detailed analysis reveals subtle yet consistent indicators of AI generation. These include missing high-frequency skin details, slight stylization, and an unnatural optical focus uniformity. Taken together, these clues suggest that the image is likely AI-generated, placing it firmly in the category of hard-to-detect synthetic media. </conclusion>\n<answer> fake </answer>"
+        }
+      },
+      {
+        "id": 1,
+        "kind": "face",
+        "verdict": "REAL",
+        "p_fake": 0.212232,
+        "confidence": 0.787768,
+        "box": [
+          6252.55,
+          687.98,
+          7181.24,
+          1954.06
+        ],
+        "crop": {
+          "box": [
+            6252.55,
+            687.98,
+            7181.24,
+            1954.06
+          ],
+          "score": 0.8885,
+          "margin": 0.3,
+          "pad_mode": "none",
+          "reflect_rejected": false,
+          "overflow_frac": 0.0,
+          "crop_size": [
+            2026,
+            2026
+          ],
+          "face_frac": 0.0244,
+          "upscale": 0.221
+        },
+        "telemetry": {
+          "hotspots": "Peripheral / Ear & Hair blending seams, Forehead / Upper hairline",
+          "spectral": "HF/LF log-magnitude energy ratio=-0.23 (lower ratio = smoother image with less high-frequency detail)"
+        },
+        "reasoning": null
+      },
+      {
+        "id": 2,
+        "kind": "face",
+        "verdict": "REAL",
+        "p_fake": 0.371365,
+        "confidence": 0.628635,
+        "box": [
+          3879.41,
+          1431.93,
+          4702.53,
+          2602.28
+        ],
+        "crop": {
+          "box": [
+            3879.41,
+            1431.93,
+            4702.53,
+            2602.28
+          ],
+          "score": 0.8933,
+          "margin": 0.3,
+          "pad_mode": "none",
+          "reflect_rejected": false,
+          "overflow_frac": 0.0,
+          "crop_size": [
+            1872,
+            1872
+          ],
+          "face_frac": 0.02,
+          "upscale": 0.239
+        },
+        "telemetry": {
+          "hotspots": "Forehead / Upper hairline, Mouth & Lower jaw",
+          "spectral": "HF/LF log-magnitude energy ratio=-0.23 (lower ratio = smoother image with less high-frequency detail)"
+        },
+        "reasoning": null
+      }
+    ],
+    "flags": {
+      "faces_disagree": true,
+      "model_disagreement": false,
+      "requires_human_review": true,
+      "faces_skipped": 0,
+      "reasoned_faces": [
+        0
+      ]
+    }
+  }
+]

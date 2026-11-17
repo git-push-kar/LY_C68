@@ -1078,6 +1078,18 @@ def write_manifest() -> None:
     lines += ["", "## Build", "", "```bash", "cd deepfake_project", "python build_rp_journal.py", "```", "",
               "Outputs: `DEEP_RP_JOURNAL.md`, `DEEP_RP_JOURNAL.html` (images inlined), "
               "`reports/journal/figures/fig1..fig11.png`, and this manifest.", ""]
+
+    ck = os.path.join(ROOT, "checkpoints_manifest.json")
+    if os.path.exists(ck):
+        spec = json.load(open(ck, encoding="utf-8"))
+        lines += ["## Large inputs (not in git)", "",
+                  "The weights are tracked by Git LFS pattern but are not committed: 8.5 GB exceeds the "
+                  "free LFS quota. `checkpoints_manifest.json` is the contract instead — restore the "
+                  "files to the paths below and check them with `python verify_checkpoints.py`.", "",
+                  "| File | SHA-256 | Bytes | Role |", "| --- | --- | ---: | --- |"]
+        for w in spec["weights"]:
+            lines.append(f"| `{w['restore_to']}` | `{w['sha256'][:16]}…` | {w.get('bytes') or '—'} | {w['role']} |")
+        lines += ["", f"Base model: `{spec['base_model']['path']}` — {spec['base_model']['role']}.", ""]
     lines += (["## Missing inputs", ""] + [f"- `{p}`" for p in missing] if missing
               else ["All listed inputs were present at build time."])
     with open(os.path.join(ROOT, "reports", "RP_BUILD_MANIFEST.md"), "w", encoding="utf-8") as fh:

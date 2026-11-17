@@ -1,0 +1,53 @@
+{
+  "why": "The paper's numbers come from these weights. They are too large for normal git objects (8.5 GB total, over GitHub's free Git LFS quota), so this manifest is the contract: any copy of the file with a matching SHA-256 is the file the paper used. Verify with `python verify_checkpoints.py`.",
+  "verified_on": "2026-11-18",
+  "weights": [
+    {
+      "path": "runs/intern_v2_ground/checkpoints/best.pth",
+      "role": "deployed checkpoint: all Table 2/3 numbers, calibration, latency, qualitative examples",
+      "kind": "whole-model state_dict (backbone + LoRA + custom heads)",
+      "bytes": 4365579738,
+      "sha256": "35c72be1b88f133f06612743aa86892daaa1d3386df3fc70e3e259ba485b8252",
+      "metadata": {"epoch": 3, "best_auc": 0.99027, "stage": "joint", "arch_version": "v2"},
+      "restore_to": "runs/intern_v2_ground/checkpoints/best.pth"
+    },
+    {
+      "path": "runs/intern_v2/checkpoints/ep006.pth",
+      "role": "Stage-4 initialisation checkpoint; also the provenance behind section 3 and the Stage-2 comparison row",
+      "kind": "whole-model state_dict (backbone + LoRA + custom heads)",
+      "bytes": 4707708703,
+      "sha256": "b93a71d60dbca329a4d4cbd6e077b465f069808ac547be2b7d1e4aa6f01a215b",
+      "metadata": {"epoch": 6, "best_auc": 0.98906, "stage": "joint", "arch_version": "v2"},
+      "restore_to": "runs/intern_v2/checkpoints/ep006.pth"
+    },
+    {
+      "path": "runs/intern_v2_ground/adapters/llm_adapter/adapter_model.safetensors",
+      "role": "shipped LLM LoRA adapter (392 tensors, r=64)",
+      "kind": "peft adapter",
+      "bytes": 147770856,
+      "sha256": "ec210956b1273cc57e10c5dab9b2d8eedb96f009cb62132c226004583afa63ef",
+      "restore_to": "runs/intern_v2_ground/adapters/llm_adapter/adapter_model.safetensors"
+    },
+    {
+      "path": "runs/intern_v2_ground/adapters/vision_adapter/adapter_model.safetensors",
+      "role": "shipped vision LoRA adapter (192 tensors, r=16)",
+      "kind": "peft adapter",
+      "bytes": 12607408,
+      "sha256": "fbf3b50455f02bf5500bfd845a4605852419fa732af71d2d64003664c6b86819",
+      "restore_to": "runs/intern_v2_ground/adapters/vision_adapter/adapter_model.safetensors"
+    },
+    {
+      "path": "runs/intern_v2_ground/adapters/custom_heads/custom_heads.safetensors",
+      "role": "shipped custom heads: cls_head, attn_pool, freq_branch, custom_projector, domain_router (59 tensors)",
+      "kind": "state_dict",
+      "bytes": 26519764,
+      "sha256": "55c225843f8abd42eb8594175daf0cf1906878203548aec70d815fb50159b5c7",
+      "restore_to": "runs/intern_v2_ground/adapters/custom_heads/custom_heads.safetensors"
+    }
+  ],
+  "base_model": {
+    "path": "models/InternVL3-2B",
+    "role": "upstream base the adapters attach to (not part of this repository)",
+    "note": "fetch from Hugging Face, e.g. OpenGVLab/InternVL3-2B; the adapters refuse any other snapshot"
+  }
+}

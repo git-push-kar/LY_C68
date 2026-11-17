@@ -1,0 +1,122 @@
+{
+  "device": "NVIDIA RTX A5000",
+  "max_new_tokens": 512,
+  "rows": [
+    {
+      "name": "1-face",
+      "image": "test_images/omi.jpg",
+      "size": [
+        1644,
+        1534
+      ],
+      "path": "passthrough",
+      "faces_detected": 1,
+      "faces_evaluated": 1,
+      "faces_skipped": 0,
+      "skip_reasons": [],
+      "detect_ms": 22.44481999950949,
+      "detect_median_ms": 22.30665000024601,
+      "detect_min_ms": 21.305399997800123,
+      "detect_max_ms": 24.524400003429037,
+      "detect_sd": 0.9575256744919594,
+      "classify_ms": 177.85405999893555,
+      "classify_median_ms": 175.47500000000582,
+      "classify_min_ms": 160.14980000181822,
+      "classify_max_ms": 197.10630000190577,
+      "classify_sd": 11.013801613447798,
+      "reason_per_face_ms": [
+        15545.495300000766
+      ],
+      "reason_top1_ms": 15545.495300000766,
+      "reason_all_ms": 15545.495300000766,
+      "total_top1_ms": 15745.794179999211,
+      "total_all_ms": 15745.794179999211,
+      "llm_answers": [
+        "real"
+      ],
+      "repeats_detect_classify": 10,
+      "repeats_reason": 1
+    },
+    {
+      "name": "4-face",
+      "image": "runs/timing/quad.jpg",
+      "size": [
+        1600,
+        1600
+      ],
+      "path": "per_face",
+      "faces_detected": 4,
+      "faces_evaluated": 4,
+      "faces_skipped": 0,
+      "skip_reasons": [],
+      "detect_ms": 23.057620000327006,
+      "detect_median_ms": 22.71985000334098,
+      "detect_min_ms": 22.339800001645926,
+      "detect_max_ms": 24.68550000048708,
+      "detect_sd": 0.7472487445019019,
+      "classify_ms": 509.29464000000735,
+      "classify_median_ms": 509.1704500009655,
+      "classify_min_ms": 491.83529999572784,
+      "classify_max_ms": 527.2972000020673,
+      "classify_sd": 9.303195622687364,
+      "reason_per_face_ms": [
+        22602.5312999991,
+        15985.920600003737,
+        19271.858000000066,
+        15788.197099995159
+      ],
+      "reason_top1_ms": 22602.5312999991,
+      "reason_all_ms": 73648.50699999806,
+      "total_top1_ms": 23134.883559999435,
+      "total_all_ms": 74180.8592599984,
+      "llm_answers": [
+        "fake",
+        "real",
+        "real",
+        "real"
+      ],
+      "repeats_detect_classify": 10,
+      "repeats_reason": 1
+    },
+    {
+      "name": "FFIW 4-face",
+      "image": "datasets/hydrafake/test/cd/FFIW/1_fake/test_00000929/053.png",
+      "size": [
+        256,
+        256
+      ],
+      "path": "per_face",
+      "faces_detected": 4,
+      "faces_evaluated": 2,
+      "faces_skipped": 2,
+      "skip_reasons": [
+        "face_too_small",
+        "face_too_small"
+      ],
+      "detect_ms": 14.301759998488706,
+      "detect_median_ms": 14.339099998323945,
+      "detect_min_ms": 13.454100000672042,
+      "detect_max_ms": 15.277999998943415,
+      "detect_sd": 0.5201274865975171,
+      "classify_ms": 262.43373999823234,
+      "classify_median_ms": 262.3816999948758,
+      "classify_min_ms": 257.98349999968195,
+      "classify_max_ms": 267.31749999453314,
+      "classify_sd": 3.214439084237509,
+      "reason_per_face_ms": [
+        20037.85809999681,
+        19298.612399994454
+      ],
+      "reason_top1_ms": 20037.85809999681,
+      "reason_all_ms": 39336.470499991265,
+      "total_top1_ms": 20314.593599993532,
+      "total_all_ms": 39613.205999987986,
+      "llm_answers": [
+        "fake",
+        "fake"
+      ],
+      "repeats_detect_classify": 10,
+      "repeats_reason": 1
+    }
+  ]
+}

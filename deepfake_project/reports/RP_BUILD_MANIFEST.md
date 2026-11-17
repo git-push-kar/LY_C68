@@ -37,4 +37,18 @@ python build_rp_journal.py
 
 Outputs: `DEEP_RP_JOURNAL.md`, `DEEP_RP_JOURNAL.html` (images inlined), `reports/journal/figures/fig1..fig11.png`, and this manifest.
 
+## Large inputs (not in git)
+
+The weights are tracked by Git LFS pattern but are not committed: 8.5 GB exceeds the free LFS quota. `checkpoints_manifest.json` is the contract instead — restore the files to the paths below and check them with `python verify_checkpoints.py`.
+
+| File | SHA-256 | Bytes | Role |
+| --- | --- | ---: | --- |
+| `runs/intern_v2_ground/checkpoints/best.pth` | `35c72be1b88f133f…` | 4365579738 | deployed checkpoint: all Table 2/3 numbers, calibration, latency, qualitative examples |
+| `runs/intern_v2/checkpoints/ep006.pth` | `b93a71d60dbca329…` | 4707708703 | Stage-4 initialisation checkpoint; also the provenance behind section 3 and the Stage-2 comparison row |
+| `runs/intern_v2_ground/adapters/llm_adapter/adapter_model.safetensors` | `ec210956b1273cc5…` | 147770856 | shipped LLM LoRA adapter (392 tensors, r=64) |
+| `runs/intern_v2_ground/adapters/vision_adapter/adapter_model.safetensors` | `fbf3b50455f02bf5…` | 12607408 | shipped vision LoRA adapter (192 tensors, r=16) |
+| `runs/intern_v2_ground/adapters/custom_heads/custom_heads.safetensors` | `55c225843f8abd42…` | 26519764 | shipped custom heads: cls_head, attn_pool, freq_branch, custom_projector, domain_router (59 tensors) |
+
+Base model: `models/InternVL3-2B` — upstream base the adapters attach to (not part of this repository).
+
 All listed inputs were present at build time.

@@ -1,1 +1,11 @@
 deepfake_project/runs/intern_exp2/checkpoints/best.pth filter=lfs diff=lfs merge=lfs -text
+
+# Model weights go to Git LFS, never to plain git objects. The two checkpoints the
+# paper cites total 8.5 GB, which exceeds GitHub's free LFS quota, so they are not
+# committed: checkpoints_manifest.json records their SHA-256 and
+# verify_checkpoints.py checks or fetches them. These patterns make sure a future
+# `git add` of any weight file goes through LFS instead of bloating history.
+deepfake_project/runs/**/checkpoints/*.pth filter=lfs diff=lfs merge=lfs -text
+deepfake_project/models/**/*.pth filter=lfs diff=lfs merge=lfs -text
+deepfake_project/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
+deepfake_project/runs/**/adapters/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
