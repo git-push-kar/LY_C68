@@ -15,12 +15,11 @@ This report documents **DeepfakeReasoningModel v2**, a 2.18B-parameter framework
 Training follows a four-stage curriculum (classifier warm-up → joint classification + reasoning → optional DPO → grounded reasoning fine-tuning), instantiated over two foundation lineages that differ only in their starting weights: an LR-fused InternVL3-2B and the vanilla InternVL3-2B.
 
 **Verified results.** **The released detector is the grounded vanilla checkpoint** — three classifier
-epochs plus three joint classifier-and-reasoning epochs, then three grounded epochs with the
-classifier frozen while the reasoning adapters and the telemetry-emitting heads keep training — scoring
+epochs plus three joint classifier-and-reasoning epochs, then three grounded epochs in which the
+classifier is frozen and the reasoning and telemetry channels train together — scoring
 **93.38% in-domain (AUC 0.9872), 87.09% mean accuracy (AUC 0.9455)** on the 52,266-sample HydraFake
-benchmark and **95.23% / AUC 0.9903** on the balanced validation set. Training runs as three
-joint classifier-and-reasoning epochs followed by three grounded epochs with the classifier frozen;
-it ships because its adapter
+benchmark and **95.23% / AUC 0.9903** on the balanced validation set. The telemetry code post-dates
+the joint block, so the telemetry channel trains only in the final three; it ships because its adapter
 package attaches to the unmodified upstream base and passes verdict parity against the checkpoint
 (18/18, $\Delta p_{\text{fake}} = 0$). The LR-fused lineage is reported as the **comparison**: it
 is stronger on the same benchmark — **94.10% in-domain, 88.13% mean accuracy, 96.00% validation,
@@ -219,13 +218,19 @@ and then saved as a standalone Hugging Face checkpoint. **Lineage B** starts fro
 
 ### 3.3 Stage 2 — joint training
 
-**Trainable:** all LoRA adapters (LLM and vision), `cls_head`, `attn_pool`, `freq_branch`,
-`custom_projector` and `domain_router`. `train.py` removes parameters only when
-`--freeze_cls_head` or `--freeze_projector` is passed, and the Stage-2 launch passed neither —
-`runs/intern_v2/logs/train.log` contains no `Froze …` line, so every custom head receives
-gradients. **Grounding:** on (`model.grounding = not args.no_grounding`, default true), so the LM is
-conditioned on the telemetry prefix (§2.7) and that input is in scope for the reasoning loss from
-the first joint epoch.
+**Trainable:** all LoRA adapters (LLM and vision), `cls_head`, `attn_pool` and `freq_branch`.
+`train.py` removes parameters only when `--freeze_cls_head` or `--freeze_projector` is passed, and
+the Stage-2 launch passed neither — `runs/intern_v2/logs/train.log` contains no `Froze …` line. The
+checkpoints agree: across the `cls_only` → `joint` boundary (`ep003.pth` → `ep004.pth`, metadata
+`stage=cls_only` / `stage=joint`) `cls_head` and `attn_pool` weights move while `custom_projector`
+and `domain_router` are bit-identical, as they are in every checkpoint of both lineages — they sit
+off the LM training path.
+
+**No telemetry in this stage.** The telemetry prefix and its `build_grounding_prompt` builder, the
+`set_tokenizer` hook and the `--no_grounding` flag all entered the repository on **2026-10-11**
+(commit `967bbd0`), whereas this stage ran **25–26 Sep 2026**. The code it ran therefore had no
+telemetry path at all: here the LM conditions on visual tokens plus the answer target, and nothing
+in this stage is trained against telemetry (§3.8).
 
 Each step pairs one classification batch (`all.json`) with one reasoning batch (`sft_36k.json`), giving 8,765 paired steps per epoch and 1,096 optimizer updates at batch 4 × accumulation 8. The LM loss weight is scheduled by joint-epoch index:
 
@@ -315,18 +320,20 @@ The deployment shift is a deliberate trade, and the report states both sides of 
 **What the shipped model is.** `intern_v2_ground` is the Lineage B path, and it is trained in two
 three-epoch blocks:
 
-- **Stage 2 — three joint epochs** (§5.1): the **classifier** and the **reasoning branch** train
-  under one objective (§2.10), with every custom head trainable and no freeze flags (§3.3).
-- **Stage 4 — three grounded epochs** (§3.5), initialised from Stage 2's `ep006.pth`.
-  `--freeze_cls_head` is the only change (`Froze 4 tensors (cls_head=True, projector=False)` in
-  `runs/intern_v2_ground/logs/train.log`); LoRA plus `attn_pool`, `freq_branch`, `custom_projector`
-  and `domain_router` keep training, with grounding on (`grounding=True  flip=0.0`).
+- **Stage 2 — three joint epochs** (25–26 Sep 2026, §5.1): the **classifier** and the **reasoning
+  branch** train under one objective (§2.10), with no freeze flags and, decisively, **no telemetry**:
+  the grounding code did not exist yet (§3.3, commit `967bbd0`, 2026-10-11).
+- **Stage 4 — three grounded epochs** (18–19 Oct 2026, §3.5), initialised from Stage 2's
+  `ep006.pth`. `--freeze_cls_head` is the only freeze (`Froze 4 tensors (cls_head=True,
+  projector=False)` in `runs/intern_v2_ground/logs/train.log`); LoRA plus `attn_pool` and
+  `freq_branch` keep training, with grounding on (`grounding=True  flip=0.0`).
 
-What differs between the blocks is therefore **one parameter group, not three channels**: the
-**classifier** trains for the three joint epochs and is frozen for the three grounded ones, while
-the **reasoning adapters and every telemetry-emitting head train in all six**. The telemetry
-*prefix* is present in both blocks (grounding defaults on, §2.7), so the difference is not when
-telemetry appears but that the classifier stops moving while the rest keeps adapting. This is the
+So the three training channels have three different histories, and the dates are what make them
+different: the **classifier** trains for the three joint epochs and is frozen through the grounded
+ones; **reasoning** trains for all six; **telemetry** is trained only in the final three, because
+that is the only block whose code contained a telemetry prefix to condition on. `attn_pool` and
+`freq_branch` — the modules that *emit* the telemetry numbers (§2.7) — did receive gradients in
+Stage 2, but only from the classifier loss; they saw no telemetry signal until Stage 4. This is the
 only lineage where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
 $|\Delta p_{\text{fake}}| = 0$).
 

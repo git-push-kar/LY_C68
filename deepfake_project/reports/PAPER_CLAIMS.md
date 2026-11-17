@@ -215,6 +215,33 @@ heads are frozen and unchanged, not damaged. And do not quote a calibrated mean 
 grounded, 89.60 fused DPO, 89.50 deployed) as the best model: every one of them fits four per-split
 thresholds and scores them on the same split, so §1's uncalibrated table stays the reference.
 
+### 1.5 Stage history — classifier 3 epochs, reasoning 6, telemetry 3
+
+The deployed model is Stage 2 (three joint epochs) followed by Stage 4 (three grounded epochs). The
+three training channels do **not** share one history, and the dates are why:
+
+| Channel | Epochs trained | Evidence |
+| :--- | :---: | :--- |
+| classifier (`cls_head`) | 3 | `--freeze_cls_head` in Stage 4; `cls_head` tensors are bit-identical across `intern_v2_ground/checkpoints/ep001..003` (max \|Δ\| = 0.0) |
+| reasoning (584 LoRA tensors) | 6 | trainable in both blocks; non-zero Δ at both stage boundaries |
+| telemetry | 3 (Stage 4 only) | the telemetry path did not exist when Stage 2 ran: `build_grounding_prompt`, `set_tokenizer` (train.py) and `--no_grounding` all enter history in commit `967bbd0`, **2026-10-11 21:50**, while Stage 2 ran **25–26 Sep 2026** |
+
+Supporting facts, all re-checkable:
+
+- Stage boundaries are recorded in the checkpoints: `intern_v2/checkpoints/ep003.pth` has
+  `stage=cls_only`, `ep004.pth` has `stage=joint`; `intern_v2_ground/*` are all `stage=joint`.
+- Across `ep003 → ep004` the `cls_head` and `attn_pool` tensors move (max |Δ| 1.4e-3) while
+  `custom_projector` and `domain_router` are bit-identical — those two sit off the LM training path
+  in every checkpoint of both lineages.
+- Stage 4's log states `grounding=True  flip=0.0` and `Froze 4 tensors (cls_head=True,
+  projector=False)`; `attn_pool` and `freq_branch` do move there (|Δ| 8.9e-3 and 0.59 over ep001→ep003).
+- `attn_pool`/`freq_branch` also move during Stage 2 — they emit the telemetry numbers — but under
+  the classifier loss only, with no telemetry prefix in the input.
+
+**DO NOT CLAIM** that Stage 2 trained telemetry, or that Stage 2 had grounding "on by default": that
+flag did not exist in the code it ran. **DO NOT CLAIM** the opposite of the table either — the
+classifier is the channel with three epochs and reasoning the one with six.
+
 ## 2. Adapter deployment is lossless
 
 Source: `verify_adapter_parity.py`, `test_adapter_loader.py` (21 tests). Measured on the **deployed**
@@ -408,7 +435,9 @@ python test_calibration.py             # 15  AUC, sweeps, floor routing
 python test_passthrough_parity.py      # 7   bitwise single-face parity
 RUN_MODEL_PARITY_TESTS=1 python test_passthrough_parity.py   # loads the model, 7/7 no skips
 python verify_adapter_parity.py        # 18/18 identical verdicts, Δ = 0 (vanilla defaults)
-python eval_metrics.py --log runs/intern_v2_ground/logs/eval_best.log        # §1 (deployed)
+python eval_metrics.py --log runs/timing/vanilla_calib/eval_calib.log        # §1 (deployed, same-day)
+python eval_metrics.py --log runs/intern_v2_ground/logs/eval_best.log        # §1 (deployed, original)
+git log -S build_grounding_prompt --format='%h %ad %s' --date=iso -- model.py  # §1.5: 967bbd0
 python eval_by_generator.py --checkpoint runs/intern_v2_ground/checkpoints/best.pth \
     --split cd --out runs/timing/eval_by_generator_cd_vanilla.json   # ~15 min, CD only
 python eval_metrics.py --log runs/intern_v2_dpo/logs/eval_dpo_best.log       # §1.4 DPO rows
