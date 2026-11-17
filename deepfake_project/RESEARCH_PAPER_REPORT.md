@@ -18,8 +18,8 @@ Training follows a four-stage curriculum (classifier warm-up → joint classific
 epochs, three reasoning epochs and three telemetry epochs, then three grounded epochs — scoring
 **93.38% in-domain (AUC 0.9872), 87.09% mean accuracy (AUC 0.9455)** on the 52,266-sample HydraFake
 benchmark and **95.23% / AUC 0.9903** on the balanced validation set. Training runs as three
-classifier-and-reasoning epochs followed by three grounded reasoning-and-telemetry epochs; it ships
-because its adapter
+joint classifier-and-reasoning epochs followed by three grounded epochs with the classifier frozen;
+it ships because its adapter
 package attaches to the unmodified upstream base and passes verdict parity against the checkpoint
 (18/18, $\Delta p_{\text{fake}} = 0$). The LR-fused lineage is reported as the **comparison**: it
 is stronger on the same benchmark — **94.10% in-domain, 88.13% mean accuracy, 96.00% validation,
@@ -218,6 +218,14 @@ and then saved as a standalone Hugging Face checkpoint. **Lineage B** starts fro
 
 ### 3.3 Stage 2 — joint training
 
+**Trainable:** all LoRA adapters (LLM and vision), `cls_head`, `attn_pool`, `freq_branch`,
+`custom_projector` and `domain_router`. `train.py` removes parameters only when
+`--freeze_cls_head` or `--freeze_projector` is passed, and the Stage-2 launch passed neither —
+`runs/intern_v2/logs/train.log` contains no `Froze …` line, so every custom head receives
+gradients. **Grounding:** on (`model.grounding = not args.no_grounding`, default true), so the LM is
+conditioned on the telemetry prefix (§2.7) and that input is in scope for the reasoning loss from
+the first joint epoch.
+
 Each step pairs one classification batch (`all.json`) with one reasoning batch (`sft_36k.json`), giving 8,765 paired steps per epoch and 1,096 optimizer updates at batch 4 × accumulation 8. The LM loss weight is scheduled by joint-epoch index:
 
 $$\lambda_{\text{lm}}(e)=\lambda_{\text{start}}+\frac{e-e_{\text{cls}}-1}{\max(1,e_{\text{joint}}-1)}\big(\lambda_{\text{end}}-\lambda_{\text{start}}\big),\qquad \lambda_{\text{start}}=0.30,\ \lambda_{\text{end}}=0.60.$$
@@ -307,15 +315,18 @@ The deployment shift is a deliberate trade, and the report states both sides of 
 three-epoch blocks:
 
 - **Stage 2 — three joint epochs** (§5.1): the **classifier** and the **reasoning branch** train
-  under one objective (§2.10). The telemetry channel is *not* trained here.
-- **Stage 4 — three grounded epochs** (§3.5), initialised from Stage 2's `ep006.pth`. `cls_head` is
-  frozen here to protect it at its peak; reasoning **and telemetry** train together, because
-  grounding is what actually exercises the telemetry prefix (§2.7).
+  under one objective (§2.10), with every custom head trainable and no freeze flags (§3.3).
+- **Stage 4 — three grounded epochs** (§3.5), initialised from Stage 2's `ep006.pth`.
+  `--freeze_cls_head` is the only change (`Froze 4 tensors (cls_head=True, projector=False)` in
+  `runs/intern_v2_ground/logs/train.log`); LoRA plus `attn_pool`, `freq_branch`, `custom_projector`
+  and `domain_router` keep training, with grounding on (`grounding=True  flip=0.0`).
 
-So the three training channels have three different histories: the **classifier** trains for three
-epochs (the joint ones) and is frozen through the grounded ones; **reasoning** trains for all six;
-**telemetry** trains only for the final three, when grounding is on. This is the only lineage where
-both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
+What differs between the blocks is therefore **one parameter group, not three channels**: the
+**classifier** trains for the three joint epochs and is frozen for the three grounded ones, while
+the **reasoning adapters and every telemetry-emitting head train in all six**. The telemetry
+*prefix* is present in both blocks (grounding defaults on, §2.7), so the difference is not when
+telemetry appears but that the classifier stops moving while the rest keeps adapting. This is the
+only lineage where both blocks ran end to end in this repository. Its adapter package is verified at 18/18 verdict parity against the checkpoint (max
 $|\Delta p_{\text{fake}}| = 0$).
 
 **Why not the LR-fused lineage, which scores higher.** Lineage A is **1.04 pp better on the macro
