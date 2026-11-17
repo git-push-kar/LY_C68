@@ -221,14 +221,15 @@ and then saved as a standalone Hugging Face checkpoint. **Lineage B** starts fro
 **Trainable:** all LoRA adapters (LLM and vision), `cls_head`, `attn_pool` and `freq_branch`.
 `train.py` removes parameters only when `--freeze_cls_head` or `--freeze_projector` is passed, and
 the Stage-2 launch passed neither — `runs/intern_v2/logs/train.log` contains no `Froze …` line. The
-checkpoints agree: across the `cls_only` → `joint` boundary (`ep003.pth` → `ep004.pth`, metadata
-`stage=cls_only` / `stage=joint`) `cls_head` and `attn_pool` weights move while `custom_projector`
-and `domain_router` are bit-identical, as they are in every checkpoint of both lineages — they sit
-off the LM training path.
+checkpoints agree. Across the `cls_only` → `joint` boundary (`ep003.pth` → `ep004.pth`) `cls_head`
+and `attn_pool` weights move while `custom_projector` and `domain_router` are bit-identical, as they
+are in every checkpoint of both lineages — they sit off the LM training path. That pair belongs to a
+later sibling run, because this run's epochs 1–4 were overwritten in place (§5.3); the surviving
+files of this run, `ep005` → `ep006`, show the same heads moving in joint epochs.
 
 **No telemetry in this stage.** The telemetry prefix and its `build_grounding_prompt` builder, the
 `set_tokenizer` hook and the `--no_grounding` flag all entered the repository on **2026-10-11**
-(commit `967bbd0`), whereas this stage ran **25 Sep 2026**. The code it ran therefore had no
+(commit `967bbd0`), whereas this stage ran **24–25 Sep 2026**. The code it ran therefore had no
 telemetry path at all: here the LM conditions on visual tokens plus the answer target, and nothing
 in this stage is trained against telemetry (§3.8).
 
@@ -470,9 +471,41 @@ Reading the table:
 - **Cross-domain** is the weakest regime (75.96–78.11% accuracy, AUC 0.850–0.868) and does not improve with grounding on either lineage; compression and in-the-wild post-processing remain the dominant failure source.
 - **DPO does not improve classification.** For the vanilla lineage, the DPO checkpoint is below its Stage-2 counterpart on ID (89.73 vs 92.42) and CF (76.17 vs 81.51); DPO's purpose is trace quality, which this benchmark does not measure. Both DPO checkpoints are listed for completeness as a tried approach, not as candidates — §3.4 gives the classifier/LLM and telemetry reasons, plus the measured disagreement rate that goes with them.
 
-The `intern_v2` row is the checkpoint the archived evaluation actually loaded: `checkpoints/ep005.pth` (metadata `epoch=5`, `best_auc=0.989061`). The directory's current `best.pth` was later overwritten by a second run (epoch 4, AUC 0.991403) and has no 52k evaluation; it is therefore not labelled "best" in this table.
+**`runs/intern_v2/checkpoints/` holds two different runs, and the `intern_v2` row comes from the
+earlier one.** `logs/epochs.csv` records both epoch tables back to back — six rows (three `cls_only`
+then three `joint`, best at epoch 5, `va_auc` 0.989061) followed by four rows from a second run
+(three `cls_only` then one `joint`, best at epoch 4, `va_auc` 0.991403) — and the `epoch_time_s`
+values match the checkpoint metadata exactly, which fixes the mapping:
 
-A metrics block in `config.yaml` records slightly different accuracies (ID 92.01, CM 99.16, CF 80.93, CD 77.85, mean 87.49) plus calibrated CF/CD numbers. Those values are not reproducible from the archived logs, while the AUCs match the `intern_v2` log exactly; the log-derived table above is therefore the reference, and the config block should be treated as a stale/derived summary.
+| File | Metadata | Run | Role |
+| :--- | :--- | :--- | :--- |
+| `ep001`–`ep003`, `ep004`, `best.pth` | `epoch` 1–4, `stage` cls_only/cls_only/cls_only/joint | later, short run (best = epoch 4, AUC 0.991403) | **not** the evaluated row; `best.pth` is a bit-identical weights-only copy of `ep004` |
+| `ep005`, `ep006` | `epoch` 5/6, `stage=joint`, `best_auc` 0.989061 on both, `epoch_time_s` 21,570.3 / 21,556.9 s | earlier, full six-epoch run | the evaluated row is epoch 5; **Stage 4 initialised from `ep006`** |
+
+The archived evaluation (`runs/intern_v2/logs/eval_best.log`, 25 Sep) prints
+`Loading checkpoint: ./runs/intern_v2/checkpoints/best.pth` with `epoch=5 stage=cls_only`. That
+`best.pth` has since been overwritten by the later run, but the save path writes `best.pth` as a
+weights-only copy of the best epoch file — verified: today's `best.pth` equals `ep004` at
+`lora_d = cls_d = 0.0`. So the evaluated weights were that run's epoch-5 file, i.e. today's
+`ep005.pth`, whose `epoch`, `best_auc` (0.989061) and `epoch_time_s` (21,570.33 s) match the eval-time
+metadata; only its `stage` label reads `joint` rather than the logged `cls_only`, the one loose end
+in this reconstruction. `ep005` was re-evaluated over all 52,266 samples to test exactly that
+(`runs/timing/intern_v2_ep005/`).
+
+**Reproduction, and the one number that does not come back exactly.** `ep005.pth` was re-evaluated
+over all 52,266 samples on 2026-11-17 12:56–14:52 (`runs/timing/intern_v2_ep005/`, exit 0). The
+**AUCs match the archived log exactly on every split** — 0.9823 / 0.9995 / 0.9418 / 0.8680, mean
+0.9479 — which identifies the weights beyond reasonable doubt. Accuracies come out 0.3–0.6 pp lower
+(ID 92.02 vs 92.42, CM 99.16 vs 99.17, CF 80.94 vs 81.51, CD 77.84 vs 78.11, mean 87.49 vs 87.80):
+101 of 12,819 ID predictions flip at the `p_fake >= 0.5` boundary, so the gap is decision-boundary
+numerics between the archived run and today's code, not a different checkpoint. The table keeps the
+archived accuracies because that is the recorded evaluation; the AUC column is the reproducible
+quantity for this row.
+
+That also explains the `config.yaml` block (ID 92.01, CM 99.16, CF 80.93, CD 77.85, mean 87.49): it
+matches today's re-evaluation of the same checkpoint to rounding, so it is a current-code evaluation
+rather than a stale summary, and the earlier dismissal of it is withdrawn. Its calibrated CF/CD
+figures remain unverified.
 
 ### 5.4 Threshold calibration
 

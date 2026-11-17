@@ -13,11 +13,20 @@ Usage
 
 Interpretation of the §1.5 pairs
 --------------------------------
-  ep003 -> ep004 (intern_v2)   cls_only -> joint: cls_head and attn_pool move,
+  ep005 -> ep006 (intern_v2)   the run that actually produced the evaluated
+                               `intern_v2` row and initialised Stage 4: heads
+                               keep moving in joint epochs.
+  ep003 -> ep004 (intern_v2)   a LATER, shorter sibling run that overwrote
+                               ep001-004 and best.pth: cls_only -> joint, so
+                               cls_head and attn_pool move while
                                custom_projector / domain_router stay identical
-                               (they are off the LM training path).
+                               (off the LM training path).
   ep001 -> ep003 (ground)      the grounded block: cls_head frozen (Δ = 0),
                                attn_pool + freq_branch keep training.
+
+Do NOT diff ep004 against ep005: they belong to the two different runs, which
+is why that pair shows a large cls_head step and is not a continuity check.
+Compare batch-norm buffers with --include-buffers if you want the counters.
 Batch-norm bookkeeping (`num_batches_tracked`, `running_mean`, `running_var`)
 is excluded by default: those buffers change by counting/observing iterations,
 not by learning, so they would mask a frozen weight. Pass --include-buffers to
@@ -38,6 +47,8 @@ BUFFER_PATTERNS = ("num_batches_tracked", "running_mean", "running_var")
 DEFAULT_PAIRS = (
     ("runs/intern_v2/checkpoints/ep003.pth", "runs/intern_v2/checkpoints/ep004.pth",
      "intern_v2 ep003 -> ep004 (cls_only -> joint)"),
+    ("runs/intern_v2/checkpoints/ep005.pth", "runs/intern_v2/checkpoints/ep006.pth",
+     "intern_v2 ep005 -> ep006 (deployed Stage-2 run)"),
     ("runs/intern_v2_ground/checkpoints/ep001.pth", "runs/intern_v2_ground/checkpoints/ep003.pth",
      "intern_v2_ground ep001 -> ep003 (grounded block)"),
 )

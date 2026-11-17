@@ -183,6 +183,12 @@ Sources: `runs/intern_fused_dpo/logs/eval_dpo_best.log`, `runs/intern_v2_dpo/log
 | `intern_v2_dpo` (Lineage B) | 89.73 / 0.9788 | 98.91 / 0.9996 | 76.17 / 0.9235 | 76.62 / 0.8675 | 85.36 / 0.8268 / 0.9423 | 89.35 / 89.50 |
 | *parent, for contrast* — `intern_v2` Stage 2 | 92.42 / 0.9823 | 99.17 / 0.9995 | 81.51 / 0.9418 | 78.11 / 0.8680 | 87.80 / 0.8659 / 0.9479 | — |
 
+The parent row is `runs/intern_v2/checkpoints/ep005.pth` — established, not assumed: the archived
+evaluation loaded a `best.pth` (epoch 5, later overwritten by a sibling run), and re-evaluating
+`ep005` reproduces that log's four AUCs exactly (0.9823 / 0.9995 / 0.9418 / 0.8680) while its
+accuracies land 0.3–0.6 pp lower (mean 87.49 vs 87.80) from `p_fake >= 0.5` boundary flips
+(`runs/timing/intern_v2_ep005/`). Stage 4's init is `ep006` of the same run.
+
 Against its own Stage-2 parent, vanilla DPO costs **2.69 pp in-domain, 5.34 pp cross-forgery,
 1.49 pp cross-domain, 2.44 pp macro**. Reward accuracy during training was 96.61 % (LR-fused) and
 91.03 % (vanilla) — that is preference fit, not trace correctness (see §8).
@@ -224,7 +230,7 @@ three training channels do **not** share one history, and the dates are why:
 | :--- | :---: | :--- |
 | classifier (`cls_head`) | 3 | `--freeze_cls_head` in Stage 4; `cls_head` tensors are bit-identical across `intern_v2_ground/checkpoints/ep001..003` (max \|Δ\| = 0.0) |
 | reasoning (584 LoRA tensors) | 6 | trainable in both blocks; non-zero Δ at both stage boundaries |
-| telemetry | 3 (Stage 4 only) | the telemetry path did not exist when Stage 2 ran: `build_grounding_prompt`, `set_tokenizer` (train.py) and `--no_grounding` all enter history in commit `967bbd0`, **2026-10-11 21:50**, while Stage 2 ran **25 Sep 2026** (`runs/intern_v2/logs/inference_best_20260925_124113.log`) |
+| telemetry | 3 (Stage 4 only) | the telemetry path did not exist when Stage 2 ran: `build_grounding_prompt`, `set_tokenizer` (train.py) and `--no_grounding` all enter history in commit `967bbd0`, **2026-10-11 21:50**, while Stage 2 ran **24–25 Sep 2026** (`ep006` was written 25 Sep 12:16; inference log `inference_best_20260925_124113.log`) |
 
 The switch is **run-level, not per-epoch**: `model._grounding_prefix()` returns `None` unless
 `self.grounding and self._tokenizer is not None`, and `train.py` sets `model.grounding = not
@@ -235,11 +241,29 @@ ran code that had the feature. Stage 2's log prints no `grounding=` line at all,
 
 Supporting facts, all re-checkable (`python verify_stage_history.py`, §10):
 
-- Stage boundaries are recorded in the checkpoints: `intern_v2/checkpoints/ep003.pth` has
-  `stage=cls_only`, `ep004.pth` has `stage=joint`; `intern_v2_ground/*` are all `stage=joint`.
-- Across `ep003 → ep004` the `cls_head` and `attn_pool` tensors move (max |Δ| 1.4e-3) while
+- **`runs/intern_v2/checkpoints/` holds two runs, not one.** `ep001`–`ep004` and `best.pth` come from
+  a later, shorter run (four epochs, best = epoch 4, `va_auc` 0.991403); `ep005`/`ep006` come from the
+  earlier six-epoch run. `logs/epochs.csv` contains both epoch tables back to back and the
+  `epoch_time_s` values match the checkpoints exactly (`ep005` 21,570.33 s, `ep006` 21,556.92 s).
+- **The evaluated row is `ep005` and Stage 4 started from `ep006`.** Stage 4's log says
+  `Loading weights from: ./runs/intern_v2/checkpoints/ep006.pth`, and `ep006.cls_head` is bit-identical
+  (|Δ| = 0.0) to `intern_v2_ground/checkpoints/ep001.pth`, which is exactly what a frozen classifier
+  implies. The archived evaluation loaded a `best.pth` whose `epoch`/`best_auc` (5 / 0.989061) match
+  `ep005`; `best.pth` is written as a weights-only copy of the best epoch file — verified on the
+  surviving pair, where `best.pth` equals `ep004` at `lora_d = cls_d = 0.0` — and it was subsequently
+  overwritten by the later run's epoch-4 file.
+- Stage labels: `ep001`–`ep003` `cls_only`, `ep004` `joint` (sibling run); `ep005`/`ep006` `joint`; all
+  `intern_v2_ground/*` `joint`. The one inconsistency is the eval log's `stage=cls_only` for epoch 5,
+  which no epoch table supports — treat the `stage` field of that overwritten `best.pth` as unreliable.
+- Reproduction pins the row to `ep005`: a full 52,266-sample re-evaluation on 2026-11-17
+  (`runs/timing/intern_v2_ep005/`) matches the archived AUCs to four decimals on all four splits
+  (0.9823 / 0.9995 / 0.9418 / 0.8680, mean 0.9479) but lands 0.3–0.6 pp lower on accuracy
+  (mean 87.49 vs 87.80), so cite AUC — not accuracy — when identifying this checkpoint.
+- Within the sibling run, `ep003 → ep004` moves `cls_head` and `attn_pool` (max |Δ| 1.4e-3) while
   `custom_projector` and `domain_router` are bit-identical — those two sit off the LM training path
-  in every checkpoint of both lineages.
+  in every checkpoint of both lineages. Within the deployed run, `ep005 → ep006` moves everything
+  (`cls_head` 1.0e-2, LoRA 7.5e-3). **Never diff `ep004` against `ep005`**: they belong to different
+  runs, so the large step there is a run boundary, not an epoch.
 - Stage 4's log states `grounding=True  flip=0.0` and `Froze 4 tensors (cls_head=True,
   projector=False)`; `attn_pool` and `freq_branch` weights do move there (|Δ| 8.9e-3 and 7.2e-3 over
   ep001→ep003), while `cls_head` stays at |Δ| = 0.0 — the classifier really is frozen.
@@ -247,7 +271,9 @@ Supporting facts, all re-checkable (`python verify_stage_history.py`, §10):
   the classifier loss only, with no telemetry prefix in the input.
 
 **DO NOT CLAIM** that Stage 2 trained telemetry, or that Stage 2 had grounding "on by default": that
-flag did not exist in the code it ran. Equally, do not present the split as a per-epoch schedule in
+flag did not exist in the code it ran. **DO NOT CLAIM** that `best.pth` (epoch 4, AUC 0.991403) is the
+benchmark row, or that `ep004` is the last epoch of the run that initialised Stage 4 — that run ended
+at `ep006`. Equally, do not present the split as a per-epoch schedule in
 code — there is no epoch condition anywhere; re-running the joint block today with default flags
 would put telemetry in all six. **DO NOT CLAIM** the opposite of the table either — the
 classifier is the channel with three epochs and reasoning the one with six.
@@ -449,6 +475,9 @@ python eval_metrics.py --log runs/timing/vanilla_calib/eval_calib.log        # �
 python eval_metrics.py --log runs/intern_v2_ground/logs/eval_best.log        # §1 (deployed, original)
 git log -S build_grounding_prompt --format='%h %ad %s' --date=iso -- model.py  # §1.5: 967bbd0
 python verify_stage_history.py         # §1.5 weight diffs (read-only, mmap; ~1 min)
+python eval.py --model_path ./models/InternVL3-2B \
+    --checkpoint runs/intern_v2/checkpoints/ep005.pth --batch_size 8 \
+    --log_dir runs/timing/intern_v2_ep005      # §1.4 parent row, ~2 h (AUC must match)
 python eval_by_generator.py --checkpoint runs/intern_v2_ground/checkpoints/best.pth \
     --split cd --out runs/timing/eval_by_generator_cd_vanilla.json   # ~15 min, CD only
 python eval_metrics.py --log runs/intern_v2_dpo/logs/eval_dpo_best.log       # §1.4 DPO rows
